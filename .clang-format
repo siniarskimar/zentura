@@ -1,6 +1,6 @@
 ---
 BasedOnStyle: LLVM
-AlignAfterOpenBracket: BlockIndent
+AlignAfterOpenBracket: AlwaysBreak
 AlignArrayOfStructures: Right
 AlignEscapedNewlines: Left
 AlignTrailingComments: false
@@ -26,3 +26,4 @@ SpaceBeforeParensOptions:
 SpaceBeforeRangeBasedForLoopColon: false
 Standard: c++17
 TabWidth: 2
+PenaltyReturnTypeOnItsOwnLine: 1000000
