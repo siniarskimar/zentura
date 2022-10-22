@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
 project("zen"
-    VERSION 1.0.0
+    VERSION 0.1.0
 )
 
 set(OpenGL_GL_PREFERENCE "GLVND" CACHE STRING "OpenGL preference (GLVND or LEGACY)" FORCE)
