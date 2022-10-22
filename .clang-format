@@ -1,0 +1,28 @@
+---
+BasedOnStyle: LLVM
+AlignAfterOpenBracket: BlockIndent
+AlignArrayOfStructures: Right
+AlignEscapedNewlines: Left
+AlignTrailingComments: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortLambdasOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes
+BitFieldColonSpacing: After
+BraceWrapping:
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+ColumnLimit: 90
+EmptyLineAfterAccessModifier: Leave
+NamespaceIndentation: Inner
+PackConstructorInitializers: CurrentLine
+PointerAlignment: Left
+ShortNamespaceLines: 10
+SortIncludes: Never
+SpaceAfterCStyleCast: true
+SpaceBeforeParens: Never
+SpaceBeforeParensOptions:
+  AfterControlStatements: false
+SpaceBeforeRangeBasedForLoopColon: false
+Standard: c++17
+TabWidth: 2
