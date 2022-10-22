@@ -13,6 +13,7 @@ include("${PROJECT_SOURCE_DIR}/dependencies/glfw3.cmake")
 add_executable(zen
     "src/main.cpp"
     "src/glfw_library.cpp"
+    "src/ui/Window.cpp"
 )
 
 target_link_libraries(zen

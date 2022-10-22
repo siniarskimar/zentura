@@ -1,6 +1,7 @@
 #include <iostream>
 #include <GLFW/glfw3.h>
 #include "glfw_library.hpp"
+#include "./ui/Window.hpp"
 
 int main(int argc, const char* argv[]) {
 
@@ -13,16 +14,13 @@ int main(int argc, const char* argv[]) {
   glfwWindowHint(GLFW_VERSION_MINOR, 0);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-  GLFWwindow* window = glfwCreateWindow(800, 600, "ZEN", nullptr, nullptr);
-  if(window == nullptr) {
-    std::cerr << "Failed to create GLFW window" << std::endl;
-    return 2;
-  }
+  Window& window = Window::createInstance(800, 600, "ZEN");
 
-  glfwMakeContextCurrent(window);
+  window.makeContextCurrent();
+
   glfwSwapInterval(1);
 
-  while(!glfwWindowShouldClose(window)) {
+  while(!window.shouldClose()) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     glBegin(GL_TRIANGLES);
@@ -37,10 +35,9 @@ int main(int argc, const char* argv[]) {
 
     glEnd();
 
-    glfwSwapBuffers(window);
+    window.swapBuffers();
     glfwPollEvents();
   }
 
-  glfwDestroyWindow(window);
   return 0;
 }
