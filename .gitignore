@@ -1,7 +1,8 @@
 /build/
 
-.vscode/
+.vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 !.vscode/*.code-snippets
 
 # Local History for Visual Studio Code
