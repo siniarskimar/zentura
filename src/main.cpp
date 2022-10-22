@@ -10,6 +10,7 @@ int main(int argc, const char* argv[]) {
 
   glfwWindowHint(GLFW_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_VERSION_MINOR, 0);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
   GLFWwindow* window = glfwCreateWindow(800, 600, "ZEN", nullptr, nullptr);
   if(window == nullptr) {
@@ -19,6 +20,7 @@ int main(int argc, const char* argv[]) {
   }
 
   glfwMakeContextCurrent(window);
+  glfwSwapInterval(1);
 
   while(!glfwWindowShouldClose(window)) {
     glClear(GL_COLOR_BUFFER_BIT);
