@@ -19,3 +19,9 @@ target_link_libraries(zen
     OpenGL::OpenGL
     OpenGL::GLX
 )
+
+target_include_directories(zen
+    PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/include"
+)
