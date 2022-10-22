@@ -1,9 +1,10 @@
 #include <iostream>
 #include <GLFW/glfw3.h>
+#include "glfw_library.hpp"
 
 int main(int argc, const char* argv[]) {
 
-  if(!glfwInit()) {
+  if(!GLFW::initialize()) {
     std::cerr << "Failed to initialize GLFW library" << std::endl;
     return 2;
   }
@@ -15,7 +16,6 @@ int main(int argc, const char* argv[]) {
   GLFWwindow* window = glfwCreateWindow(800, 600, "ZEN", nullptr, nullptr);
   if(window == nullptr) {
     std::cerr << "Failed to create GLFW window" << std::endl;
-    glfwTerminate();
     return 2;
   }
 
@@ -42,6 +42,5 @@ int main(int argc, const char* argv[]) {
   }
 
   glfwDestroyWindow(window);
-  glfwTerminate();
   return 0;
 }
