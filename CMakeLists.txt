@@ -6,9 +6,8 @@ project("zen"
 
 set(OpenGL_GL_PREFERENCE "GLVND" CACHE STRING "OpenGL preference (GLVND or LEGACY)" FORCE)
 find_package("OpenGL" REQUIRED)
-
-option(GLFW_USE_WAYLAND "Whenever to use Wayland context" OFF)
-include("${PROJECT_SOURCE_DIR}/dependencies/glfw3.cmake")
+find_package("PkgConfig" QUIET)
+find_package("glfw3" 3.3 REQUIRED)
 
 add_executable(zen
     "src/main.cpp"
