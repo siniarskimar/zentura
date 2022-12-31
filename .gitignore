@@ -43,3 +43,6 @@
 *.exe
 *.out
 *.app
+
+# Ignore clangd .cache/
+.cache/
