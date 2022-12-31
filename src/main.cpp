@@ -1,6 +1,6 @@
 #include <iostream>
 #include <GLFW/glfw3.h>
-#include "glfw_library.hpp"
+#include "ui/glfw.hpp"
 #include "./ui/Window.hpp"
 
 int main(int argc, const char* argv[]) {

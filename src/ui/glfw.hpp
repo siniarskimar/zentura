@@ -2,6 +2,8 @@
 #define GLFW_LIBRARY_H
 #pragma once
 
+#include <GLFW/glfw3.h>
+
 class GLFW {
 public:
   static bool initialize();
