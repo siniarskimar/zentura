@@ -2,7 +2,7 @@ executable('zen',
   'main.cpp',
   'ui/glfw.cpp',
   'ui/Window.cpp',
-  'gl/glad.c',
+  'gl/glad/glad.c',
   dependencies: [
     opengl_dependencies,
     libGLFW
