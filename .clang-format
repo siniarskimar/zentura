@@ -1,10 +1,11 @@
 ---
 BasedOnStyle: LLVM
+AccessModifierOffset: 0
 AlignAfterOpenBracket: AlwaysBreak
 AlignArrayOfStructures: Right
-AlignEscapedNewlines: Left
+AlignEscapedNewlines: DontAlign 
 AlignTrailingComments: false
-AllowShortFunctionsOnASingleLine: Inline
+AllowShortFunctionsOnASingleLine: Empty
 AllowShortLambdasOnASingleLine: Inline
 AlwaysBreakTemplateDeclarations: Yes
 BitFieldColonSpacing: After
