@@ -7,7 +7,7 @@
 #include <GLFW/glfw3.h>
 
 class GLFW {
-public:
+  public:
   static bool initialize();
   static bool isInitialized();
   static void terminate();
