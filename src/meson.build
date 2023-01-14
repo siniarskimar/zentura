@@ -6,5 +6,8 @@ executable('zen',
   dependencies: [
     opengl_dependencies,
     libGLFW
+  ],
+  include_directories: [
+    include_directories('gl')
   ]
 )
