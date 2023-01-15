@@ -4,16 +4,18 @@
 #include "shader.hpp"
 #include "ui/glfw.hpp"
 #include "./ui/Window.hpp"
+#include <fmt/core.h>
+#include <cstdio>
 
 int main(int argc, const char* argv[]) {
 
   if(!GLFW::initialize()) {
-    std::cerr << "Failed to initialize GLFW library" << std::endl;
+    fmt::print(stderr, "Failed to initialize GLFW\n");
     return 2;
   }
 
   glfwSetErrorCallback([](int errorCode, const char* errorMsg) {
-    std::cerr << "[GLFW " << errorCode << "] " << errorMsg << '\n';
+    fmt::print(stderr, "[GLFW {}] {}\n", errorCode, errorMsg);
   });
 
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -28,9 +30,12 @@ int main(int argc, const char* argv[]) {
   int version = gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
 
   if(version == 0) {
-    std::cerr << "Failed to load OpenGL 3.0" << std::endl;
+    fmt::print(stderr, "Failed to load OpenGL context\n");
     return 2;
   }
+
+  const char* glVersion = (const char*) glGetString(GL_VERSION);
+  fmt::print("OpenGL {:s}\n", glVersion);
 
   glfwSwapInterval(1);
 
@@ -71,21 +76,20 @@ int main(int argc, const char* argv[]) {
   GLShaderCompiler::CompilationStatus compileStatus;
 
   if(!(compileStatus = shaderCompiler.compile(GL_VERTEX_SHADER, vertexSource))) {
-    std::cerr << "Vertex shader compilation failed!\n"
-              << compileStatus.infoLog << std::endl;
+    fmt::print(stderr, "Vertex shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
   }
 
   if(!(compileStatus = shaderCompiler.compile(GL_FRAGMENT_SHADER, fragmentSource))) {
-    std::cerr << "Fragment shader compilation failed!\n"
-              << compileStatus.infoLog << std::endl;
+    fmt::print(
+        stderr, "Fragment shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
   }
 
   auto shaderProgram = shaderCompiler.link();
 
   if(!shaderProgram) {
-    std::cerr << "Failed to link shader program!" << std::endl;
+    fmt::print(stderr, "Failed to link shader program!\n");
     return 2;
   }
 

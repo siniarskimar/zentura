@@ -1,10 +1,11 @@
 #pragma once
 
 #include "gl/glad/glad.h"
-#include <iostream>
+#include <fmt/core.h>
+#include <cstdio>
 
 #define GLCall(func) \
   (func); \
   while(auto error = glGetError()) { \
-    std::cout << __FILE__ << ":" << __LINE__ << " GLERROR " << error << std::endl; \
+    fmt::print(stderr, "{}:{} [OPENGL {}]\n", __FILE__, __LINE__, error); \
   }
