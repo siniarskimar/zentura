@@ -1,90 +1,9 @@
 #include <iostream>
 #include <vector>
+#include "gl/shader.hpp"
+#include "shader.hpp"
 #include "ui/glfw.hpp"
 #include "./ui/Window.hpp"
-
-#define GLCall(func) \
-  (func); \
-  while(auto error = glGetError()) { \
-    std::cout << __FILE__ << ":" << __LINE__ << " GLERROR " << error << std::endl; \
-  }
-
-/// @brief Compiles a GLSL shader
-/// @returns 0 on failure
-GLuint compileShader(GLenum shaderType, const std::string shaderSource) {
-  GLuint shader = glCreateShader(shaderType);
-  const GLchar* shaderSources[1] = {shaderSource.c_str()};
-  glShaderSource(shader, 1, shaderSources, NULL);
-
-  glCompileShader(shader);
-
-  GLint compileStatus = GL_TRUE;
-  glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
-
-  if(compileStatus == GL_FALSE) {
-    int infoLogSize{};
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogSize);
-    std::vector<char> infoLog(infoLogSize, '\0');
-    glGetShaderInfoLog(shader, infoLog.size(), NULL, infoLog.data());
-
-    std::cout << "Shader Compilation Error: \n" << infoLog.data() << std::endl;
-    glDeleteShader(shader);
-    return 0;
-  }
-
-  return shader;
-}
-
-class GLShaderProgram {
-  public:
-
-  GLShaderProgram() : shaderProgram_(glCreateProgram()), ready_(false) {}
-
-  void attachShader(GLuint shader) {
-    GLCall(glAttachShader(getProgramID(), shader));
-  }
-
-  bool linkProgram() {
-    ready_ = false;
-
-    GLCall(glLinkProgram(getProgramID()));
-
-    GLint linkStatus = GL_TRUE;
-    glGetProgramiv(getProgramID(), GL_LINK_STATUS, &linkStatus);
-    if(linkStatus == GL_FALSE) {
-      return false;
-    }
-
-    ready_ = true;
-    return true;
-  }
-
-  void use() {
-    GLCall(glUseProgram(getProgramID()));
-  }
-
-  inline GLuint getProgramID() const noexcept {
-    return shaderProgram_;
-  }
-
-  inline bool isReady() const noexcept {
-    return ready_;
-  }
-
-  GLint getUniformLocation(const std::string& name) {
-    auto loc = GLCall(glGetUniformLocation(getProgramID(), name.c_str()));
-    return loc;
-  }
-
-  GLint getAttribLocation(const std::string& name) {
-    auto loc = GLCall(glGetAttribLocation(getProgramID(), name.c_str()));
-    return loc;
-  }
-
-  private:
-  GLuint shaderProgram_;
-  bool ready_;
-};
 
 int main(int argc, const char* argv[]) {
 
@@ -119,7 +38,9 @@ int main(int argc, const char* argv[]) {
       // clang-format on
   };
 
-  const char* vertexShaderSrc = R"(
+  GLShaderCompiler shaderCompiler;
+
+  const char* vertexSource = R"(
     #version 130
 
     in vec2 iPosition;
@@ -132,7 +53,7 @@ int main(int argc, const char* argv[]) {
     }  
   )";
 
-  const char* fragmentShaderSrc = R"(
+  const char* fragmentSource = R"(
     #version 130
 
     in vec3 vertexColor;
@@ -142,31 +63,29 @@ int main(int argc, const char* argv[]) {
       fragment = vec4(vertexColor, 1.0);  
     }
     )";
-  GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSrc);
-  GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSrc);
+  GLShaderCompiler::CompilationStatus compileStatus;
 
-  if(vertexShader == 0) {
-    std::cerr << "Failed to compile vertex shader [" << glGetError() << ']' << std::endl;
+  if(!(compileStatus = shaderCompiler.compile(GL_VERTEX_SHADER, vertexSource))) {
+    std::cerr << "Vertex shader compilation failed!\n"
+              << compileStatus.infoLog << std::endl;
     return 2;
   }
 
-  if(fragmentShader == 0) {
-    std::cerr << "Failed to compile fragment shader [" << glGetError() << ']'
-              << std::endl;
+  if(!(compileStatus = shaderCompiler.compile(GL_FRAGMENT_SHADER, fragmentSource))) {
+    std::cerr << "Fragment shader compilation failed!\n"
+              << compileStatus.infoLog << std::endl;
     return 2;
   }
 
-  GLShaderProgram shaderProg;
-  shaderProg.attachShader(vertexShader);
-  shaderProg.attachShader(fragmentShader);
+  auto shaderProgram = shaderCompiler.link();
 
-  if(!shaderProg.linkProgram()) {
-    std::cerr << "Failed to link shader program [" << glGetError() << ']' << std::endl;
+  if(!shaderProgram) {
+    std::cerr << "Failed to link shader program!" << std::endl;
     return 2;
   }
 
-  const GLint positionAttribLoc = shaderProg.getAttribLocation("iPosition");
-  const GLint colorAttribLoc = shaderProg.getAttribLocation("iColor");
+  const GLint positionAttribLoc = shaderProgram->getAttribLocation("iPosition");
+  const GLint colorAttribLoc = shaderProgram->getAttribLocation("iColor");
 
   GLuint vertexArray;
   GLuint vertexBuffer;
@@ -189,7 +108,7 @@ int main(int argc, const char* argv[]) {
   while(!window.shouldClose()) {
     glClear(GL_COLOR_BUFFER_BIT);
 
-    shaderProg.use();
+    shaderProgram->use();
     GLCall(glBindVertexArray(vertexArray));
     GLCall(glDrawArrays(GL_TRIANGLES, 0, 3));
 
