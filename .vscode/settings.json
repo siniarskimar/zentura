@@ -1,5 +1,6 @@
 {
     "editor.formatOnSave": true,
     "editor.formatOnSaveMode": "modifications",
-    "C_Cpp.autoAddFileAssociations": false
+    "C_Cpp.autoAddFileAssociations": false,
+    "mesonbuild.buildFolder": "build"
 }
