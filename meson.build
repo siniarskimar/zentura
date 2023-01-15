@@ -17,6 +17,8 @@ libOpenGL = dependency('opengl', required: false)
 #       requested
 libGLFW = dependency('glfw3', required: true)
 
+libfmt = dependency('fmt', version: '9.1.0>=', required: true)
+
 if not libOpenGL.found()
   # the 'Legacy' OpenGL
   libGL = dependency('gl')

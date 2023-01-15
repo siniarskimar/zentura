@@ -6,7 +6,8 @@ executable('zen',
   'gl/shader.cpp',
   dependencies: [
     opengl_dependencies,
-    libGLFW
+    libGLFW,
+    libfmt
   ],
   include_directories: [
     include_directories('gl')
