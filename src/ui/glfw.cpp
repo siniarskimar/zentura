@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <memory>
 
+/// @internal
 struct GLFWLibrary_raii {
   ~GLFWLibrary_raii() { glfwTerminate(); }
 };

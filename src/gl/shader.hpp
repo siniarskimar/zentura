@@ -12,6 +12,7 @@
 class GLShaderProgram {
   public:
 
+  /// \{
   GLShaderProgram() = delete;
 
   /// @brief Constructs GLShaderProgram
@@ -21,13 +22,14 @@ class GLShaderProgram {
   /// @param glID OpenGL Program Object
   GLShaderProgram(GLuint glID);
 
-  GLShaderProgram(const GLShaderProgram&) = delete;
   GLShaderProgram(GLShaderProgram&&) = default;
+  GLShaderProgram& operator=(GLShaderProgram&&) = default;
+
+  GLShaderProgram(const GLShaderProgram&) = delete;
+  GLShaderProgram& operator=(const GLShaderProgram&) = delete;
+  /// \}
 
   ~GLShaderProgram();
-
-  GLShaderProgram& operator=(const GLShaderProgram&) = delete;
-  GLShaderProgram& operator=(GLShaderProgram&&) = default;
 
   /// @brief Activates OpenGL program
   void use();
@@ -61,13 +63,17 @@ class GLShaderProgram {
 ///
 /// Provides the interface for compilation and linkage of OpenGL Programs
 struct GLShaderCompiler {
-  GLuint vertexShader;
-  GLuint fragmentShader;
-  GLuint geometryShader;
+
+  GLuint vertexShader; ///< OpenGL vertex shader
+  GLuint fragmentShader; ///< OpenGL fragment shader
+  GLuint geometryShader; ///< OpenGL geometry shader
 
   /// @brief Used in GLShaderCompiler::compile for returning compilation status
   struct CompilationStatus {
+    /// @brief indicates whenever compilation succeded
     bool success;
+
+    /// @brief errorLog returned when error occoured
     std::string infoLog;
 
     /// @brief Default constructor
@@ -78,11 +84,16 @@ struct GLShaderCompiler {
     /// @param infoLog ie. error log
     CompilationStatus(bool success, std::string infoLog = "");
 
+    /// @brief Implicit boolean conversion
+    /// @return @ref success member variable
     operator bool();
   };
 
   /// @brief Default constructor
   GLShaderCompiler();
+
+  /// @brief Destructor
+  ~GLShaderCompiler();
 
   /// @brief Compiles a given shader source
   ///
