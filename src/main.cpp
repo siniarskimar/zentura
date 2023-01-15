@@ -12,8 +12,12 @@ int main(int argc, const char* argv[]) {
     return 2;
   }
 
-  glfwWindowHint(GLFW_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_VERSION_MINOR, 3);
+  glfwSetErrorCallback([](int errorCode, const char* errorMsg) {
+    std::cerr << "[GLFW " << errorCode << "] " << errorMsg << '\n';
+  });
+
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
