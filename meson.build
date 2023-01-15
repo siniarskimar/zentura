@@ -6,6 +6,9 @@ project('zen', ['c','cpp'],
   meson_version: '0.63.0>='
 )
 
+doxygen = find_program('doxygen', required: false)
+python = find_program('python3')
+
 opengl_dependencies = []
 
 libOpenGL = dependency('opengl', required: false)
@@ -21,6 +24,42 @@ if not libOpenGL.found()
 else
   libGLX = dependency('glx')
   opengl_dependencies += [libGLX, libOpenGL]
+endif
+
+if doxygen.found() and get_option('build_devdocs')
+  doxyfile_conf_data = configuration_data()
+  doxyfile_conf_data.set('PROJECT_NAME', meson.project_name())
+  doxyfile_conf_data.set('PROJECT_VERSION', meson.project_version())
+  doxyfile_conf_data.set('OUTPUT_DIRECTORY', meson.project_build_root() / 'docs' / 'dev')
+  doxyfile_conf_data.set('OUTPUT_LANGUAGE', 'English')
+  doxyfile_conf_data.set('INPUT', meson.project_source_root() / 'src')
+
+  configure_file(
+    input: 'docs/Doxyfile.in',
+    output: 'Doxyfile',
+    configuration: doxyfile_conf_data
+  )
+
+  run_target('devdoc',
+    command: [
+      doxygen
+    ]
+  )
+endif
+
+python_install = import('python').find_installation(
+  modules: ['sphinx', 'sphinx_book_theme']
+)
+
+if get_option('build_userdocs')
+  run_target('userdoc',
+    command: [
+      python,
+      meson.project_source_root() / 'docs' / 'make.py',
+      meson.project_source_root() / 'docs' / 'source',
+      meson.project_build_root() / 'docs' / 'user'
+    ]
+  )
 endif
 
 subdir('src')
