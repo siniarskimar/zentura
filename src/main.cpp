@@ -1,11 +1,11 @@
 #include <iostream>
 #include <vector>
 #include "gl/shader.hpp"
-#include "shader.hpp"
 #include "ui/glfw.hpp"
 #include "./ui/Window.hpp"
 #include <fmt/core.h>
 #include <cstdio>
+#include "gl/shadercompiler.hpp"
 
 int main(int argc, const char* argv[]) {
 

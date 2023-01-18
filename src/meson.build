@@ -4,6 +4,7 @@ executable('zen',
   'ui/Window.cpp',
   'gl/glad/glad.c',
   'gl/shader.cpp',
+  'gl/shadercompiler.cpp',
   dependencies: [
     opengl_dependencies,
     libGLFW,
