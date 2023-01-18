@@ -47,17 +47,8 @@ GLShaderCompiler::CompilationStatus GLShaderCompiler::compile(
     return false;
   }
 
-  switch(type) {
-  case GL_VERTEX_SHADER:
-    shaders_[VERTEX_SHADER_INDEX] = shader;
-    break;
-  case GL_FRAGMENT_SHADER:
-    shaders_[FRAGMENT_SHADER_INDEX] = shader;
-    break;
-  case GL_GEOMETRY_SHADER:
-    shaders_[GEOMETRY_SHADER_INDEX] = shader;
-    break;
-  }
+  shaders_.at(get_shader_index(type)) = shader;
+
   return true;
 }
 
