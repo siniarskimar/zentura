@@ -67,6 +67,18 @@ GLShaderCompiler::GLShaderCompiler()
       fragmentShader(0),
       geometryShader(0) {}
 
+GLShaderCompiler::~GLShaderCompiler() {
+  if(vertexShader != 0) {
+    GLCall(glDeleteShader(vertexShader));
+  }
+  if(fragmentShader != 0) {
+    GLCall(glDeleteShader(fragmentShader));
+  }
+  if(geometryShader != 0) {
+    GLCall(glDeleteShader(geometryShader));
+  }
+}
+
 std::optional<GLShaderProgram> GLShaderCompiler::link() {
   auto shaderProg = GLCall(glCreateProgram());
 
