@@ -6,6 +6,7 @@
 #include <fmt/core.h>
 #include <cstdio>
 #include "gl/shadercompiler.hpp"
+#include "gl/vao.hpp"
 
 int main(int argc, const char* argv[]) {
 
@@ -42,9 +43,17 @@ int main(int argc, const char* argv[]) {
   const float vertices[] = {
       // clang-format off
       // position     color
-      0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
+      -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,
       0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
-      -0.5f, -0.5f,   0.0f, 0.0f, 1.0f
+      0.5f,   0.5f,   1.0f, 1.0f, 0.0f,
+      -0.5f,   0.5f,  1.0f, 0.0f, 0.0f,
+      // clang-format on
+  };
+
+  const unsigned int indicies[] = {
+      // clang-format off
+      0, 1, 2,
+      2, 3, 0
       // clang-format on
   };
 
@@ -96,30 +105,27 @@ int main(int argc, const char* argv[]) {
   const GLint positionAttribLoc = shaderProgram->getAttribLocation("iPosition");
   const GLint colorAttribLoc = shaderProgram->getAttribLocation("iColor");
 
-  GLuint vertexArray;
-  GLuint vertexBuffer;
-  GLCall(glGenBuffers(1, &vertexBuffer));
-  GLCall(glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer));
-  GLCall(glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW));
+  GLVAO vertexArray;
+  vertexArray.bind();
+  vertexArray.uploadDataBuffer(vertices, sizeof(vertices), GL_STATIC_DRAW);
+  vertexArray.uploadIndexBuffer(indicies, sizeof(indicies), GL_STATIC_DRAW);
 
-  GLCall(glGenVertexArrays(1, &vertexArray));
-  GLCall(glBindVertexArray(vertexArray));
+  vertexArray.enableAttrib(positionAttribLoc);
+  vertexArray.vertexAttribFormat(
+      positionAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, 0);
 
-  GLCall(glEnableVertexAttribArray(positionAttribLoc));
-  GLCall(glVertexAttribPointer(
-      positionAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, (void*) 0));
+  vertexArray.enableAttrib(colorAttribLoc);
+  vertexArray.vertexAttribFormat(
+      colorAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5, sizeof(float) * 2);
 
-  GLCall(glEnableVertexAttribArray(colorAttribLoc));
-  GLCall(glVertexAttribPointer(
-      colorAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5,
-      (void*) (sizeof(float) * 2)));
+  glBindVertexArray(0);
 
   while(!window.shouldClose()) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     shaderProgram->use();
-    GLCall(glBindVertexArray(vertexArray));
-    GLCall(glDrawArrays(GL_TRIANGLES, 0, 3));
+    vertexArray.bind();
+    GLCall(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr));
 
     window.swapBuffers();
     glfwPollEvents();

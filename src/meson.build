@@ -5,6 +5,7 @@ executable('zen',
   'gl/glad/glad.c',
   'gl/shader.cpp',
   'gl/shadercompiler.cpp',
+  'gl/vao.cpp',
   dependencies: [
     opengl_dependencies,
     libGLFW,
