@@ -15,8 +15,8 @@ class GLVAO {
       GLint attrib, GLint dimensions, GLenum type, GLboolean normalize, GLsizei step,
       GLsizei offset);
 
-  void uploadDataBuffer(const void* data, size_t size, GLenum usageHint);
-  void uploadIndexBuffer(const void* data, size_t size, GLenum usageHint);
+  void uploadDataBuffer(const void* data, GLsizeiptr size, GLenum usageHint);
+  void uploadIndexBuffer(const void* data, GLsizeiptr size, GLenum usageHint);
 
   private:
   GLuint glObjectId_;

@@ -1,6 +1,6 @@
 #include "gl/vao.hpp"
 
-GLVAO::GLVAO() {
+GLVAO::GLVAO() : glObjectId_(0), dataBuffer_(0), indexBuffer_(0) {
   glGenVertexArrays(1, &glObjectId_);
   glGenBuffers(1, &dataBuffer_);
   glGenBuffers(1, &indexBuffer_);
@@ -31,12 +31,12 @@ void GLVAO::vertexAttribFormat(
       attrib, dimensions, type, normalize, step, (const void*) (uintptr_t) offset);
 }
 
-void GLVAO::uploadDataBuffer(const void* data, size_t size, GLenum usageHint) {
+void GLVAO::uploadDataBuffer(const void* data, GLsizeiptr size, GLenum usageHint) {
   glBindBuffer(GL_ARRAY_BUFFER, dataBuffer_);
   glBufferData(GL_ARRAY_BUFFER, size, data, usageHint);
 }
 
-void GLVAO::uploadIndexBuffer(const void* data, size_t size, GLenum usageHint) {
+void GLVAO::uploadIndexBuffer(const void* data, GLsizeiptr size, GLenum usageHint) {
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer_);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, data, usageHint);
 }
