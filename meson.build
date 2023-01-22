@@ -18,6 +18,7 @@ libOpenGL = dependency('opengl', required: false)
 libGLFW = dependency('glfw3', required: true)
 
 libfmt = dependency('fmt', version: '9.1.0>=', required: true)
+libglm = dependency('glm', version: '0.9.9.8>=', required: true)
 
 if not libOpenGL.found()
   # the 'Legacy' OpenGL
@@ -48,10 +49,6 @@ if doxygen.found() and get_option('build_devdocs')
     ]
   )
 endif
-
-python_install = import('python').find_installation(
-  modules: ['sphinx', 'sphinx_book_theme']
-)
 
 if get_option('build_userdocs')
   run_target('userdoc',

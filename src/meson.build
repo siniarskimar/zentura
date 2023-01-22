@@ -9,7 +9,8 @@ executable('zen',
   dependencies: [
     opengl_dependencies,
     libGLFW,
-    libfmt
+    libfmt,
+    libglm
   ],
   include_directories: [
     include_directories('gl')
