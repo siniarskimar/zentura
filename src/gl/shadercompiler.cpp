@@ -1,5 +1,4 @@
 #include "./shadercompiler.hpp"
-#include <map>
 #include <cstddef>
 
 #define VERTEX_SHADER_INDEX 0
@@ -43,13 +42,18 @@ GLShaderCompiler::CompilationStatus GLShaderCompiler::compile(
   GLint compileStatus = GL_TRUE;
   GLCall(glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus));
   if(compileStatus == GL_FALSE) {
+    int infoLogLen = 0;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogLen);
+    std::vector<char> infoLog(infoLogLen, '\0');
+    glGetShaderInfoLog(shader, infoLogLen, nullptr, infoLog.data());
+
     glDeleteShader(shader);
-    return false;
+    return CompilationStatus(false, std::string(infoLog.begin(), infoLog.end()));
   }
 
   shaders_.at(get_shader_index(type)) = shader;
 
-  return true;
+  return CompilationStatus(true);
 }
 
 std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) {
