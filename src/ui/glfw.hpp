@@ -10,6 +10,7 @@
 /// @brief Represents GLFW library context
 class GLFW {
   public:
+  ~GLFW();
 
   /// @brief Initializes GLFW
   /// @return true on sucess, false otherwise

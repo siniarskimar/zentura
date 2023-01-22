@@ -2,12 +2,11 @@
 #include <GLFW/glfw3.h>
 #include <memory>
 
-/// @internal
-struct GLFWLibrary_raii {
-  ~GLFWLibrary_raii() { glfwTerminate(); }
-};
+static std::unique_ptr<GLFW> pContext;
 
-static std::unique_ptr<GLFWLibrary_raii> pContext;
+GLFW::~GLFW() {
+  glfwTerminate();
+}
 
 bool GLFW::initialize() {
   if(pContext != nullptr) {
@@ -16,7 +15,7 @@ bool GLFW::initialize() {
   if(!glfwInit()) {
     return false;
   }
-  pContext = std::make_unique<GLFWLibrary_raii>();
+  pContext = std::make_unique<GLFW>();
   return true;
 }
 bool GLFW::isInitialized() {
