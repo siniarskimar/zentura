@@ -4,10 +4,10 @@
 #include <cstddef>
 
 /// @brief OpenGL Vertex Array Object abstraction
-class GLVAO {
+class GLVertexArray {
   public:
-  GLVAO();
-  ~GLVAO();
+  GLVertexArray();
+  ~GLVertexArray();
 
   void bind();
   void enableAttrib(GLint attrib);

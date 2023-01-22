@@ -105,7 +105,7 @@ int main(int argc, const char* argv[]) {
   const GLint positionAttribLoc = shaderProgram->getAttribLocation("iPosition");
   const GLint colorAttribLoc = shaderProgram->getAttribLocation("iColor");
 
-  GLVAO vertexArray;
+  GLVertexArray vertexArray;
   vertexArray.bind();
   vertexArray.uploadDataBuffer(vertices, sizeof(vertices), GL_STATIC_DRAW);
   vertexArray.uploadIndexBuffer(indicies, sizeof(indicies), GL_STATIC_DRAW);
