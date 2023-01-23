@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gl/glad/glad.h"
+#include "glad/glad.h"
 #include <fmt/core.h>
 #include <cstdio>
 
