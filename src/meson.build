@@ -6,6 +6,7 @@ executable('zen',
   'gl/shader.cpp',
   'gl/shadercompiler.cpp',
   'gl/vao.cpp',
+  'stb_image.c',
   dependencies: [
     opengl_dependencies,
     libGLFW,
@@ -13,6 +14,6 @@ executable('zen',
     libglm
   ],
   include_directories: [
-    include_directories('gl')
+    include_directories('include')
   ]
 )
