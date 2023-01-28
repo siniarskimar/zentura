@@ -1,6 +1,6 @@
 project('zen', ['c','cpp'],
   default_options: [
-    'cpp_std=c++17'
+    'cpp_std=c++20'
   ],
   license: 'Apache-2.0',
   meson_version: '0.63.0>='
