@@ -13,9 +13,10 @@ executable('zen',
     libfmt,
     libglm,
     libfontconfig,
-    libfreetype2
+    libfreetype
   ],
   include_directories: [
     include_directories('include')
-  ]
+  ],
+  cpp_pch: 'pch/pch.hpp'
 )
