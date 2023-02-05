@@ -19,6 +19,7 @@ libGLFW = dependency('glfw3', required: true)
 
 libfmt = dependency('fmt', version: '9.1.0>=', required: true)
 libglm = dependency('glm', version: '0.9.9.8>=', required: true)
+libfontconfig = dependency('fontconfig', required: true)
 
 if not libOpenGL.found()
   # the 'Legacy' OpenGL

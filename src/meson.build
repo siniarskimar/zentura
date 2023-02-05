@@ -11,7 +11,8 @@ executable('zen',
     opengl_dependencies,
     libGLFW,
     libfmt,
-    libglm
+    libglm,
+    libfontconfig
   ],
   include_directories: [
     include_directories('include')

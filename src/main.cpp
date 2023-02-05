@@ -1,4 +1,5 @@
 #include <iostream>
+#include <optional>
 #include <vector>
 #include "gl/shader.hpp"
 #include "ui/glfw.hpp"
@@ -7,6 +8,50 @@
 #include <cstdio>
 #include "gl/shadercompiler.hpp"
 #include "gl/vao.hpp"
+#include <fontconfig/fontconfig.h>
+
+std::optional<std::string> getMonospaceFont() noexcept {
+  FcConfig* config = FcInitLoadConfigAndFonts();
+  if(config == NULL) {
+    return std::nullopt;
+  }
+  FcPattern* pattern = FcNameParse(reinterpret_cast<const FcChar8*>("mono"));
+  FcConfigSubstitute(config, pattern, FcMatchPattern);
+  FcDefaultSubstitute(pattern);
+
+  FcResult res;
+
+  FcPattern* font = FcFontMatch(config, pattern, &res);
+
+  if(font == NULL) {
+    FcPatternDestroy(pattern);
+    FcConfigDestroy(config);
+    FcFini();
+    return std::nullopt;
+  }
+
+  FcChar8* filepath_pointer;
+  if(FcPatternGetString(font, FC_FILE, 0, &filepath_pointer) != FcResultMatch) {
+    /// ??? There should be at least one entry ???
+    FcPatternDestroy(font);
+    FcPatternDestroy(pattern);
+    FcConfigDestroy(config);
+    FcFini();
+    fmt::print(
+        stderr,
+        "fontconfig found a monospace font without a filename! most likely a bug!\n");
+    return std::nullopt;
+  }
+
+  std::string result = reinterpret_cast<const char*>(filepath_pointer);
+
+  FcPatternDestroy(font);
+  FcPatternDestroy(pattern);
+  FcConfigDestroy(config);
+  FcFini();
+
+  return std::make_optional(std::move(result));
+}
 
 int main(int argc, const char* argv[]) {
 
@@ -14,6 +59,12 @@ int main(int argc, const char* argv[]) {
     fmt::print(stderr, "Failed to initialize GLFW\n");
     return 2;
   }
+  auto monospaceFontPath = getMonospaceFont();
+  if(!monospaceFontPath.has_value()) {
+    fmt::print(stderr, "No valid monospace font found!\n");
+    return 2;
+  }
+  fmt::print("{}\n", monospaceFontPath.value());
 
   glfwSetErrorCallback([](int errorCode, const char* errorMsg) {
     fmt::print(stderr, "[GLFW {}] {}\n", errorCode, errorMsg);
