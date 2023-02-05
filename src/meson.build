@@ -12,7 +12,8 @@ executable('zen',
     libGLFW,
     libfmt,
     libglm,
-    libfontconfig
+    libfontconfig,
+    libfreetype2
   ],
   include_directories: [
     include_directories('include')
