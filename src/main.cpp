@@ -1,14 +1,15 @@
-#include <iostream>
 #include <optional>
 #include <vector>
+#include <fmt/core.h>
+#include <cstdio>
+#include <fontconfig/fontconfig.h>
 #include "gl/shader.hpp"
 #include "ui/glfw.hpp"
 #include "./ui/Window.hpp"
-#include <fmt/core.h>
-#include <cstdio>
 #include "gl/shadercompiler.hpp"
 #include "gl/vao.hpp"
-#include <fontconfig/fontconfig.h>
+#include "shader/simple_vert.hpp"
+#include "shader/simple_frag.hpp"
 
 std::optional<std::string> getMonospaceFont() noexcept {
   FcConfig* config = FcInitLoadConfigAndFonts();
@@ -110,37 +111,16 @@ int main(int argc, const char* argv[]) {
 
   GLShaderCompiler shaderCompiler;
 
-  const char* vertexSource = R"(
-    #version 130
-
-    in vec2 iPosition;
-    in vec3 iColor;
-    out vec3 vertexColor;
-
-    void main() {
-      gl_Position = vec4(iPosition.xy, 0.0, 1.0);
-      vertexColor = iColor;
-    }  
-  )";
-
-  const char* fragmentSource = R"(
-    #version 130
-
-    in vec3 vertexColor;
-    out vec4 fragment;
-    
-    void main() {
-      fragment = vec4(vertexColor, 1.0);  
-    }
-    )";
   GLShaderCompiler::CompilationStatus compileStatus;
 
-  if(!(compileStatus = shaderCompiler.compile(GL_VERTEX_SHADER, vertexSource))) {
+  if(!(compileStatus =
+           shaderCompiler.compile(GL_VERTEX_SHADER, embed_shader_simple_vertex))) {
     fmt::print(stderr, "Vertex shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
   }
 
-  if(!(compileStatus = shaderCompiler.compile(GL_FRAGMENT_SHADER, fragmentSource))) {
+  if(!(compileStatus =
+           shaderCompiler.compile(GL_FRAGMENT_SHADER, embed_shader_simple_frag))) {
     fmt::print(
         stderr, "Fragment shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
@@ -153,8 +133,8 @@ int main(int argc, const char* argv[]) {
     return 2;
   }
 
-  const GLint positionAttribLoc = shaderProgram->getAttribLocation("iPosition");
-  const GLint colorAttribLoc = shaderProgram->getAttribLocation("iColor");
+  const GLint positionAttribLoc = 0;
+  const GLint colorAttribLoc = 1;
 
   GLVertexArray vertexArray;
   vertexArray.bind();
