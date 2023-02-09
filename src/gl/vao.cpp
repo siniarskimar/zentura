@@ -1,12 +1,15 @@
 #include "gl/vao.hpp"
 
-GLVertexArray::GLVertexArray() : m_glObjectId(0), m_dataBuffer(0), m_indexBuffer(0) {
+GLVertexArray::GLVertexArray() noexcept
+    : m_glObjectId(0),
+      m_dataBuffer(0),
+      m_indexBuffer(0) {
   glGenVertexArrays(1, &m_glObjectId);
   glGenBuffers(1, &m_dataBuffer);
   glGenBuffers(1, &m_indexBuffer);
 }
 
-GLVertexArray::~GLVertexArray() {
+GLVertexArray::~GLVertexArray() noexcept {
   glDeleteVertexArrays(1, &m_glObjectId);
   glDeleteBuffers(1, &m_dataBuffer);
   glDeleteBuffers(1, &m_indexBuffer);
