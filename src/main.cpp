@@ -15,6 +15,8 @@
 #include "shader/simple_frag.hpp"
 #include "lib/glfw/glfw.hpp"
 
+#include <GLFW/glfw3.h>
+
 std::optional<std::string> getMonospaceFont() noexcept {
   FcConfig* config = FcInitLoadConfigAndFonts();
   if(config == nullptr) {
@@ -76,9 +78,12 @@ int main(int argc, const char* argv[]) {
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-  Window& window = Window::createInstance(800, 600, "ZEN");
+  auto window = ui::Window::create(800, 600, "zen");
+  if(!window.has_value()) {
+    fmt::print(stderr, "Failed to create window: {}", glfwGetError(nullptr));
+  }
 
-  window.makeContextCurrent();
+  window->makeCurrent();
 
   const int kVersion =
       gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
@@ -154,14 +159,14 @@ int main(int argc, const char* argv[]) {
 
   glBindVertexArray(0);
 
-  while(!window.shouldClose()) {
+  while(!window->shouldClose()) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     shaderProgram->use();
     vertexArray.bind();
     GLCall(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr));
 
-    window.swapBuffers();
+    glfwSwapBuffers(window->getHandle());
     glfwPollEvents();
   }
 

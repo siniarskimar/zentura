@@ -1,53 +1,35 @@
-#include "Window.hpp"
-#include <string>
-#include <exception>
-#include <stdexcept>
+#include "./window.hpp"
 #include <GLFW/glfw3.h>
-#include <memory>
-#include <iostream>
 
-static std::unique_ptr<Window> pWindow;
+namespace ui {
 
-Window::Window(const int width, const int height, const std::string_view title) {
-  const std::string kTmpTitle(title.begin(), title.end());
+std::optional<Window> Window::create(
+    const int width, const int height, const std::string& title) {
+  auto window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
 
-  GLFWwindow* window =
-      glfwCreateWindow(width, height, kTmpTitle.data(), nullptr, nullptr);
   if(window == nullptr) {
-    throw std::runtime_error("Failed to create GLFW window");
+    return std::nullopt;
   }
-
-  m_glfwWindow = window;
+  return {window};
 }
 
-Window::~Window() {
-  glfwDestroyWindow(m_glfwWindow);
+Window::Window(GLFWwindow* handle)
+    : m_window(WindowHandlePtr(handle, glfwDestroyWindow)) {}
+
+void Window::makeCurrent() {
+  glfwMakeContextCurrent(m_window.get());
 }
 
-Window& Window::createInstance(
-    const int width, const int height, const std::string_view title) {
-  pWindow = std::unique_ptr<Window>(new Window(width, height, title));
-  return *pWindow;
+GLFWwindow* Window::getHandle() {
+  return m_window.get();
 }
 
-Window& Window::getInstance() {
-  if(pWindow == nullptr) {
-    throw std::runtime_error("Window::getInstance() called but no window created!");
-  }
-  return *pWindow;
+void Window::setTitle(const std::string& title) {
+  glfwSetWindowTitle(m_window.get(), title.c_str());
 }
 
-void Window::destroyInstance() {
-  pWindow.reset(nullptr);
-}
-
-void Window::makeContextCurrent() {
-  glfwMakeContextCurrent(m_glfwWindow);
-}
-
-void Window::swapBuffers() {
-  glfwSwapBuffers(m_glfwWindow);
-}
 bool Window::shouldClose() {
-  return glfwWindowShouldClose(m_glfwWindow);
+  return glfwWindowShouldClose(m_window.get());
 }
+
+} // namespace ui

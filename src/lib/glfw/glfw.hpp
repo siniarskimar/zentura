@@ -14,6 +14,7 @@ namespace glfw {
 class InitializationError : public std::exception {
   public:
   InitializationError(const char* what) noexcept : m_what(what) {}
+
   // NOLINTNEXTLINE(modernize-pass-by-value)
   InitializationError(int err, const std::string& what) noexcept : m_what(what) {}
 
