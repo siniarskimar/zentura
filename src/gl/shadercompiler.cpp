@@ -23,7 +23,7 @@ constexpr int getShaderIndex(const GLenum glenum) {
   }
 };
 
-GLShaderCompiler::GLShaderCompiler() : m_shaders() {}
+GLShaderCompiler::GLShaderCompiler() noexcept : m_shaders(), m_infoLog() {}
 
 GLShaderCompiler::~GLShaderCompiler() {
   for(auto& shader: m_shaders) {
@@ -33,8 +33,7 @@ GLShaderCompiler::~GLShaderCompiler() {
   }
 }
 
-GLShaderCompiler::CompilationStatus GLShaderCompiler::compile(
-    GLenum type, const std::string& source) {
+bool GLShaderCompiler::compile(GLenum type, const std::string& source) {
   GLuint shader = GLCall(glCreateShader(type));
 
   const GLchar* shaderSources[1] = {source.c_str()};
@@ -52,12 +51,13 @@ GLShaderCompiler::CompilationStatus GLShaderCompiler::compile(
     glGetShaderInfoLog(shader, infoLogLen, nullptr, infoLog.data());
 
     glDeleteShader(shader);
-    return {false, std::string(infoLog.begin(), infoLog.end())};
+    m_infoLog = {infoLog.begin(), infoLog.end()};
+    return false;
   }
 
   m_shaders.at(getShaderIndex(type)) = shader;
 
-  return {true};
+  return true;
 }
 
 std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) {
@@ -87,12 +87,4 @@ std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) 
   }
 
   return std::make_optional<GLShaderProgram>(shaderProg);
-}
-
-GLShaderCompiler::CompilationStatus::CompilationStatus(bool success, std::string infoLog)
-    : success(success),
-      infoLog(std::move(infoLog)) {}
-
-GLShaderCompiler::CompilationStatus::operator bool() {
-  return success;
 }

@@ -11,47 +11,22 @@
 class GLShaderCompiler {
   public:
 
-  /// @brief Used in GLShaderCompiler::compile for returning compilation status
-  struct CompilationStatus {
-    /// @brief indicates whenever compilation succeded
-    bool success{};
-
-    /// @brief errorLog returned when error occoured
-    std::string infoLog;
-
-    /// @brief Default constructor
-    CompilationStatus() = default;
-
-    /// @brief Constructs CompilationStatus with given success state
-    /// @param success true or false depending on the result of compilation
-    /// @param infoLog ie. error log
-    CompilationStatus(bool success, std::string infoLog = "");
-
-    CompilationStatus(const CompilationStatus&) = default;
-    CompilationStatus(CompilationStatus&&) = default;
-
-    CompilationStatus& operator=(const CompilationStatus&) = default;
-    // CompilationStatus& operator=(CompilationStatus&&) = default;
-
-    ~CompilationStatus() = default;
-
-    /// @brief Implicit boolean conversion
-    /// @return @ref success member variable
-    operator bool();
-  };
-
   /// @brief Default constructor
-  GLShaderCompiler();
+  GLShaderCompiler() noexcept;
 
   /// @brief Destructor
-  ~GLShaderCompiler();
+  ~GLShaderCompiler() noexcept;
+
+  [[nodiscard]] const std::string& getInfoLog() const noexcept {
+    return m_infoLog;
+  }
 
   /// @brief Compiles a given shader source
   ///
   /// @param type Shader type
   /// @param source Shader source
-  /// @return CompilationStatus
-  CompilationStatus compile(GLenum type, const std::string& source);
+  /// @return bool true if success, false otherwise
+  bool compile(GLenum type, const std::string& source);
 
   /// @brief Links together previously compiled shaders
   /// @param deleteShaders Whenever to mark compiled shaders for deletion after successful
@@ -61,4 +36,5 @@ class GLShaderCompiler {
 
   private:
   std::array<GLuint, 3> m_shaders;
+  std::string m_infoLog;
 };
