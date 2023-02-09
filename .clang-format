@@ -28,3 +28,4 @@ SpaceBeforeRangeBasedForLoopColon: false
 Standard: c++17
 TabWidth: 2
 PenaltyReturnTypeOnItsOwnLine: 1000000
+SeparateDefinitionBlocks: Always
