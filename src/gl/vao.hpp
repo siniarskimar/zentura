@@ -6,8 +6,12 @@
 /// @brief OpenGL Vertex Array Object abstraction
 class GLVertexArray {
   public:
-  GLVertexArray();
-  ~GLVertexArray();
+  GLVertexArray() noexcept;
+  GLVertexArray(const GLVertexArray&) = delete;
+  GLVertexArray(GLVertexArray&&) = default;
+  GLVertexArray& operator=(const GLVertexArray&) = delete;
+  GLVertexArray& operator=(GLVertexArray&&) = default;
+  ~GLVertexArray() noexcept;
 
   void bind();
   void enableAttrib(GLint attrib);
