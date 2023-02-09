@@ -22,6 +22,10 @@ class GLVertexArray {
   void uploadDataBuffer(const void* data, GLsizeiptr size, GLenum usageHint);
   void uploadIndexBuffer(const void* data, GLsizeiptr size, GLenum usageHint);
 
+  [[nodiscard]] inline GLuint getGLObjectID() const noexcept {
+    return m_glObjectId;
+  }
+
   private:
   GLuint m_glObjectId;
   GLuint m_dataBuffer;
