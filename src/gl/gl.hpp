@@ -10,6 +10,7 @@ inline int glClearError() {
   return 0;
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define GLCall(func) \
   (glClearError(), func); \
   while(auto error = glGetError()) { \
