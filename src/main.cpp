@@ -14,6 +14,7 @@
 #include "gl/vao.hpp"
 #include "shader/simple_vert.hpp"
 #include "shader/simple_frag.hpp"
+#include "lib/glfw/glfw.hpp"
 
 std::optional<std::string> getMonospaceFont() noexcept {
   FcConfig* config = FcInitLoadConfigAndFonts();
@@ -62,14 +63,7 @@ std::optional<std::string> getMonospaceFont() noexcept {
 // TODO: break up this behemoth of a function
 int main(int argc, const char* argv[]) {
 
-  if(!GLFW::initialize()) {
-    fmt::print(stderr, "Failed to initialize GLFW\n");
-    return 2;
-  }
-
-  glfwSetErrorCallback([](int errorCode, const char* errorMsg) {
-    fmt::print(stderr, "[GLFW {}] {}\n", errorCode, errorMsg);
-  });
+  glfw::GLFWLibrary glfwLibrary;
 
   auto monospaceFontPath = getMonospaceFont();
   if(!monospaceFontPath.has_value()) {

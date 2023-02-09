@@ -5,45 +5,44 @@
 #include <optional>
 #include <string>
 #include <GLFW/glfw3.h>
+#include <exception>
+#include <utility>
+#include <fmt/core.h>
 
 namespace glfw {
 
-class Window {
+class InitializationError : public std::exception {
   public:
-  Window(GLFWwindow* window);
-  Window(const Window&) = delete;
-  Window(Window&&) = default;
-  ~Window();
+  InitializationError(const char* what) noexcept : m_what(what) {}
+  // NOLINTNEXTLINE(modernize-pass-by-value)
+  InitializationError(int err, const std::string& what) noexcept : m_what(what) {}
 
-  Window& operator=(const Window&) = delete;
-  Window& operator=(Window&&) = default;
+  InitializationError(const InitializationError&) noexcept = default;
+  InitializationError(InitializationError&&) noexcept = delete;
+  InitializationError& operator=(const InitializationError& other) noexcept = default;
+  InitializationError& operator=(InitializationError&&) noexcept = delete;
 
-  void loadGL();
+  ~InitializationError() override = default;
 
-  void setTitle(const std::string&);
-
-  bool shouldClose() noexcept;
+  [[nodiscard]] const char* what() const noexcept override {
+    return m_what.c_str();
+  }
 
   private:
-  GLFWwindow* m_window;
+  std::string m_what;
 };
 
 class GLFWLibrary {
   public:
-  GLFWLibrary() = default;
+  GLFWLibrary();
   GLFWLibrary(const GLFWLibrary&) = default;
   GLFWLibrary(GLFWLibrary&&) = default;
   ~GLFWLibrary();
 
   GLFWLibrary& operator=(const GLFWLibrary&) = default;
   GLFWLibrary& operator=(GLFWLibrary&&) = default;
-
-  const char* getVersionString() noexcept;
-  std::optional<Window> createWindow() noexcept;
 };
 
-std::optional<GLFWLibrary> initialize() noexcept;
-void terminate() noexcept;
 }; // namespace glfw
 
 #endif

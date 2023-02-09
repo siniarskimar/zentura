@@ -1,12 +1,12 @@
 executable('zen',
   'main.cpp',
-  'ui/glfw.cpp',
   'ui/Window.cpp',
   'gl/glad/glad.c',
   'gl/shader.cpp',
   'gl/shadercompiler.cpp',
   'gl/vao.cpp',
   'stb_image.c',
+  'lib/glfw/glfw.cpp',
   dependencies: [
     opengl_dependencies,
     libGLFW,
