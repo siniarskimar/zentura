@@ -74,6 +74,13 @@ std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) 
   GLint linkStatus = GL_TRUE;
   glGetProgramiv(shaderProg, GL_LINK_STATUS, &linkStatus);
   if(linkStatus == GL_FALSE) {
+    int infoLogLen = 0;
+    glGetProgramiv(shaderProg, GL_INFO_LOG_LENGTH, &infoLogLen);
+    std::vector<char> infoLog(infoLogLen, '\0');
+    glGetProgramInfoLog(shaderProg, infoLogLen, nullptr, infoLog.data());
+
+    glDeleteProgram(shaderProg);
+    m_infoLog = {infoLog.begin(), infoLog.end()};
     return std::nullopt;
   }
 
