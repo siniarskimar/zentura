@@ -3,9 +3,9 @@
 #include <utility>
 
 enum GLShaderIndex {
-  VERTEX_SHADER_INDEX = 0,
-  FRAGMENT_SHADER_INDEX = 1,
-  GEOMETRY_SHADER_INDEX = 2
+  kVertexShaderIndex = 0,
+  kFragmentShaderIndex = 1,
+  kGeometryShaderIndex = 2
 };
 
 // I could do some template magic to enforce conteval
@@ -13,11 +13,11 @@ enum GLShaderIndex {
 constexpr int getShaderIndex(const GLenum glenum) {
   switch(glenum) {
   case GL_VERTEX_SHADER:
-    return VERTEX_SHADER_INDEX;
+    return kVertexShaderIndex;
   case GL_FRAGMENT_SHADER:
-    return FRAGMENT_SHADER_INDEX;
+    return kFragmentShaderIndex;
   case GL_GEOMETRY_SHADER:
-    return GEOMETRY_SHADER_INDEX;
+    return kGeometryShaderIndex;
   default:
     return -1; // std::array should catch this right?
   }

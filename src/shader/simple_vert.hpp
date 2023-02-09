@@ -1,7 +1,7 @@
 #ifndef SHADER_SIMPLE_VERT_H
 #define SHADER_SIMPLE_VERT_H
 
-static const char* const EMBED_SHADER_SIMPLE_VERTEX =
+static const char* const kEmbedShaderSimpleVertex =
     R"(
 #version 330 core
 

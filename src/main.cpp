@@ -87,19 +87,19 @@ int main(int argc, const char* argv[]) {
 
   window.makeContextCurrent();
 
-  int version = gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
+  const int kVersion =
+      gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
 
-  if(version == 0) {
+  if(kVersion == 0) {
     fmt::print(stderr, "Failed to load OpenGL context\n");
     return 2;
   }
-
   // unsigned char* -> char*
   fmt::print("OpenGL {:s}\n", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
 
   glfwSwapInterval(1);
 
-  const float VERTICES[] = {
+  const float kVertices[] = {
       // clang-format off
       // position     color
       -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,
@@ -109,7 +109,7 @@ int main(int argc, const char* argv[]) {
       // clang-format on
   };
 
-  const unsigned int INDICIES[] = {
+  const unsigned int kIndicies[] = {
       // clang-format off
       0, 1, 2,
       2, 3, 0
@@ -121,13 +121,13 @@ int main(int argc, const char* argv[]) {
   GLShaderCompiler::CompilationStatus compileStatus;
 
   if(!(compileStatus =
-           shaderCompiler.compile(GL_VERTEX_SHADER, EMBED_SHADER_SIMPLE_VERTEX))) {
+           shaderCompiler.compile(GL_VERTEX_SHADER, kEmbedShaderSimpleVertex))) {
     fmt::print(stderr, "Vertex shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
   }
 
   if(!(compileStatus =
-           shaderCompiler.compile(GL_FRAGMENT_SHADER, EMBED_SHADER_SIMPLE_FRAG))) {
+           shaderCompiler.compile(GL_FRAGMENT_SHADER, kEmbedShaderSimpleFrag))) {
     fmt::print(
         stderr, "Fragment shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
@@ -140,23 +140,23 @@ int main(int argc, const char* argv[]) {
     return 2;
   }
 
-  const GLint POSITION_ATTRIB_LOC = 0;
-  const GLint COLOR_ATTRIB_LOC = 1;
+  const GLint kPositionAttribLoc = 0;
+  const GLint kColorAttribLoc = 1;
 
   GLVertexArray vertexArray;
   vertexArray.bind();
   vertexArray.uploadDataBuffer(
-      static_cast<const void*>(VERTICES), sizeof(VERTICES), GL_STATIC_DRAW);
+      static_cast<const void*>(kVertices), sizeof(kVertices), GL_STATIC_DRAW);
   vertexArray.uploadIndexBuffer(
-      static_cast<const void*>(INDICIES), sizeof(INDICIES), GL_STATIC_DRAW);
+      static_cast<const void*>(kIndicies), sizeof(kIndicies), GL_STATIC_DRAW);
 
-  vertexArray.enableAttrib(POSITION_ATTRIB_LOC);
+  vertexArray.enableAttrib(kPositionAttribLoc);
   vertexArray.vertexAttribFormat(
-      POSITION_ATTRIB_LOC, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, 0);
+      kPositionAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, 0);
 
-  vertexArray.enableAttrib(COLOR_ATTRIB_LOC);
+  vertexArray.enableAttrib(kColorAttribLoc);
   vertexArray.vertexAttribFormat(
-      COLOR_ATTRIB_LOC, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5, sizeof(float) * 2);
+      kColorAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5, sizeof(float) * 2);
 
   glBindVertexArray(0);
 
