@@ -3,7 +3,7 @@
 #include <optional>
 #include <string_view>
 
-GLShaderProgram::GLShaderProgram(GLuint glID) : glID_(glID) {}
+GLShaderProgram::GLShaderProgram(GLuint glID) : m_glId(glID) {}
 
 GLShaderProgram::~GLShaderProgram() {
   auto object = getGLObjectID();
@@ -17,7 +17,7 @@ void GLShaderProgram::use() {
 }
 
 GLuint GLShaderProgram::getGLObjectID() const noexcept {
-  return glID_;
+  return m_glId;
 }
 
 GLint GLShaderProgram::getUniformLocation(const std::string& name) const {

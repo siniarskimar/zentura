@@ -14,7 +14,7 @@ class GLShaderCompiler {
   /// @brief Used in GLShaderCompiler::compile for returning compilation status
   struct CompilationStatus {
     /// @brief indicates whenever compilation succeded
-    bool success;
+    bool success{};
 
     /// @brief errorLog returned when error occoured
     std::string infoLog;
@@ -26,6 +26,14 @@ class GLShaderCompiler {
     /// @param success true or false depending on the result of compilation
     /// @param infoLog ie. error log
     CompilationStatus(bool success, std::string infoLog = "");
+
+    CompilationStatus(const CompilationStatus&) = default;
+    CompilationStatus(CompilationStatus&&) = default;
+
+    CompilationStatus& operator=(const CompilationStatus&) = default;
+    // CompilationStatus& operator=(CompilationStatus&&) = default;
+
+    ~CompilationStatus() = default;
 
     /// @brief Implicit boolean conversion
     /// @return @ref success member variable
@@ -52,5 +60,5 @@ class GLShaderCompiler {
   std::optional<GLShaderProgram> link(const bool deleteShaders = true);
 
   private:
-  std::array<GLuint, 3> shaders_;
+  std::array<GLuint, 3> m_shaders;
 };

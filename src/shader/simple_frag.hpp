@@ -1,7 +1,7 @@
 #ifndef SHADER_SIMPLE_FRAG_H
 #define SHADER_SIMPLE_FRAG_H
 
-static const char* embed_shader_simple_frag =
+static const char* const EMBED_SHADER_SIMPLE_FRAG =
     R"(
 #version 330 core
 

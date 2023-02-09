@@ -35,7 +35,7 @@ class GLShaderProgram {
   void use();
 
   /// @brief Returns the underlying OpenGL Object
-  GLuint getGLObjectID() const noexcept;
+  [[nodiscard]] GLuint getGLObjectID() const noexcept;
 
   /// @brief Gets location of an attribute
   ///
@@ -43,7 +43,7 @@ class GLShaderProgram {
   ///
   /// @param name attribute name
   /// @return Attribute location
-  GLint getAttribLocation(const std::string& name) const;
+  [[nodiscard]] GLint getAttribLocation(const std::string& name) const;
 
   /// @brief Gets location of an uniform
   ///
@@ -52,8 +52,8 @@ class GLShaderProgram {
   ///
   /// @param name Uniform name
   /// @return Uniform location
-  GLint getUniformLocation(const std::string& name) const;
+  [[nodiscard]] GLint getUniformLocation(const std::string& name) const;
 
   private:
-  GLuint glID_;
+  GLuint m_glId;
 };

@@ -1,13 +1,16 @@
 #include "./shadercompiler.hpp"
 #include <cstddef>
+#include <utility>
 
-#define VERTEX_SHADER_INDEX 0
-#define FRAGMENT_SHADER_INDEX 1
-#define GEOMETRY_SHADER_INDEX 2
+enum GLShaderIndex {
+  VERTEX_SHADER_INDEX = 0,
+  FRAGMENT_SHADER_INDEX = 1,
+  GEOMETRY_SHADER_INDEX = 2
+};
 
 // I could do some template magic to enforce conteval
 // but I prefer not to for readability sake
-constexpr int get_shader_index(const GLenum glenum) {
+constexpr int getShaderIndex(const GLenum glenum) {
   switch(glenum) {
   case GL_VERTEX_SHADER:
     return VERTEX_SHADER_INDEX;
@@ -20,10 +23,10 @@ constexpr int get_shader_index(const GLenum glenum) {
   }
 };
 
-GLShaderCompiler::GLShaderCompiler() : shaders_() {}
+GLShaderCompiler::GLShaderCompiler() : m_shaders() {}
 
 GLShaderCompiler::~GLShaderCompiler() {
-  for(auto& shader: shaders_) {
+  for(auto& shader: m_shaders) {
     if(shader != 0) {
       GLCall(glDeleteShader(shader));
     }
@@ -36,7 +39,8 @@ GLShaderCompiler::CompilationStatus GLShaderCompiler::compile(
 
   const GLchar* shaderSources[1] = {source.c_str()};
 
-  GLCall(glShaderSource(shader, 1, shaderSources, nullptr));
+  GLCall(glShaderSource(
+      shader, 1, reinterpret_cast<const GLchar**>(shaderSources), nullptr));
   GLCall(glCompileShader(shader));
 
   GLint compileStatus = GL_TRUE;
@@ -48,18 +52,18 @@ GLShaderCompiler::CompilationStatus GLShaderCompiler::compile(
     glGetShaderInfoLog(shader, infoLogLen, nullptr, infoLog.data());
 
     glDeleteShader(shader);
-    return CompilationStatus(false, std::string(infoLog.begin(), infoLog.end()));
+    return {false, std::string(infoLog.begin(), infoLog.end())};
   }
 
-  shaders_.at(get_shader_index(type)) = shader;
+  m_shaders.at(getShaderIndex(type)) = shader;
 
-  return CompilationStatus(true);
+  return {true};
 }
 
 std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) {
   auto shaderProg = GLCall(glCreateProgram());
 
-  for(auto& shader: shaders_) {
+  for(auto& shader: m_shaders) {
     if(shader != 0) {
       GLCall(glAttachShader(shaderProg, shader));
     }
@@ -74,7 +78,7 @@ std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) 
   }
 
   if(deleteShaders == true) {
-    for(auto& shader: shaders_) {
+    for(auto& shader: m_shaders) {
       if(shader != 0) {
         GLCall(glDeleteShader(shader));
         shader = 0;
@@ -87,7 +91,7 @@ std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) 
 
 GLShaderCompiler::CompilationStatus::CompilationStatus(bool success, std::string infoLog)
     : success(success),
-      infoLog(infoLog) {}
+      infoLog(std::move(infoLog)) {}
 
 GLShaderCompiler::CompilationStatus::operator bool() {
   return success;

@@ -19,7 +19,7 @@ class GLVertexArray {
   void uploadIndexBuffer(const void* data, GLsizeiptr size, GLenum usageHint);
 
   private:
-  GLuint glObjectId_;
-  GLuint dataBuffer_;
-  GLuint indexBuffer_;
+  GLuint m_glObjectId;
+  GLuint m_dataBuffer;
+  GLuint m_indexBuffer;
 };

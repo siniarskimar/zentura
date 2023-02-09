@@ -2,7 +2,11 @@
 #include <vector>
 #include <fmt/core.h>
 #include <cstdio>
+#include <memory>
 #include <fontconfig/fontconfig.h>
+#include <ft2build.h>
+#include <freetype/freetype.h>
+
 #include "gl/shader.hpp"
 #include "ui/glfw.hpp"
 #include "./ui/Window.hpp"
@@ -13,26 +17,27 @@
 
 std::optional<std::string> getMonospaceFont() noexcept {
   FcConfig* config = FcInitLoadConfigAndFonts();
-  if(config == NULL) {
+  if(config == nullptr) {
     return std::nullopt;
   }
+
+  // reinterpret_cast is required for conversion of FcChar8 (unsigned char) <-> char
   FcPattern* pattern = FcNameParse(reinterpret_cast<const FcChar8*>("mono"));
   FcConfigSubstitute(config, pattern, FcMatchPattern);
   FcDefaultSubstitute(pattern);
 
-  FcResult res;
-
+  FcResult res{};
   FcPattern* font = FcFontMatch(config, pattern, &res);
 
-  if(font == NULL) {
+  if(font == nullptr) {
     FcPatternDestroy(pattern);
     FcConfigDestroy(config);
     FcFini();
     return std::nullopt;
   }
 
-  FcChar8* filepath_pointer;
-  if(FcPatternGetString(font, FC_FILE, 0, &filepath_pointer) != FcResultMatch) {
+  FcChar8* filepathPointer = nullptr;
+  if(FcPatternGetString(font, FC_FILE, 0, &filepathPointer) != FcResultMatch) {
     /// ??? There should be at least one entry ???
     FcPatternDestroy(font);
     FcPatternDestroy(pattern);
@@ -44,7 +49,7 @@ std::optional<std::string> getMonospaceFont() noexcept {
     return std::nullopt;
   }
 
-  std::string result = reinterpret_cast<const char*>(filepath_pointer);
+  std::string result = reinterpret_cast<const char*>(filepathPointer);
 
   FcPatternDestroy(font);
   FcPatternDestroy(pattern);
@@ -54,22 +59,24 @@ std::optional<std::string> getMonospaceFont() noexcept {
   return std::make_optional(std::move(result));
 }
 
+// TODO: break up this behemoth of a function
 int main(int argc, const char* argv[]) {
 
   if(!GLFW::initialize()) {
     fmt::print(stderr, "Failed to initialize GLFW\n");
     return 2;
   }
+
+  glfwSetErrorCallback([](int errorCode, const char* errorMsg) {
+    fmt::print(stderr, "[GLFW {}] {}\n", errorCode, errorMsg);
+  });
+
   auto monospaceFontPath = getMonospaceFont();
   if(!monospaceFontPath.has_value()) {
     fmt::print(stderr, "No valid monospace font found!\n");
     return 2;
   }
   fmt::print("{}\n", monospaceFontPath.value());
-
-  glfwSetErrorCallback([](int errorCode, const char* errorMsg) {
-    fmt::print(stderr, "[GLFW {}] {}\n", errorCode, errorMsg);
-  });
 
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -80,19 +87,19 @@ int main(int argc, const char* argv[]) {
 
   window.makeContextCurrent();
 
-  int version = gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
+  int version = gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
 
   if(version == 0) {
     fmt::print(stderr, "Failed to load OpenGL context\n");
     return 2;
   }
 
-  const char* glVersion = (const char*) glGetString(GL_VERSION);
-  fmt::print("OpenGL {:s}\n", glVersion);
+  // unsigned char* -> char*
+  fmt::print("OpenGL {:s}\n", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
 
   glfwSwapInterval(1);
 
-  const float vertices[] = {
+  const float VERTICES[] = {
       // clang-format off
       // position     color
       -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,
@@ -102,7 +109,7 @@ int main(int argc, const char* argv[]) {
       // clang-format on
   };
 
-  const unsigned int indicies[] = {
+  const unsigned int INDICIES[] = {
       // clang-format off
       0, 1, 2,
       2, 3, 0
@@ -114,13 +121,13 @@ int main(int argc, const char* argv[]) {
   GLShaderCompiler::CompilationStatus compileStatus;
 
   if(!(compileStatus =
-           shaderCompiler.compile(GL_VERTEX_SHADER, embed_shader_simple_vertex))) {
+           shaderCompiler.compile(GL_VERTEX_SHADER, EMBED_SHADER_SIMPLE_VERTEX))) {
     fmt::print(stderr, "Vertex shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
   }
 
   if(!(compileStatus =
-           shaderCompiler.compile(GL_FRAGMENT_SHADER, embed_shader_simple_frag))) {
+           shaderCompiler.compile(GL_FRAGMENT_SHADER, EMBED_SHADER_SIMPLE_FRAG))) {
     fmt::print(
         stderr, "Fragment shader compilation failed!\n{}\n", compileStatus.infoLog);
     return 2;
@@ -133,21 +140,23 @@ int main(int argc, const char* argv[]) {
     return 2;
   }
 
-  const GLint positionAttribLoc = 0;
-  const GLint colorAttribLoc = 1;
+  const GLint POSITION_ATTRIB_LOC = 0;
+  const GLint COLOR_ATTRIB_LOC = 1;
 
   GLVertexArray vertexArray;
   vertexArray.bind();
-  vertexArray.uploadDataBuffer(vertices, sizeof(vertices), GL_STATIC_DRAW);
-  vertexArray.uploadIndexBuffer(indicies, sizeof(indicies), GL_STATIC_DRAW);
+  vertexArray.uploadDataBuffer(
+      static_cast<const void*>(VERTICES), sizeof(VERTICES), GL_STATIC_DRAW);
+  vertexArray.uploadIndexBuffer(
+      static_cast<const void*>(INDICIES), sizeof(INDICIES), GL_STATIC_DRAW);
 
-  vertexArray.enableAttrib(positionAttribLoc);
+  vertexArray.enableAttrib(POSITION_ATTRIB_LOC);
   vertexArray.vertexAttribFormat(
-      positionAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, 0);
+      POSITION_ATTRIB_LOC, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, 0);
 
-  vertexArray.enableAttrib(colorAttribLoc);
+  vertexArray.enableAttrib(COLOR_ATTRIB_LOC);
   vertexArray.vertexAttribFormat(
-      colorAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5, sizeof(float) * 2);
+      COLOR_ATTRIB_LOC, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5, sizeof(float) * 2);
 
   glBindVertexArray(0);
 

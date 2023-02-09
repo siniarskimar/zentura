@@ -9,9 +9,9 @@
 static std::unique_ptr<Window> pWindow;
 
 Window::Window(const int width, const int height, const std::string_view title) {
-  const std::string tmpTitle(title.begin(), title.end());
+  const std::string TMP_TITLE(title.begin(), title.end());
 
-  GLFWwindow* window = glfwCreateWindow(width, height, tmpTitle.data(), nullptr, nullptr);
+  GLFWwindow* window = glfwCreateWindow(width, height, TMP_TITLE.data(), nullptr, nullptr);
   if(window == nullptr) {
     throw std::runtime_error("Failed to create GLFW window");
   }
