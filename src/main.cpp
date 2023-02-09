@@ -8,8 +8,7 @@
 #include <freetype/freetype.h>
 
 #include "gl/shader.hpp"
-#include "ui/glfw.hpp"
-#include "./ui/Window.hpp"
+#include "ui/window.hpp"
 #include "gl/shadercompiler.hpp"
 #include "gl/vao.hpp"
 #include "shader/simple_vert.hpp"
@@ -88,6 +87,7 @@ int main(int argc, const char* argv[]) {
     fmt::print(stderr, "Failed to load OpenGL context\n");
     return 2;
   }
+  fmt::print("GLFW {:s}\n", glfwGetVersionString());
   // unsigned char* -> char*
   fmt::print("OpenGL {:s}\n", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
 

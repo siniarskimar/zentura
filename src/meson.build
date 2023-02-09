@@ -1,6 +1,6 @@
 executable('zen',
   'main.cpp',
-  'ui/Window.cpp',
+  'ui/window.cpp',
   'gl/glad/glad.c',
   'gl/shader.cpp',
   'gl/shadercompiler.cpp',
