@@ -117,25 +117,23 @@ int main(int argc, const char* argv[]) {
 
   GLShaderCompiler shaderCompiler;
 
-  GLShaderCompiler::CompilationStatus compileStatus;
-
-  if(!(compileStatus =
-           shaderCompiler.compile(GL_VERTEX_SHADER, kEmbedShaderSimpleVertex))) {
-    fmt::print(stderr, "Vertex shader compilation failed!\n{}\n", compileStatus.infoLog);
+  if(!shaderCompiler.compile(GL_VERTEX_SHADER, kEmbedShaderSimpleVertex)) {
+    fmt::print(
+        stderr, "Vertex shader compilation failed!\n{}\n", shaderCompiler.getInfoLog());
     return 2;
   }
 
-  if(!(compileStatus =
-           shaderCompiler.compile(GL_FRAGMENT_SHADER, kEmbedShaderSimpleFrag))) {
+  if(!shaderCompiler.compile(GL_FRAGMENT_SHADER, kEmbedShaderSimpleFrag)) {
     fmt::print(
-        stderr, "Fragment shader compilation failed!\n{}\n", compileStatus.infoLog);
+        stderr, "Fragment shader compilation failed!\n{}\n", shaderCompiler.getInfoLog());
     return 2;
   }
 
   auto shaderProgram = shaderCompiler.link();
 
   if(!shaderProgram) {
-    fmt::print(stderr, "Failed to link shader program!\n");
+    fmt::print(
+        stderr, "Failed to link shader program!\n{}\n", shaderCompiler.getInfoLog());
     return 2;
   }
 
