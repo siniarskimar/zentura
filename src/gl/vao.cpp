@@ -10,9 +10,37 @@ GLVertexArray::GLVertexArray() noexcept
 }
 
 GLVertexArray::~GLVertexArray() noexcept {
-  glDeleteVertexArrays(1, &m_glObjectId);
-  glDeleteBuffers(1, &m_dataBuffer);
-  glDeleteBuffers(1, &m_indexBuffer);
+  // We have to check if object exists
+  // in case move happened
+  if(m_glObjectId != 0) {
+    glDeleteVertexArrays(1, &m_glObjectId);
+  }
+  if(m_dataBuffer != 0) {
+    glDeleteBuffers(1, &m_dataBuffer);
+  }
+  if(m_indexBuffer != 0) {
+    glDeleteBuffers(1, &m_indexBuffer);
+  }
+}
+
+GLVertexArray::GLVertexArray(GLVertexArray&& other) noexcept
+    : m_glObjectId(other.m_glObjectId),
+      m_dataBuffer(other.m_dataBuffer),
+      m_indexBuffer(other.m_indexBuffer) {
+  other.m_dataBuffer = 0;
+  other.m_glObjectId = 0;
+  other.m_indexBuffer = 0;
+}
+
+GLVertexArray& GLVertexArray::operator=(GLVertexArray&& other) noexcept {
+  this->m_glObjectId = other.m_glObjectId;
+  other.m_glObjectId = 0;
+
+  this->m_dataBuffer = other.m_dataBuffer;
+  other.m_dataBuffer = 0;
+  this->m_indexBuffer = other.m_indexBuffer;
+  other.m_indexBuffer = 0;
+  return *this;
 }
 
 void GLVertexArray::bind() {

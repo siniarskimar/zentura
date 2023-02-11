@@ -8,9 +8,9 @@ class GLVertexArray {
   public:
   GLVertexArray() noexcept;
   GLVertexArray(const GLVertexArray&) = delete;
-  GLVertexArray(GLVertexArray&&) = default;
+  GLVertexArray(GLVertexArray&&) noexcept;
   GLVertexArray& operator=(const GLVertexArray&) = delete;
-  GLVertexArray& operator=(GLVertexArray&&) = default;
+  GLVertexArray& operator=(GLVertexArray&&) noexcept;
   ~GLVertexArray() noexcept;
 
   void bind();
