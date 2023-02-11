@@ -81,6 +81,7 @@ int main(int argc, const char* argv[]) {
   auto window = ui::Window::create(800, 600, "zen");
   if(!window.has_value()) {
     fmt::print(stderr, "Failed to create window: {}", glfwGetError(nullptr));
+    return 2;
   }
 
   window->makeCurrent();
