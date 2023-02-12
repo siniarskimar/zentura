@@ -22,13 +22,10 @@ libglm = dependency('glm', version: '0.9.9.8>=', required: true)
 libfontconfig = dependency('fontconfig', required: true)
 libfreetype = dependency('freetype2', required: true)
 
-if not libOpenGL.found()
-  # the 'Legacy' OpenGL
-  libGL = dependency('gl')
-  opengl_dependencies += [libGL]
+if libOpenGL.found()
+  opengl_dependencies += [libOpenGL]
 else
-  libGLX = dependency('glx')
-  opengl_dependencies += [libGLX, libOpenGL]
+  opengl_dependencies += [dependency('gl')]
 endif
 
 if doxygen.found() and get_option('build_devdocs')
