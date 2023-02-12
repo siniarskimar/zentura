@@ -25,7 +25,9 @@ SpaceBeforeParens: Never
 SpaceBeforeParensOptions:
   AfterControlStatements: false
 SpaceBeforeRangeBasedForLoopColon: false
-Standard: c++17
+Standard: c++20
 TabWidth: 2
 PenaltyReturnTypeOnItsOwnLine: 1000000
 SeparateDefinitionBlocks: Always
+RequiresClausePosition: OwnLine
+IndentRequiresClause: true
