@@ -1,5 +1,5 @@
 Checks: 'clang-diagnostic-*,clang-analyzer-*,cppcoreguidelines-*,modernize-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-type-reinterpret-cast,-modernize-avoid-c-arrays
-,-cppcoreguidelines-avoid-c-arrays, readability-duplicate-include, readability-identifier-naming, -cppcoreguidelines-avoid-non-const-global-variables'
+,-cppcoreguidelines-avoid-c-arrays, readability-duplicate-include, readability-identifier-naming, -cppcoreguidelines-avoid-non-const-global-variables,-cppcoreguidelines-pro-type-union-access'
 CheckOptions:
   - {key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor, value: true}
   - { key: readability-identifier-naming.ClassCase, value: CamelCase }
