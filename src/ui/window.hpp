@@ -13,12 +13,17 @@ namespace ui {
 
 class Window {
   public:
-  Window() = delete;
+  /// @brief Default constructors
+  /// \{
   Window(GLFWwindow* handle);
-  Window(const Window&) = delete;
   Window(Window&&) = default;
-  Window& operator=(const Window&) = delete;
   Window& operator=(Window&&) = default;
+  /// \}
+  /// @brief Deleted copy constructors
+  /// \{
+  Window(const Window&) = delete;
+  Window& operator=(const Window&) = delete;
+  /// \}
   ~Window() = default;
 
   static std::optional<Window> create(
