@@ -17,16 +17,14 @@
 class GLShaderProgram {
   public:
 
-  /// \{
-  GLShaderProgram() = delete;
-
-  /// @brief Constructs GLShaderProgram
+  /// @brief Constructs GLShaderProgram using a given OpenGL object
   ///
   /// @note GLShaderProgram takes ownership over glID argument
   ///
   /// @param glID OpenGL Program Object
   GLShaderProgram(GLuint glID);
 
+  /// \{
   GLShaderProgram(GLShaderProgram&&) = default;
   GLShaderProgram& operator=(GLShaderProgram&&) = default;
 

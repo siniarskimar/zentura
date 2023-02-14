@@ -14,7 +14,19 @@ class GLShaderCompiler {
   /// @brief Default constructor
   GLShaderCompiler() noexcept;
 
-  /// @brief Destructor
+  /// @brief Copy constructors
+  /// \{
+  GLShaderCompiler(const GLShaderCompiler&) = delete;
+  GLShaderCompiler& operator=(const GLShaderCompiler&) = delete;
+  /// \}
+
+  /// @brief Move constructors
+  /// \{
+  GLShaderCompiler(GLShaderCompiler&&) = default;
+  GLShaderCompiler& operator=(GLShaderCompiler&&) = default;
+  /// \}
+
+  /// @brief Default destructor
   ~GLShaderCompiler() noexcept;
 
   [[nodiscard]] const std::string& getInfoLog() const noexcept {
