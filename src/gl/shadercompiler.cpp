@@ -60,7 +60,7 @@ bool GLShaderCompiler::compile(GLenum type, const std::string& source) {
   return true;
 }
 
-std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) {
+std::optional<GLShaderProgram> GLShaderCompiler::link() {
   auto shaderProg = GLCall(glCreateProgram());
 
   for(auto& shader: m_shaders) {
@@ -84,12 +84,11 @@ std::optional<GLShaderProgram> GLShaderCompiler::link(const bool deleteShaders) 
     return std::nullopt;
   }
 
-  if(deleteShaders == true) {
-    for(auto& shader: m_shaders) {
-      if(shader != 0) {
-        GLCall(glDeleteShader(shader));
-        shader = 0;
-      }
+  for(auto& shader: m_shaders) {
+    if(shader != 0) {
+      GLCall(glDetachShader(shaderProg, shader));
+      GLCall(glDeleteShader(shader));
+      shader = 0;
     }
   }
 

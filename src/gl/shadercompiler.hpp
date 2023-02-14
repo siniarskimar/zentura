@@ -41,10 +41,10 @@ class GLShaderCompiler {
   bool compile(GLenum type, const std::string& source);
 
   /// @brief Links together previously compiled shaders
-  /// @param deleteShaders Whenever to mark compiled shaders for deletion after successful
-  /// linkage
+  ///
+  /// On success, the shaders involved in the compilation are deleted
   /// @return std::optional with GLShaderProgram on success
-  std::optional<GLShaderProgram> link(const bool deleteShaders = true);
+  std::optional<GLShaderProgram> link();
 
   private:
   std::array<GLuint, 3> m_shaders;
