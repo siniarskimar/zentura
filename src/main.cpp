@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <vector>
 #include <fmt/core.h>
@@ -7,6 +9,7 @@
 #include <ft2build.h>
 #include <freetype/freetype.h>
 
+#include "gl/gl.hpp"
 #include "gl/shader.hpp"
 #include "ui/window.hpp"
 #include "gl/shadercompiler.hpp"
@@ -14,6 +17,8 @@
 #include "shader/simple_vert.hpp"
 #include "shader/simple_frag.hpp"
 #include "lib/glfw/glfw.hpp"
+#include <glm/vec2.hpp>
+#include <glm/vec4.hpp>
 
 #include <GLFW/glfw3.h>
 
@@ -61,6 +66,59 @@ std::optional<std::string> getMonospaceFont() noexcept {
   return std::make_optional(std::move(result));
 }
 
+struct Vertex {
+  glm::vec2 position{};
+  glm::vec4 color{};
+  float textureSlot{};
+  glm::vec2 textureOffset{};
+
+  Vertex(glm::vec2 pos, glm::vec4 c, float tSlot, glm::vec2 tOff)
+      : position(pos),
+        color(c),
+        textureSlot(tSlot),
+        textureOffset(tOff) {}
+};
+
+class Renderer {
+  public:
+
+  void submitQuad(const glm::vec2 position, const glm::vec2 size, const glm::vec4 color) {
+
+    m_dataBuffer.emplace_back(position, color, 0.0f, glm::vec2());
+    m_dataBuffer.emplace_back(
+        position + glm::vec2(size.x, 0.0f), color, 0.0f, glm::vec2());
+    m_dataBuffer.emplace_back(
+        position + glm::vec2(size.x, -size.y), color, 0.0f, glm::vec2());
+    m_dataBuffer.emplace_back(
+        position - glm::vec2(0.0f, size.y), color, 0.0f, glm::vec2());
+
+    const uint32_t kIndexCount = (m_indexBuffer.size() / 6) * 4;
+    m_indexBuffer.push_back(kIndexCount + 0);
+    m_indexBuffer.push_back(kIndexCount + 1);
+    m_indexBuffer.push_back(kIndexCount + 2);
+    m_indexBuffer.push_back(kIndexCount + 2);
+    m_indexBuffer.push_back(kIndexCount + 3);
+    m_indexBuffer.push_back(kIndexCount + 0);
+  }
+
+  void submitFrame(ui::Window& window, GLShaderProgram& program, GLVertexArray& vao) {
+    vao.uploadDataBuffer(
+        m_dataBuffer.data(),
+        static_cast<GLsizeiptr>(m_dataBuffer.size() * sizeof(Vertex)), GL_DYNAMIC_DRAW);
+    vao.uploadIndexBuffer(
+        m_indexBuffer.data(),
+        static_cast<GLsizeiptr>(m_indexBuffer.size() * sizeof(uint32_t)),
+        GL_DYNAMIC_DRAW);
+    program.use();
+    vao.bind();
+    GLCall(glDrawElements(GL_TRIANGLES, m_indexBuffer.size(), GL_UNSIGNED_INT, nullptr));
+  }
+
+  private:
+  std::vector<Vertex> m_dataBuffer;
+  std::vector<uint32_t> m_indexBuffer;
+};
+
 // TODO: break up this behemoth of a function
 int main(int argc, const char* argv[]) {
 
@@ -99,23 +157,6 @@ int main(int argc, const char* argv[]) {
 
   glfwSwapInterval(1);
 
-  const float kVertices[] = {
-      // clang-format off
-      // position     color
-      -0.5f, -0.5f,   0.0f, 0.0f, 1.0f,
-      0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
-      0.5f,   0.5f,   1.0f, 1.0f, 0.0f,
-      -0.5f,   0.5f,  1.0f, 0.0f, 0.0f,
-      // clang-format on
-  };
-
-  const unsigned int kIndicies[] = {
-      // clang-format off
-      0, 1, 2,
-      2, 3, 0
-      // clang-format on
-  };
-
   GLShaderCompiler shaderCompiler;
 
   if(!shaderCompiler.compile(GL_VERTEX_SHADER, kEmbedShaderSimpleVertex)) {
@@ -142,28 +183,26 @@ int main(int argc, const char* argv[]) {
   const GLint kColorAttribLoc = 1;
 
   GLVertexArray vertexArray;
-  vertexArray.bind();
-  vertexArray.uploadDataBuffer(
-      static_cast<const void*>(kVertices), sizeof(kVertices), GL_STATIC_DRAW);
-  vertexArray.uploadIndexBuffer(
-      static_cast<const void*>(kIndicies), sizeof(kIndicies), GL_STATIC_DRAW);
 
   vertexArray.enableAttrib(kPositionAttribLoc);
   vertexArray.vertexAttribFormat(
-      kPositionAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, 0);
+      kPositionAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+      offsetof(Vertex, position));
 
   vertexArray.enableAttrib(kColorAttribLoc);
   vertexArray.vertexAttribFormat(
-      kColorAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5, sizeof(float) * 2);
+      kColorAttribLoc, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), offsetof(Vertex, color));
 
   glBindVertexArray(0);
+  Renderer renderer;
+
+  renderer.submitQuad({-0.9f, .9f}, {1.0f, 1.0f}, {1.0f, .0f, .0f, 0.5f});
+  renderer.submitQuad({-0.1f, 0.1f}, {1.0f, 1.5f}, {0.0f, 1.0f, .0f, 0.5f});
 
   while(!window->shouldClose()) {
     glClear(GL_COLOR_BUFFER_BIT);
 
-    shaderProgram->use();
-    vertexArray.bind();
-    GLCall(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr));
+    renderer.submitFrame(window.value(), shaderProgram.value(), vertexArray);
 
     glfwSwapBuffers(window->getHandle());
     glfwPollEvents();
