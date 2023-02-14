@@ -25,7 +25,7 @@ constexpr int getShaderIndex(const GLenum glenum) {
 
 GLShaderCompiler::GLShaderCompiler() noexcept : m_shaders(), m_infoLog() {}
 
-GLShaderCompiler::~GLShaderCompiler() {
+GLShaderCompiler::~GLShaderCompiler() noexcept {
   for(auto& shader: m_shaders) {
     if(shader != 0) {
       GLCall(glDeleteShader(shader));
