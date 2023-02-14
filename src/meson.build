@@ -16,7 +16,8 @@ executable('zen',
     libfreetype
   ],
   include_directories: [
-    include_directories('include')
+    include_directories('include'),
+    include_directories('pch')
   ],
   cpp_pch: 'pch/pch.hpp'
 )
