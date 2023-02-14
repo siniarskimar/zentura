@@ -1,0 +1,4 @@
+src/gl/glad/glad.c
+src/include/*.h
+src/include/*.hpp
+src/stb_image.c
