@@ -66,7 +66,7 @@ class GLShaderProgram {
   /// @param name Uniform name
   /// @param v Uniform value
   /// {
-  template <uint8_t N, typename T = glm::vec<N, float, glm::defaultp>>
+  template <int N, typename T = glm::vec<N, float, glm::defaultp>>
   inline void setUniformSafe(const std::string& name, const T& v) noexcept
     requires(1 <= N && N <= 4)
   {
@@ -84,7 +84,7 @@ class GLShaderProgram {
     }
   }
 
-  template <uint8_t N = 1>
+  template <int N = 1>
   inline void setUniformSafe(const std::string& name, const float& v) noexcept {
     const GLint kLoc = getUniformLocation(name);
 
@@ -94,7 +94,7 @@ class GLShaderProgram {
     glUniform1f(kLoc, v);
   }
 
-  template <uint8_t R, uint8_t C>
+  template <int R, int C>
   inline void setUniformMatrixSafe(
       const std::string& name, const glm::mat<C, R, float, glm::defaultp>& v) noexcept
     requires(R <= 4 && C <= 4)
