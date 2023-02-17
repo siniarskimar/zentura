@@ -1,4 +1,5 @@
-#pragma once
+#ifndef GL_VERTEXARRAY_H
+#define GL_VERTEXARRAY_H
 
 #include "glad/glad.h"
 #include <cstddef>
@@ -33,3 +34,5 @@ class GLVertexArray {
   uint32_t m_dataBufferSize;
   uint32_t m_indexBufferSize;
 };
+
+#endif
