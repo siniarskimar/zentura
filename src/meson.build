@@ -7,6 +7,7 @@ executable('zen',
   'gl/vao.cpp',
   'stb_image.c',
   'lib/glfw/glfw.cpp',
+  'gl/renderer.cpp',
   dependencies: [
     opengl_dependencies,
     libGLFW,
