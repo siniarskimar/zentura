@@ -9,6 +9,9 @@ GLVertexArray::GLVertexArray() noexcept
   glGenVertexArrays(1, &m_glObjectId);
   glGenBuffers(1, &m_dataBuffer);
   glGenBuffers(1, &m_indexBuffer);
+  glBindVertexArray(m_glObjectId);
+  glBindBuffer(GL_ARRAY_BUFFER, m_dataBuffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBuffer);
 }
 
 GLVertexArray::~GLVertexArray() noexcept {
@@ -51,8 +54,6 @@ GLVertexArray& GLVertexArray::operator=(GLVertexArray&& other) noexcept {
 
 void GLVertexArray::bind() {
   glBindVertexArray(m_glObjectId);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, m_dataBuffer);
 }
 
 void GLVertexArray::enableAttrib(GLint attrib) {

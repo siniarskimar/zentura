@@ -7,6 +7,10 @@
 /// @brief OpenGL Vertex Array Object abstraction
 class GLVertexArray {
   public:
+  /// @brief Default constructor
+  ///
+  /// @remark Caution when using multiple VAOs. Constructor leaves newly created
+  /// Vertex Array bound.
   GLVertexArray() noexcept;
   GLVertexArray(const GLVertexArray&) = delete;
   GLVertexArray(GLVertexArray&&) noexcept;
