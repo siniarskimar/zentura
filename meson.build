@@ -29,21 +29,13 @@ else
 endif
 
 if doxygen.found() and get_option('build_devdocs')
-  doxyfile_conf_data = configuration_data()
-  doxyfile_conf_data.set('PROJECT_NAME', meson.project_name())
-  doxyfile_conf_data.set('PROJECT_VERSION', meson.project_version())
-  doxyfile_conf_data.set('OUTPUT_DIRECTORY', meson.project_build_root() / 'docs' / 'dev')
-  doxyfile_conf_data.set('OUTPUT_LANGUAGE', 'English')
-  doxyfile_conf_data.set('INPUT', meson.project_source_root() / 'src')
-
-  configure_file(
-    input: 'docs/Doxyfile.in',
-    output: 'Doxyfile',
-    configuration: doxyfile_conf_data
-  )
-
   run_target('devdoc',
     command: [
+      python,
+      meson.project_source_root() / 'docs' / 'dev' / 'make.py',
+      '-o',
+      meson.project_build_root() / 'docs',
+      '--doxygen-bin',
       doxygen
     ]
   )
@@ -53,8 +45,8 @@ if get_option('build_userdocs')
   run_target('userdoc',
     command: [
       python,
-      meson.project_source_root() / 'docs' / 'make.py',
-      meson.project_source_root() / 'docs' / 'source',
+      meson.project_source_root() / 'docs' / 'user' / 'make.py',
+      meson.project_source_root() / 'docs' / 'user',
       meson.project_build_root() / 'docs' / 'user'
     ]
   )
