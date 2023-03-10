@@ -14,5 +14,5 @@ inline int glClearError() {
 #define GLCall(func) \
   (glClearError(), func); \
   while(auto error = glGetError()) { \
-    fmt::print(stderr, "{}:{} [OPENGL {}]\n", __FILE__, __LINE__, error); \
+    fmt::print(stderr, "{}:{} [OPENGL {:#x}]\n", __FILE__, __LINE__, error); \
   }
