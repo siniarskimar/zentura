@@ -1,9 +1,68 @@
 #include "./renderer.hpp"
 #include <GLFW/glfw3.h>
 #include <optional>
-#include "shader/simple_vert.hpp"
-#include "shader/simple_frag.hpp"
 #include <stdexcept>
+
+static const char* const kEmbedShaderSimpleVertex =
+    R"(
+#version 330 core
+
+layout (location = 0) in vec2 position;
+layout (location = 1) in vec4 color;
+layout (location = 2) in float textureIndex;
+layout (location = 3) in vec2 textureCoords;
+
+out vec4 vertex_color;
+out float vertex_texture;
+out vec2 vertex_textureCoords;
+
+void main() {
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+  vertex_color = color;
+  vertex_texture = textureIndex;
+  
+}
+    
+)";
+
+static const char* const kEmbedShaderSimpleFrag =
+    R"(
+#version 330 core
+
+in vec4 vertex_color;
+in float vertex_texture;
+in vec2 vertex_textureCoords;
+
+uniform sampler2D textures[16];
+
+out vec4 frag_color;
+
+void main() {
+  if(vertex_texture == 255) {
+    frag_color = vertex_color;    
+  } else {
+    switch(int(vertex_texture)) {
+      case 0: frag_color = texture(textures[0], vertex_textureCoords); break;
+      case 1: frag_color = texture(textures[1], vertex_textureCoords); break;
+      case 2: frag_color = texture(textures[2], vertex_textureCoords); break;
+      case 3: frag_color = texture(textures[3], vertex_textureCoords); break;
+      case 4: frag_color = texture(textures[4], vertex_textureCoords); break;
+      case 5: frag_color = texture(textures[5], vertex_textureCoords); break;
+      case 6: frag_color = texture(textures[6], vertex_textureCoords); break;
+      case 7: frag_color = texture(textures[7], vertex_textureCoords); break;
+      case 8: frag_color = texture(textures[8], vertex_textureCoords); break;
+      case 9: frag_color = texture(textures[9], vertex_textureCoords); break;
+      case 10: frag_color = texture(textures[10], vertex_textureCoords); break;
+      case 11: frag_color = texture(textures[11], vertex_textureCoords); break;
+      case 12: frag_color = texture(textures[12], vertex_textureCoords); break;
+      case 13: frag_color = texture(textures[13], vertex_textureCoords); break;
+      case 14: frag_color = texture(textures[14], vertex_textureCoords); break;
+      case 15: frag_color = texture(textures[15], vertex_textureCoords); break;
+    }
+  }
+}
+    
+)";
 
 namespace render {
 
