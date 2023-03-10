@@ -16,6 +16,7 @@
 /// @brief Represents an OpenGL Program
 class GLShaderProgram {
   public:
+  GLShaderProgram();
 
   /// @brief Constructs GLShaderProgram using a given OpenGL object
   ///
@@ -25,14 +26,17 @@ class GLShaderProgram {
   GLShaderProgram(GLuint glID);
 
   /// \{
-  GLShaderProgram(GLShaderProgram&&) = default;
-  GLShaderProgram& operator=(GLShaderProgram&&) = default;
+  GLShaderProgram(GLShaderProgram&&);
+  GLShaderProgram& operator=(GLShaderProgram&&);
 
   GLShaderProgram(const GLShaderProgram&) = delete;
   GLShaderProgram& operator=(const GLShaderProgram&) = delete;
   /// \}
 
   ~GLShaderProgram();
+
+  static std::optional<GLShaderProgram> compile(
+      const std::string_view vertexSource, const std::string_view fragmentSource);
 
   /// @brief Activates OpenGL program
   void use();

@@ -12,7 +12,6 @@
 #include "gl/gl.hpp"
 #include "gl/shader.hpp"
 #include "ui/window.hpp"
-#include "gl/shadercompiler.hpp"
 #include "gl/vao.hpp"
 #include "shader/simple_vert.hpp"
 #include "shader/simple_frag.hpp"
@@ -24,6 +23,7 @@
 
 #include <GLFW/glfw3.h>
 
+/// @brief Gets the path of systems default monospace font
 std::optional<std::string> getMonospaceFont() noexcept {
   FcConfig* config = FcInitLoadConfigAndFonts();
   if(config == nullptr) {
@@ -80,66 +80,12 @@ int main(int argc, const char* argv[]) {
   }
   fmt::print("{}\n", monospaceFontPath.value());
 
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
   auto window = ui::Window::create(800, 600, "zen");
   if(!window.has_value()) {
     fmt::print(stderr, "Failed to create window: {}", glfwGetError(nullptr));
     return 2;
   }
-
-  window->makeCurrent();
-
-  const int kVersion =
-      gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
-
-  if(kVersion == 0) {
-    fmt::print(stderr, "Failed to load OpenGL context\n");
-    return 2;
-  }
-  fmt::print("GLFW {:s}\n", glfwGetVersionString());
-  // unsigned char* -> char*
-  fmt::print("OpenGL {:s}\n", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
-
-  glfwSwapInterval(1);
-
-  GLShaderCompiler shaderCompiler;
-
-  if(!shaderCompiler.compile(GL_VERTEX_SHADER, kEmbedShaderSimpleVertex)) {
-    fmt::print(
-        stderr, "Vertex shader compilation failed!\n{}\n", shaderCompiler.getInfoLog());
-    return 2;
-  }
-
-  if(!shaderCompiler.compile(GL_FRAGMENT_SHADER, kEmbedShaderSimpleFrag)) {
-    fmt::print(
-        stderr, "Fragment shader compilation failed!\n{}\n", shaderCompiler.getInfoLog());
-    return 2;
-  }
-
-  auto shaderProgram = shaderCompiler.link();
-
-  if(!shaderProgram) {
-    fmt::print(
-        stderr, "Failed to link shader program!\n{}\n", shaderCompiler.getInfoLog());
-    return 2;
-  }
-
-  render::GLRenderer renderer;
-
-  while(!window->shouldClose()) {
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    renderer.submitQuad({-0.9f, .9f, 0.0f}, {1.0f, 1.0f}, {1.0f, .0f, .0f, 0.5f});
-    renderer.submitQuad({-0.1f, 0.1f, 0.0f}, {1.0f, 1.5f}, {0.0f, 1.0f, .0f, 0.5f});
-    renderer.renderFrame(shaderProgram.value());
-
-    glfwSwapBuffers(window->getHandle());
-    glfwPollEvents();
-  }
+  window->runLoop();
 
   return 0;
 }
