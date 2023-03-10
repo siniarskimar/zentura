@@ -12,14 +12,10 @@
 #include "gl/gl.hpp"
 #include "gl/shader.hpp"
 #include "ui/window.hpp"
-#include "gl/vao.hpp"
-#include "shader/simple_vert.hpp"
-#include "shader/simple_frag.hpp"
 #include "lib/glfw/glfw.hpp"
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
-#include "gl/renderer.hpp"
 
 #include <GLFW/glfw3.h>
 
