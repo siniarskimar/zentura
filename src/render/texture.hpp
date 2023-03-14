@@ -3,35 +3,76 @@
 
 #include <span>
 #include <memory>
+#include <cstdint>
 
 namespace render {
+
+/// @class Texture
+/// @brief Container for storing pixel data.
+///
 class Texture {
   public:
-  Texture(size_t width, size_t height, const std::span<uint32_t>);
+
+  /// @brief Constructs an empty Texture
+  Texture(size_t width, size_t height, uint8_t channels);
+
+  /// @brief Constructs a Texture from existing pixel data
+  ///
+  /// Resulting Texture class holds a copy of provided data.
+  ///
+  /// @param width texture width
+  /// @param height texture height
+  /// @param channels number of source data channels
+  /// @param data source data
+  Texture(
+      size_t width, size_t height, uint8_t channels, const std::span<const uint8_t> data);
+
+  // NOTE: This might be useful
+  // Texture(size_t width, size_t height, uint8_t channels, const std::span<uint8_t[]>&&
+  // data);
+
+  // NOTE: Consider implementing this function
+  // void combine(const Texture& source, size_t sourceX, size_t sourceY, size_t
+  // regionWidth, size_t regionHeight);
+
+  /// \{
   explicit Texture(const Texture&);
-  Texture(Texture&&) = default;
   Texture& operator=(const Texture&);
+  /// \}
+  /// \{
+  Texture(Texture&&) = default;
   Texture& operator=(Texture&&) = default;
+  /// \}
   ~Texture() = default;
 
+  /// @brief Get texture width
   [[nodiscard]] size_t getWidth() const;
-  [[nodiscard]] size_t getHeight() const;
-  [[nodiscard]] const std::span<uint32_t> getTextureData() const;
 
-  [[nodiscard]] uint32_t samplePixel(size_t x, size_t y) const;
-  void setPixel(size_t x, size_t y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-  void setPixel(size_t x, size_t y, uint32_t pixel);
+  /// @brief Get texture height
+  [[nodiscard]] size_t getHeight() const;
+
+  /// @brief Get texture channel count
+  [[nodiscard]] uint8_t getChannelCount() const;
+
+  /// @brief Get texture size in bytes
+  [[nodiscard]] size_t getTextureSize() const;
+
+  /// @brief Get texture data
+  [[nodiscard]] const std::span<uint8_t> getTextureData() const;
+
+  /// @brief Access a single pixel
+  /// \{
+  [[nodiscard]] const std::span<uint8_t> at(size_t x, size_t y);
+  [[nodiscard]] const std::span<const uint8_t> at(size_t x, size_t y) const;
+  /// \}
 
   private:
   size_t m_width;
   size_t m_height;
-  std::unique_ptr<uint32_t[]> m_data;
+  uint8_t m_channels;
+  std::unique_ptr<uint8_t[]> m_data;
 };
 
-template <typename... Args>
-inline std::shared_ptr<Texture> makeTexture(Args... args) {
-  return std::make_shared<Texture>(std::forward(args...));
-};
 } // namespace render
 
 #endif
