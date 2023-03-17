@@ -7,7 +7,6 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
-#include "gl/vao.hpp"
 #include "gl/shader.hpp"
 #include "render/texture.hpp"
 #include "render/renderer.hpp"
@@ -40,9 +39,29 @@ class GLRenderer : public Renderer {
   void clearFramebuffer() override;
 
   private:
+  struct GLVAO {
+    GLuint glId;
+    GLuint dataBufferId;
+    GLuint indexBufferId;
+    uint32_t dataBufferSize;
+    uint32_t indexBufferSize;
+
+    GLVAO();
+    GLVAO(const GLVAO&) = delete;
+    GLVAO& operator=(const GLVAO&) = delete;
+    GLVAO(GLVAO&&);
+    GLVAO& operator=(GLVAO&&);
+    ~GLVAO();
+
+    void bind();
+    void uploadDataBuffer(const void* data, GLsizeiptr size);
+    void uploadIndexBuffer(const void* data, GLsizeiptr size);
+  };
+
+  private:
   std::vector<Vertex> m_dataBuffer;
   std::vector<uint32_t> m_indexBuffer;
-  GLVertexArray m_vao;
+  GLVAO m_vao;
   GLShaderProgram m_quadProgram;
 };
 

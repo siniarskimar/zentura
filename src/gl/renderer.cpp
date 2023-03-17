@@ -9,18 +9,16 @@ static const char* const kEmbedShaderSimpleVertex =
 
 layout (location = 0) in vec2 position;
 layout (location = 1) in vec4 color;
-layout (location = 2) in float textureIndex;
-layout (location = 3) in vec2 textureCoords;
+layout (location = 2) in vec2 textureCoords;
 
 out vec4 vertex_color;
-out float vertex_texture;
+out int vertex_textureIndex;
 out vec2 vertex_textureCoords;
 
 void main() {
   gl_Position = vec4(position.xy, 0.0, 1.0);
   vertex_color = color;
-  vertex_texture = textureIndex;
-  
+  vertex_textureCoords = textureCoords;
 }
     
 )";
@@ -30,36 +28,14 @@ static const char* const kEmbedShaderSimpleFrag =
 #version 330 core
 
 in vec4 vertex_color;
-in float vertex_texture;
 in vec2 vertex_textureCoords;
 
-uniform sampler2D textures[16];
+uniform sampler2D textureAtlas;
 
 out vec4 frag_color;
 
 void main() {
-  if(vertex_texture == 255) {
-    frag_color = vertex_color;    
-  } else {
-    switch(int(vertex_texture)) {
-      case 0: frag_color = texture(textures[0], vertex_textureCoords); break;
-      case 1: frag_color = texture(textures[1], vertex_textureCoords); break;
-      case 2: frag_color = texture(textures[2], vertex_textureCoords); break;
-      case 3: frag_color = texture(textures[3], vertex_textureCoords); break;
-      case 4: frag_color = texture(textures[4], vertex_textureCoords); break;
-      case 5: frag_color = texture(textures[5], vertex_textureCoords); break;
-      case 6: frag_color = texture(textures[6], vertex_textureCoords); break;
-      case 7: frag_color = texture(textures[7], vertex_textureCoords); break;
-      case 8: frag_color = texture(textures[8], vertex_textureCoords); break;
-      case 9: frag_color = texture(textures[9], vertex_textureCoords); break;
-      case 10: frag_color = texture(textures[10], vertex_textureCoords); break;
-      case 11: frag_color = texture(textures[11], vertex_textureCoords); break;
-      case 12: frag_color = texture(textures[12], vertex_textureCoords); break;
-      case 13: frag_color = texture(textures[13], vertex_textureCoords); break;
-      case 14: frag_color = texture(textures[14], vertex_textureCoords); break;
-      case 15: frag_color = texture(textures[15], vertex_textureCoords); break;
-    }
-  }
+  frag_color = vertex_color;
 }
     
 )";
@@ -69,6 +45,7 @@ namespace render {
 GLRenderer::GLRenderer() {
   constexpr int kPositionAttribLoc = 0;
   constexpr int kColorAttribLoc = 1;
+  constexpr int kTextureCoordAttribLoc = 2;
 
   auto quadProgram =
       GLShaderProgram::compile(kEmbedShaderSimpleVertex, kEmbedShaderSimpleFrag);
@@ -78,14 +55,20 @@ GLRenderer::GLRenderer() {
   }
   m_quadProgram = std::move(quadProgram.value());
 
-  m_vao.enableAttrib(kPositionAttribLoc);
-  m_vao.vertexAttribFormat(
-      kPositionAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-      offsetof(Vertex, position));
+  GLCall(glEnableVertexAttribArray(kPositionAttribLoc));
+  GLCall(glVertexAttribPointer(
+      kPositionAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+      reinterpret_cast<const void*>(offsetof(Vertex, position))));
 
-  m_vao.enableAttrib(kColorAttribLoc);
-  m_vao.vertexAttribFormat(
-      kColorAttribLoc, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), offsetof(Vertex, color));
+  GLCall(glEnableVertexAttribArray(kColorAttribLoc));
+  GLCall(glVertexAttribPointer(
+      kColorAttribLoc, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+      reinterpret_cast<const void*>(offsetof(Vertex, color))));
+
+  GLCall(glEnableVertexAttribArray(kTextureCoordAttribLoc));
+  GLCall(glVertexAttribPointer(
+      kTextureCoordAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+      reinterpret_cast<const void*>(offsetof(Vertex, textureCoord))));
 }
 
 void GLRenderer::clearFramebuffer() {
@@ -125,6 +108,83 @@ void GLRenderer::flush() {
   GLCall(glDrawElements(GL_TRIANGLES, m_indexBuffer.size(), GL_UNSIGNED_INT, nullptr));
   m_dataBuffer.erase(m_dataBuffer.begin(), m_dataBuffer.end());
   m_indexBuffer.erase(m_indexBuffer.begin(), m_indexBuffer.end());
+}
+
+GLRenderer::GLVAO::GLVAO()
+    : glId(0),
+      dataBufferId(0),
+      indexBufferId(0),
+      dataBufferSize(),
+      indexBufferSize() {
+  glGenVertexArrays(1, &glId);
+  glGenBuffers(1, &dataBufferId);
+  glGenBuffers(1, &indexBufferId);
+  glBindVertexArray(glId);
+  glBindBuffer(GL_ARRAY_BUFFER, dataBufferId);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferId);
+}
+
+GLRenderer::GLVAO::~GLVAO() {
+  // We have to check if object exists
+  // in case move happened
+  if(dataBufferId != 0) {
+    glDeleteBuffers(1, &dataBufferId);
+  }
+  if(indexBufferId != 0) {
+    glDeleteBuffers(1, &indexBufferId);
+  }
+  if(glId != 0) {
+    glDeleteVertexArrays(1, &glId);
+  }
+}
+
+GLRenderer::GLVAO::GLVAO(GLRenderer::GLVAO&& other)
+    : glId(other.glId),
+      dataBufferId(other.dataBufferId),
+      indexBufferId(other.indexBufferId),
+      dataBufferSize(other.dataBufferSize),
+      indexBufferSize(other.indexBufferSize) {
+  other.dataBufferId = 0;
+  other.indexBufferId = 0;
+  other.glId = 0;
+}
+
+GLRenderer::GLVAO& GLRenderer::GLVAO::operator=(GLRenderer::GLVAO&& other) {
+  glId = other.glId;
+  other.glId = 0;
+  dataBufferId = other.dataBufferId;
+  other.dataBufferId = 0;
+  indexBufferId = other.indexBufferId;
+  other.indexBufferId = 0;
+  dataBufferSize = other.dataBufferSize;
+  indexBufferSize = other.indexBufferSize;
+
+  return *this;
+}
+
+void GLRenderer::GLVAO::bind() {
+  GLCall(glBindVertexArray(glId));
+}
+
+void GLRenderer::GLVAO::uploadDataBuffer(const void* data, GLsizeiptr size) {
+  glBindBuffer(GL_ARRAY_BUFFER, dataBufferId);
+
+  if(size > dataBufferSize) {
+    glBufferData(GL_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW);
+    dataBufferSize = size;
+  } else {
+    glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
+  }
+}
+
+void GLRenderer::GLVAO::uploadIndexBuffer(const void* data, GLsizeiptr size) {
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferId);
+
+  if(size > indexBufferSize) {
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW);
+  } else {
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, size, data);
+  }
 }
 
 } // namespace render
