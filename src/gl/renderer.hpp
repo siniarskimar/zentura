@@ -27,12 +27,6 @@ class GLRenderer : public Renderer {
       const glm::vec3 position, const glm::vec2 size,
       std::shared_ptr<Texture> texture) override;
 
-  /// @brief Render to a Texture
-  void renderFrame(GLShaderProgram& program, Texture& texture);
-
-  /// @brief Render to default framebuffer
-  void renderFrame(GLShaderProgram& program);
-
   /// @brief Render current batch to default framebuffer
   void flush() override;
 
