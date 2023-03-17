@@ -97,12 +97,36 @@ GLuint GLShaderProgram::getGLObjectID() const noexcept {
   return m_glId;
 }
 
+GLint GLShaderProgram::getUniformLocation(const std::string& name) {
+  if(m_locCache.count(name)) {
+    return m_locCache.at(name);
+  }
+  auto loc = GLCall(glGetUniformLocation(getGLObjectID(), name.data()));
+  m_locCache.insert({name, loc});
+  return loc;
+}
+
 GLint GLShaderProgram::getUniformLocation(const std::string& name) const {
+  if(m_locCache.count(name)) {
+    return m_locCache.at(name);
+  }
   auto loc = GLCall(glGetUniformLocation(getGLObjectID(), name.data()));
   return loc;
 }
 
+GLint GLShaderProgram::getAttribLocation(const std::string& name) {
+  if(m_locCache.count(name)) {
+    return m_locCache.at(name);
+  }
+  auto loc = GLCall(glGetAttribLocation(getGLObjectID(), name.data()));
+  m_locCache.insert({name, loc});
+  return loc;
+}
+
 GLint GLShaderProgram::getAttribLocation(const std::string& name) const {
+  if(m_locCache.count(name)) {
+    return m_locCache.at(name);
+  }
   auto loc = GLCall(glGetAttribLocation(getGLObjectID(), name.data()));
   return loc;
 }
