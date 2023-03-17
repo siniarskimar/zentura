@@ -39,6 +39,7 @@ class Texture {
   explicit Texture(const Texture&);
   Texture& operator=(const Texture&);
   /// \}
+
   /// \{
   Texture(Texture&&) = default;
   Texture& operator=(Texture&&) = default;
