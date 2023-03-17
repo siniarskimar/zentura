@@ -12,16 +12,15 @@ struct Vertex {
   glm::vec3 position{};
   glm::vec4 color{};
   uint32_t textureIndex{};
-  glm::vec2 textureOffset{};
+  glm::vec2 textureCoord{};
 
   Vertex(glm::vec3 position, glm::vec4 color) : position(position), color(color) {}
 
-  Vertex(
-      glm::vec3 position, glm::vec4 color, uint32_t textureIdx, glm::vec2 textureOffset)
+  Vertex(glm::vec3 position, glm::vec4 color, uint32_t textureIdx, glm::vec2 textureCoord)
       : position(position),
         color(color),
         textureIndex(textureIdx),
-        textureOffset(textureOffset) {}
+        textureCoord(textureCoord) {}
 };
 }
 
