@@ -42,6 +42,8 @@ void main() {
 
 namespace render {
 
+static unsigned int maxSupportedTextureSize = 1024;
+
 GLRenderer::GLRenderer() {
   constexpr int kPositionAttribLoc = 0;
   constexpr int kColorAttribLoc = 1;
@@ -54,6 +56,10 @@ GLRenderer::GLRenderer() {
     throw std::runtime_error("Could not compile shader");
   }
   m_quadProgram = std::move(quadProgram.value());
+
+  GLint getResult = 0;
+  GLCall(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &getResult));
+  maxSupportedTextureSize = getResult;
 
   GLCall(glEnableVertexAttribArray(kPositionAttribLoc));
   GLCall(glVertexAttribPointer(
@@ -108,6 +114,10 @@ void GLRenderer::flush() {
   GLCall(glDrawElements(GL_TRIANGLES, m_indexBuffer.size(), GL_UNSIGNED_INT, nullptr));
   m_dataBuffer.erase(m_dataBuffer.begin(), m_dataBuffer.end());
   m_indexBuffer.erase(m_indexBuffer.begin(), m_indexBuffer.end());
+}
+
+unsigned int GLRenderer::maxTextureSize() {
+  return maxSupportedTextureSize;
 }
 
 GLRenderer::GLVAO::GLVAO()

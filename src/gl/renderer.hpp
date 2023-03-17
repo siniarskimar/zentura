@@ -27,6 +27,8 @@ class GLRenderer : public Renderer {
       const glm::vec3 position, const glm::vec2 size,
       std::shared_ptr<Texture> texture) override;
 
+  unsigned int maxTextureSize() override;
+
   /// @brief Render current batch to default framebuffer
   void flush() override;
 
