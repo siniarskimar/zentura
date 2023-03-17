@@ -64,7 +64,7 @@ class GLShaderProgram {
   /// @brief Sets a value of a shader uniform
   ///
   /// Sets a value of a shader uniform in a safe manner. Firstly it check if a uniform
-  /// with given @ref name exists and then sets it to the desired value.
+  /// with given name exists and then sets it to the desired value.
   /// This is done in order to prevent errors when GLSL optimizes an uniform away.
   ///
   /// @param name Uniform name
