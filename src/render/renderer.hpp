@@ -29,12 +29,10 @@ class Renderer {
   // virtual void submitText(const glm::vec3 position, const float scale, FontDescriptor
   // desc, TextView text);
 
-  //  virtual std::shared_ptr<Texture> newTexture();
-
   virtual void clearFramebuffer() = 0;
 
-  //  virtual unsigned int maxTextureWidth();
-  //  virtual unsigned int maxTextureHeight();
+  /// @brief Returns maximum rectangular size for texture (N x N)
+  virtual unsigned int maxTextureSize() = 0;
 };
 } // namespace render
 
