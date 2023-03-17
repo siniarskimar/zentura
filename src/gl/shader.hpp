@@ -46,7 +46,7 @@ class GLShaderProgram {
 
   /// @brief Gets location of an attribute
   ///
-  /// Gets location of an shader attribute. Useful in OpenGL contexts lower than **3.3**.
+  /// Gets location of an shader attribute.
   ///
   /// @param name attribute name
   /// @return Attribute location
