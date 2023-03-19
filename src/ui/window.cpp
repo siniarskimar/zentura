@@ -1,5 +1,6 @@
 #include "gl/renderer.hpp"
 #include "./window.hpp"
+#include "stb_image.h"
 
 namespace ui {
 
@@ -45,11 +46,30 @@ void Window::setTitle(const std::string& title) {
 }
 
 void Window::runLoop() {
+  int tWidth = 0;
+  int tHeight = 0;
+  int tChannels = 0;
+  auto* data = stbi_load("share/zen/test_image.jpg", &tWidth, &tHeight, &tChannels, 0);
+  if(data == nullptr) {
+    fmt::print("Failed to open 'share/zen/test_image.jpg'\n");
+    return;
+  }
+
+  std::shared_ptr<render::Texture> texture = std::make_shared<render::Texture>(
+      tWidth, tHeight, tChannels,
+      std::span<const uint8_t>(
+          reinterpret_cast<const uint8_t*>(data),
+          reinterpret_cast<const uint8_t*>(data) + tWidth * tHeight * tChannels));
+
+  if(texture->getChannelCount() < 4) {
+    *texture.get() = texture->expandToRGBA();
+  }
+
   auto& renderer = getRenderer();
   while(!glfwWindowShouldClose(getGLFWHandle())) {
     renderer.clearFramebuffer();
-    renderer.submitQuad({-0.5f, 0.5f, 0.0f}, {0.5f, 0.5f}, {1.0f, 0.0f, 0.0f, 1.0f});
-
+    // renderer.submitQuad({-0.5f, 0.5f, 0.0f}, {0.5f, 0.5f}, {1.0f, 0.0f, 0.0f, 1.0f});
+    renderer.submitQuad({-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f}, texture);
     renderer.flush();
     glfwSwapBuffers(getGLFWHandle());
     glfwPollEvents();

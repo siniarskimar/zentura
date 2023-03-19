@@ -11,6 +11,7 @@
 #include "render/texture.hpp"
 #include "render/renderer.hpp"
 #include "render/vertex.hpp"
+#include <map>
 
 namespace render {
 
@@ -38,6 +39,9 @@ class GLRenderer : public Renderer {
   void clearFramebuffer() override;
 
   private:
+  template <typename K, typename V>
+  using WeakPtrMap = std::map<std::weak_ptr<K>, V, std::owner_less<>>;
+
   /// Wrapper around OpenGL Vertex Array Object.
   struct GLVAO {
     GLuint glId;
@@ -58,11 +62,30 @@ class GLRenderer : public Renderer {
     void uploadIndexBuffer(const void* data, GLsizeiptr size);
   };
 
+  struct TextureBoundingBox {
+    unsigned int x;
+    unsigned int y;
+    unsigned int width;
+    unsigned int height;
+  };
+
+  struct TextureAtlas {
+    std::shared_ptr<Texture> textureAtlas;
+    WeakPtrMap<Texture, TextureBoundingBox> boundingBoxes;
+    std::optional<TextureBoundingBox> fit(std::shared_ptr<Texture> texture);
+  };
+
   private:
   std::vector<Vertex> m_dataBuffer;
   std::vector<uint32_t> m_indexBuffer;
   GLVAO m_vao;
   GLShaderProgram m_quadProgram;
+  std::vector<TextureAtlas> m_textureAtlases;
+  std::vector<std::shared_ptr<Texture>> m_boundTextures;
+  std::map<
+      std::weak_ptr<Texture>, std::reference_wrapper<TextureAtlas>, std::owner_less<>>
+      m_textureToAtlasMap;
+  std::map<std::weak_ptr<Texture>, GLuint, std::owner_less<>> m_textureToObjectMap;
 };
 
 } // namespace render

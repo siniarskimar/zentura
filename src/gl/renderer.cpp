@@ -31,11 +31,15 @@ in vec4 vertex_color;
 in vec2 vertex_textureCoords;
 
 uniform sampler2D textureAtlas;
+uniform bool enableTexture;
 
 out vec4 frag_color;
 
 void main() {
   frag_color = vertex_color;
+  if(enableTexture) {
+    frag_color = texture(textureAtlas, vertex_textureCoords);
+  }
 }
     
 )";
@@ -60,6 +64,32 @@ GLRenderer::GLRenderer() {
   GLint getResult = 0;
   GLCall(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &getResult));
   maxSupportedTextureSize = getResult;
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  m_textureAtlases.reserve(16);
+  {
+    TextureAtlas atlas = {
+        std::make_shared<Texture>(maxSupportedTextureSize, maxSupportedTextureSize, 4)};
+    GLuint textureObject = 0;
+    glGenTextures(1, &textureObject);
+    glBindTexture(GL_TEXTURE_2D, textureObject);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    GLCall(glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA8, atlas.textureAtlas->getWidth(),
+        atlas.textureAtlas->getHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
+    m_textureToObjectMap.insert({atlas.textureAtlas, textureObject});
+
+    // templates fail on me here
+    m_textureAtlases.emplace_back(std::move(atlas));
+  }
+
+  m_vao.bind();
+  GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_vao.dataBufferId));
 
   GLCall(glEnableVertexAttribArray(kPositionAttribLoc));
   GLCall(glVertexAttribPointer(
@@ -99,7 +129,84 @@ void GLRenderer::submitQuad(
 }
 
 void GLRenderer::submitQuad(
-    const glm::vec3 position, const glm::vec2 size, std::shared_ptr<Texture> texture) {}
+    const glm::vec3 position, const glm::vec2 size, std::shared_ptr<Texture> texture) {
+
+  glm::vec2 textureCoords[4];
+  GLuint textureObject{};
+  TextureBoundingBox boundingBox{};
+  unsigned int kAtlasWidth{};
+  unsigned int kAtlasHeight{};
+
+  if(m_textureToAtlasMap.contains(texture)) {
+    // Get texture atlas
+    TextureAtlas& atlas = m_textureToAtlasMap.at(texture);
+    textureObject = m_textureToObjectMap.at(atlas.textureAtlas);
+
+    boundingBox = atlas.boundingBoxes.at(texture);
+    kAtlasWidth = atlas.textureAtlas->getWidth();
+    kAtlasHeight = atlas.textureAtlas->getHeight();
+
+    // then calculate texture coords from the bounding box
+  } else {
+    // Try and fit texture into existing texture atlas
+    // if that fails, allocate new texture atlas and fit texture into it
+
+    // .. for now just use single texture atlas
+    auto& atlas = m_textureAtlases[0];
+    textureObject = m_textureToObjectMap.at(atlas.textureAtlas);
+    auto fitResult = atlas.fit(texture);
+    if(!fitResult) {
+      throw std::runtime_error("TODO: implement multiple texture atlases");
+    }
+    boundingBox = fitResult.value();
+    kAtlasWidth = atlas.textureAtlas->getWidth();
+    kAtlasHeight = atlas.textureAtlas->getHeight();
+    m_textureToAtlasMap.insert({texture, atlas});
+  }
+  textureCoords[0] = {
+      boundingBox.x / static_cast<double>(kAtlasWidth),
+      boundingBox.y / static_cast<double>(kAtlasHeight)};
+  textureCoords[1] = {
+      (boundingBox.x + boundingBox.width) / static_cast<double>(kAtlasWidth),
+      boundingBox.y / static_cast<double>(kAtlasHeight)};
+  textureCoords[2] = {
+      (boundingBox.x + boundingBox.width) / static_cast<double>(kAtlasWidth),
+      (boundingBox.y + boundingBox.height) / static_cast<double>(kAtlasHeight)};
+  textureCoords[3] = {
+      boundingBox.x / static_cast<double>(kAtlasWidth),
+      (boundingBox.y + boundingBox.height) / static_cast<double>(kAtlasHeight)};
+  GLCall(glActiveTexture(GL_TEXTURE1));
+  GLCall(glBindTexture(GL_TEXTURE_2D, textureObject));
+  GLCall(glTexSubImage2D(
+      GL_TEXTURE_2D, 0, boundingBox.x, boundingBox.y, boundingBox.width,
+      boundingBox.height, GL_RGBA, GL_UNSIGNED_BYTE, texture->getTextureData().data()));
+
+  m_dataBuffer.emplace_back(
+      position, glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0,
+      textureCoords[0]);
+  m_dataBuffer.emplace_back(
+      position + glm::vec3(size.x, 0.0f, 0.0f),
+      glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0, textureCoords[1]);
+  m_dataBuffer.emplace_back(
+      position + glm::vec3(size.x, -size.y, 0.0f),
+      glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0, textureCoords[2]);
+  m_dataBuffer.emplace_back(
+      position - glm::vec3(0.0f, size.y, 0.0f),
+      glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0, textureCoords[3]);
+
+  const uint32_t kIndexCount = m_indexBuffer.size() * 4 / 6;
+  m_indexBuffer.push_back(kIndexCount + 0);
+  m_indexBuffer.push_back(kIndexCount + 1);
+  m_indexBuffer.push_back(kIndexCount + 2);
+  m_indexBuffer.push_back(kIndexCount + 2);
+  m_indexBuffer.push_back(kIndexCount + 3);
+  m_indexBuffer.push_back(kIndexCount + 0);
+
+  m_quadProgram.use();
+  m_quadProgram.setUniformSafe("textureAtlas", textureObject);
+  m_quadProgram.setUniformSafe("enableTexture", true);
+  flush();
+}
 
 void GLRenderer::flush() {
   m_vao.uploadDataBuffer(
@@ -114,10 +221,23 @@ void GLRenderer::flush() {
   GLCall(glDrawElements(GL_TRIANGLES, m_indexBuffer.size(), GL_UNSIGNED_INT, nullptr));
   m_dataBuffer.erase(m_dataBuffer.begin(), m_dataBuffer.end());
   m_indexBuffer.erase(m_indexBuffer.begin(), m_indexBuffer.end());
+  m_quadProgram.setUniformSafe("enableTexture", false);
 }
 
 unsigned int GLRenderer::maxTextureSize() {
   return maxSupportedTextureSize;
+}
+
+std::optional<GLRenderer::TextureBoundingBox> GLRenderer::TextureAtlas::fit(
+    std::shared_ptr<Texture> texture) {
+  // TODO: implement this function
+  if(boundingBoxes.contains(texture)) {
+    return boundingBoxes.at(texture);
+  }
+  TextureBoundingBox boundingBox = {0, 0, texture->getWidth(), texture->getHeight()};
+  boundingBoxes.clear();
+  boundingBoxes.insert({texture, boundingBox});
+  return boundingBox;
 }
 
 GLRenderer::GLVAO::GLVAO()
