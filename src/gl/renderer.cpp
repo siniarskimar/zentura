@@ -145,6 +145,8 @@ void GLRenderer::submitQuad(
     boundingBox = atlas.boundingBoxes.at(texture);
     kAtlasWidth = atlas.textureAtlas->getWidth();
     kAtlasHeight = atlas.textureAtlas->getHeight();
+    GLCall(glActiveTexture(GL_TEXTURE1));
+    GLCall(glBindTexture(GL_TEXTURE_2D, textureObject));
 
     // then calculate texture coords from the bounding box
   } else {
@@ -162,6 +164,11 @@ void GLRenderer::submitQuad(
     kAtlasWidth = atlas.textureAtlas->getWidth();
     kAtlasHeight = atlas.textureAtlas->getHeight();
     m_textureToAtlasMap.insert({texture, atlas});
+    GLCall(glActiveTexture(GL_TEXTURE1));
+    GLCall(glBindTexture(GL_TEXTURE_2D, textureObject));
+    GLCall(glTexSubImage2D(
+        GL_TEXTURE_2D, 0, boundingBox.x, boundingBox.y, boundingBox.width,
+        boundingBox.height, GL_RGBA, GL_UNSIGNED_BYTE, texture->getTextureData().data()));
   }
   textureCoords[0] = {
       boundingBox.x / static_cast<double>(kAtlasWidth),
@@ -175,11 +182,6 @@ void GLRenderer::submitQuad(
   textureCoords[3] = {
       boundingBox.x / static_cast<double>(kAtlasWidth),
       (boundingBox.y + boundingBox.height) / static_cast<double>(kAtlasHeight)};
-  GLCall(glActiveTexture(GL_TEXTURE1));
-  GLCall(glBindTexture(GL_TEXTURE_2D, textureObject));
-  GLCall(glTexSubImage2D(
-      GL_TEXTURE_2D, 0, boundingBox.x, boundingBox.y, boundingBox.width,
-      boundingBox.height, GL_RGBA, GL_UNSIGNED_BYTE, texture->getTextureData().data()));
 
   m_dataBuffer.emplace_back(
       position, glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0,
