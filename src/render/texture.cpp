@@ -63,4 +63,45 @@ const std::span<uint8_t> Texture::at(unsigned int x, unsigned int y) {
   return {begin, end};
 }
 
+Texture Texture::expandToRGBA() const {
+  auto srcChannels = getChannelCount();
+  if(srcChannels == 4) {
+    return *this;
+  }
+  Texture resultTexture(getWidth(), getHeight(), 4);
+  for(auto y = 0; y < getHeight(); y++) {
+    for(auto x = 0; x < getWidth(); x++) {
+      auto destData = resultTexture.at(x, y);
+      auto srcData = at(x, y);
+      switch(srcChannels) {
+      case 1:
+        destData[0] = srcData[0];
+        destData[1] = srcData[0];
+        destData[2] = srcData[0];
+        destData[3] = 255;
+        break;
+      case 2:
+        destData[0] = srcData[0];
+        destData[1] = srcData[1];
+        destData[2] = 0;
+        destData[3] = 255;
+        break;
+      case 3:
+        destData[0] = srcData[0];
+        destData[1] = srcData[1];
+        destData[2] = srcData[2];
+        destData[3] = 255;
+        break;
+      default:
+        destData[0] = srcData[0];
+        destData[1] = srcData[1];
+        destData[2] = srcData[2];
+        destData[3] = srcData[3];
+        break;
+      }
+    }
+  }
+  return resultTexture;
+}
+
 } // namespace render

@@ -44,6 +44,8 @@ class Texture {
   /// \}
   ~Texture() = default;
 
+  [[nodiscard]] Texture expandToRGBA() const;
+
   /// Get texture width.
   [[nodiscard]] unsigned int getWidth() const;
 
