@@ -12,6 +12,7 @@
 #include <glm/vec4.hpp>
 #include <glm/mat2x2.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <concepts>
 
 /// Represents an OpenGL Program.
 class GLShaderProgram {
@@ -69,34 +70,51 @@ class GLShaderProgram {
   /// Firstly it check if a uniform with given name exists and then sets it to the desired
   /// value. This is done in order to prevent errors when GLSL optimizes an uniform away.
   /// \{
-  template <int N, typename T = glm::vec<N, float, glm::defaultp>>
-  inline void setUniformSafe(const std::string& name, const T& value) noexcept
-    requires(1 <= N && N <= 4)
+  template <int N, typename T, typename V = glm::vec<N, T, glm::defaultp>>
+  inline void setUniformSafe(const std::string& name, const V& value) noexcept
+    requires(1 <= N && N <= 4 && std::is_fundamental_v<T>)
   {
     const GLint kLoc = getUniformLocation(name);
 
     if(kLoc == -1) {
       return;
     }
-    if constexpr(N == 2) {
-      glUniform2fv(kLoc, 2, glm::value_ptr(value));
-    } else if constexpr(N == 3) {
-      glUniform3fv(kLoc, 3, glm::value_ptr(value));
-    } else if constexpr(N == 4) {
-      glUniform4fv(kLoc, 4, glm::value_ptr(value));
+    auto valuePtr = glm::value_ptr(value);
+    if constexpr(std::is_same_v<T, float>) {
+      if constexpr(N == 2) {
+        glUniform2fv(kLoc, 2, valuePtr);
+      } else if constexpr(N == 3) {
+        glUniform3fv(kLoc, 3, valuePtr);
+      } else if constexpr(N == 4) {
+        glUniform4fv(kLoc, 4, valuePtr);
+      }
+    } else if constexpr(std::is_same_v<T, int> || std::is_same_v<T, bool>) {
+      if constexpr(N == 2) {
+        glUniform2iv(kLoc, 2, valuePtr);
+      } else if constexpr(N == 3) {
+        glUniform3iv(kLoc, 3, valuePtr);
+      } else if constexpr(N == 4) {
+        glUniform4iv(kLoc, 4, valuePtr);
+      }
     }
   }
 
   /// Template specialization of setUniformSafe for a single float value.
   /// There's no glm::vec1, so that's why.
-  template <int N = 1>
-  inline void setUniformSafe(const std::string& name, const float& value) noexcept {
+  template <int N = 1, typename T>
+  inline void setUniformSafe(const std::string& name, const T& value) noexcept
+    requires(std::is_fundamental_v<T>)
+  {
     const GLint kLoc = getUniformLocation(name);
 
     if(kLoc == -1) {
       return;
     }
-    glUniform1f(kLoc, value);
+    if constexpr(std::is_same_v<T, float>) {
+      glUniform1f(kLoc, value);
+    } else if constexpr(std::is_same_v<T, int> || std::is_same_v<T, bool>) {
+      glUniform1i(kLoc, value);
+    }
   }
 
   /// Set uniform matrix in a safe manner.
