@@ -12,7 +12,7 @@ class Texture {
   public:
 
   /// Constructs an empty Texture.
-  Texture(size_t width, size_t height, uint8_t channels);
+  Texture(unsigned int width, unsigned int height, uint8_t channels);
 
   /// Constructs a Texture from existing pixel data.
   /// Resulting Texture class holds a copy of provided data.
@@ -22,15 +22,16 @@ class Texture {
   /// @param channels number of source data channels
   /// @param data source data
   Texture(
-      size_t width, size_t height, uint8_t channels, const std::span<const uint8_t> data);
+      unsigned int width, unsigned int height, uint8_t channels,
+      const std::span<const uint8_t> data);
 
   // NOTE: This might be useful
-  // Texture(size_t width, size_t height, uint8_t channels, const std::span<uint8_t[]>&&
-  // data);
+  // Texture(unsigned int width, unsigned int height, uint8_t channels, const
+  // std::span<uint8_t[]>&& data);
 
   // NOTE: Consider implementing this function
-  // void combine(const Texture& source, size_t sourceX, size_t sourceY, size_t
-  // regionWidth, size_t regionHeight);
+  // void combine(const Texture& source, unsigned int sourceX, unsigned int sourceY,
+  // unsigned int regionWidth, unsigned int regionHeight);
 
   /// \{
   explicit Texture(const Texture&);
@@ -44,29 +45,29 @@ class Texture {
   ~Texture() = default;
 
   /// Get texture width.
-  [[nodiscard]] size_t getWidth() const;
+  [[nodiscard]] unsigned int getWidth() const;
 
   /// Get texture height.
-  [[nodiscard]] size_t getHeight() const;
+  [[nodiscard]] unsigned int getHeight() const;
 
   /// Get texture channel count.
   [[nodiscard]] uint8_t getChannelCount() const;
 
   /// Get texture size in bytes.
-  [[nodiscard]] size_t getTextureSize() const;
+  [[nodiscard]] unsigned int getTextureSize() const;
 
   /// Get texture data.
   [[nodiscard]] const std::span<uint8_t> getTextureData() const;
 
   /// Access a single pixel.
   /// \{
-  [[nodiscard]] const std::span<uint8_t> at(size_t x, size_t y);
-  [[nodiscard]] const std::span<const uint8_t> at(size_t x, size_t y) const;
+  [[nodiscard]] const std::span<uint8_t> at(unsigned int x, unsigned int y);
+  [[nodiscard]] const std::span<const uint8_t> at(unsigned int x, unsigned int y) const;
   /// \}
 
   private:
-  size_t m_width;
-  size_t m_height;
+  unsigned int m_width;
+  unsigned int m_height;
   uint8_t m_channels;
   std::unique_ptr<uint8_t[]> m_data;
 };

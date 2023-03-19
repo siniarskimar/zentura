@@ -3,14 +3,15 @@
 #include <stdexcept>
 
 namespace render {
-Texture::Texture(size_t width, size_t height, uint8_t channels)
+Texture::Texture(unsigned int width, unsigned int height, uint8_t channels)
     : m_width(width),
       m_height(height),
       m_channels(channels),
       m_data(std::make_unique<uint8_t[]>(width * height * channels)) {}
 
 Texture::Texture(
-    size_t width, size_t height, uint8_t channels, const std::span<const uint8_t> data)
+    unsigned int width, unsigned int height, uint8_t channels,
+    const std::span<const uint8_t> data)
     : m_width(width),
       m_height(height),
       m_channels(channels),
@@ -35,11 +36,11 @@ Texture& Texture::operator=(const Texture& other) {
   return *this;
 }
 
-size_t Texture::getWidth() const {
+unsigned int Texture::getWidth() const {
   return m_width;
 }
 
-size_t Texture::getHeight() const {
+unsigned int Texture::getHeight() const {
   return m_height;
 }
 
@@ -47,11 +48,11 @@ const std::span<uint8_t> Texture::getTextureData() const {
   return {m_data.get(), getTextureSize()};
 }
 
-size_t Texture::getTextureSize() const {
+unsigned int Texture::getTextureSize() const {
   return m_width * m_height * m_channels;
 }
 
-const std::span<uint8_t> Texture::at(size_t x, size_t y) {
+const std::span<uint8_t> Texture::at(unsigned int x, unsigned int y) {
   if(x >= m_width || y >= m_height) {
     throw std::out_of_range("Tried to index Texture data out of range");
   }
