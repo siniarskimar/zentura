@@ -11,32 +11,37 @@
 #include "render/renderer.hpp"
 
 namespace ui {
-
 class Window {
   public:
-  /// @brief Default constructors
   /// \{
   Window(GLFWwindow* handle);
   Window(Window&&) = default;
   Window& operator=(Window&&) = default;
   /// \}
-  /// @brief Deleted copy constructors
+
+  /// Window should not be copied.
   /// \{
   Window(const Window&) = delete;
   Window& operator=(const Window&) = delete;
   /// \}
   ~Window() = default;
 
+  /// Create a new window.
   static std::optional<Window> create(
       const int width, const int height, const std::string& title);
 
+  /// Change the title of a window.
   void setTitle(const std::string& title);
+
+  /// Go into main window loop.
   void runLoop();
 
-  GLFWwindow* getGLFWHandle();
+  /// Get a reference to Renderer instance.
   render::Renderer& getRenderer();
 
   private:
+  GLFWwindow* getGLFWHandle();
+
   using WindowHandlePtr =
       std::unique_ptr<GLFWwindow, std::function<decltype(glfwDestroyWindow)>>;
 

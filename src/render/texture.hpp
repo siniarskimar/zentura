@@ -7,17 +7,14 @@
 
 namespace render {
 
-/// @class Texture
-/// @brief Container for storing pixel data.
-///
+/// Container for storing pixel data.
 class Texture {
   public:
 
-  /// @brief Constructs an empty Texture
+  /// Constructs an empty Texture.
   Texture(size_t width, size_t height, uint8_t channels);
 
-  /// @brief Constructs a Texture from existing pixel data
-  ///
+  /// Constructs a Texture from existing pixel data.
   /// Resulting Texture class holds a copy of provided data.
   ///
   /// @param width texture width
@@ -46,22 +43,22 @@ class Texture {
   /// \}
   ~Texture() = default;
 
-  /// @brief Get texture width
+  /// Get texture width.
   [[nodiscard]] size_t getWidth() const;
 
-  /// @brief Get texture height
+  /// Get texture height.
   [[nodiscard]] size_t getHeight() const;
 
-  /// @brief Get texture channel count
+  /// Get texture channel count.
   [[nodiscard]] uint8_t getChannelCount() const;
 
-  /// @brief Get texture size in bytes
+  /// Get texture size in bytes.
   [[nodiscard]] size_t getTextureSize() const;
 
-  /// @brief Get texture data
+  /// Get texture data.
   [[nodiscard]] const std::span<uint8_t> getTextureData() const;
 
-  /// @brief Access a single pixel
+  /// Access a single pixel.
   /// \{
   [[nodiscard]] const std::span<uint8_t> at(size_t x, size_t y);
   [[nodiscard]] const std::span<const uint8_t> at(size_t x, size_t y) const;

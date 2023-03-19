@@ -19,7 +19,7 @@
 
 #include <GLFW/glfw3.h>
 
-/// @brief Gets the path of systems default monospace font
+/// Gets the path of systems default monospace font.
 std::optional<std::string> getMonospaceFont() noexcept {
   FcConfig* config = FcInitLoadConfigAndFonts();
   if(config == nullptr) {

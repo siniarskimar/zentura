@@ -14,27 +14,31 @@
 
 namespace render {
 
+/// OpenGL renderer backend.
 class GLRenderer : public Renderer {
   public:
   GLRenderer();
 
-  /// @brief Submit a quad for rendering
+  /// Submit a quad for rendering.
   void submitQuad(
       const glm::vec3 position, const glm::vec2 size, const glm::vec4 color) override;
 
-  /// @brief Submit a texture quad for rendering
+  /// Submit a texture quad for rendering.
   void submitQuad(
       const glm::vec3 position, const glm::vec2 size,
       std::shared_ptr<Texture> texture) override;
 
+  /// Get maximum rectangular texture size ( NxN ).
   unsigned int maxTextureSize() override;
 
-  /// @brief Render current batch to default framebuffer
+  /// Render current batch to default framebuffer.
   void flush() override;
 
+  /// Clear current frambuffer.
   void clearFramebuffer() override;
 
   private:
+  /// Wrapper around OpenGL Vertex Array Object.
   struct GLVAO {
     GLuint glId;
     GLuint dataBufferId;
