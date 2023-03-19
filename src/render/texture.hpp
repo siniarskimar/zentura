@@ -34,7 +34,7 @@ class Texture {
   // unsigned int regionWidth, unsigned int regionHeight);
 
   /// \{
-  explicit Texture(const Texture&);
+  Texture(const Texture&);
   Texture& operator=(const Texture&);
   /// \}
 
