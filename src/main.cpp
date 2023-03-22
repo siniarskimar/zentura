@@ -9,8 +9,6 @@
 #include <ft2build.h>
 #include <freetype/freetype.h>
 
-#include "gl/gl.hpp"
-#include "gl/shader.hpp"
 #include "ui/window.hpp"
 #include "lib/glfw/glfw.hpp"
 #include <glm/vec2.hpp>
@@ -64,7 +62,6 @@ std::optional<std::string> getMonospaceFont() noexcept {
   return std::make_optional(std::move(result));
 }
 
-// TODO: break up this behemoth of a function
 int main(int argc, const char* argv[]) {
 
   glfw::GLFWLibrary glfwLibrary;
