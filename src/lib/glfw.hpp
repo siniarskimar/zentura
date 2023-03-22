@@ -9,8 +9,6 @@
 #include <utility>
 #include <fmt/core.h>
 
-namespace glfw {
-
 class GLFWInitError : public std::exception {
   public:
   GLFWInitError(const char* what) noexcept : m_what(what) {}
@@ -43,7 +41,5 @@ class GLFWLibrary {
   GLFWLibrary& operator=(const GLFWLibrary&) = default;
   GLFWLibrary& operator=(GLFWLibrary&&) = default;
 };
-
-}; // namespace glfw
 
 #endif

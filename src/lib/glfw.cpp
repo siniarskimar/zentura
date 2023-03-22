@@ -3,8 +3,6 @@
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
-namespace glfw {
-
 GLFWLibrary::GLFWLibrary() {
   glfwSetErrorCallback([](const int errorCode, const char* errorMsg) {
     switch(errorCode) {
@@ -45,5 +43,3 @@ GLFWLibrary::GLFWLibrary() {
 GLFWLibrary::~GLFWLibrary() {
   glfwTerminate();
 }
-
-} // namespace glfw
