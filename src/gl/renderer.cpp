@@ -44,8 +44,6 @@ void main() {
     
 )";
 
-namespace render {
-
 static unsigned int maxSupportedTextureSize = 1024;
 
 GLRenderer::GLRenderer() {
@@ -318,5 +316,3 @@ void GLRenderer::GLVAO::uploadIndexBuffer(const void* data, GLsizeiptr size) {
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, size, data);
   }
 }
-
-} // namespace render

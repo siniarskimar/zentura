@@ -2,7 +2,6 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace render {
 Texture::Texture(unsigned int width, unsigned int height, uint8_t channels)
     : m_width(width),
       m_height(height),
@@ -118,5 +117,3 @@ Texture Texture::expandToRGBA() const {
   }
   return resultTexture;
 }
-
-} // namespace render

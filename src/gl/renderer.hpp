@@ -13,8 +13,6 @@
 #include "render/vertex.hpp"
 #include <map>
 
-namespace render {
-
 /// OpenGL renderer backend.
 class GLRenderer : public Renderer {
   public:
@@ -88,5 +86,4 @@ class GLRenderer : public Renderer {
   std::map<std::weak_ptr<Texture>, GLuint, std::owner_less<>> m_textureToObjectMap;
 };
 
-} // namespace render
 #endif

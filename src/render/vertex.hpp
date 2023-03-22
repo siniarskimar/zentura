@@ -6,8 +6,6 @@
 #include <glm/vec4.hpp>
 #include <cstdint>
 
-namespace render {
-
 struct Vertex {
   glm::vec3 position{};
   glm::vec4 color{};
@@ -22,6 +20,5 @@ struct Vertex {
         textureIndex(textureIdx),
         textureCoord(textureCoord) {}
 };
-}
 
 #endif

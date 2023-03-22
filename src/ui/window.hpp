@@ -37,7 +37,7 @@ class Window {
   void runLoop();
 
   /// Get a reference to Renderer instance.
-  render::Renderer& getRenderer();
+  Renderer& getRenderer();
 
   private:
   GLFWwindow* getGLFWHandle();
@@ -47,7 +47,7 @@ class Window {
 
   WindowHandlePtr m_window;
 
-  std::unique_ptr<render::Renderer> m_renderer;
+  std::unique_ptr<Renderer> m_renderer;
 };
 
 }; // namespace ui

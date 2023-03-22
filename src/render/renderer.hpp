@@ -5,7 +5,6 @@
 #include "render/texture.hpp"
 #include <memory>
 
-namespace render {
 class Renderer {
   public:
   virtual ~Renderer() = default;
@@ -33,6 +32,5 @@ class Renderer {
   /// Returns maximum rectangular size for texture (N x N).
   virtual unsigned int maxTextureSize() = 0;
 };
-} // namespace render
 
 #endif

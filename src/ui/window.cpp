@@ -4,9 +4,9 @@
 
 namespace ui {
 
-std::unique_ptr<render::Renderer> createRenderer() {
+std::unique_ptr<Renderer> createRenderer() {
   /// Only OpenGL for now
-  return std::make_unique<render::GLRenderer>();
+  return std::make_unique<GLRenderer>();
 }
 
 std::optional<Window> Window::create(
@@ -37,7 +37,7 @@ GLFWwindow* Window::getGLFWHandle() {
   return m_window.get();
 }
 
-render::Renderer& Window::getRenderer() {
+Renderer& Window::getRenderer() {
   return *m_renderer;
 }
 
@@ -55,7 +55,7 @@ void Window::runLoop() {
     return;
   }
 
-  std::shared_ptr<render::Texture> texture = std::make_shared<render::Texture>(
+  std::shared_ptr<Texture> texture = std::make_shared<Texture>(
       tWidth, tHeight, tChannels,
       std::span<const uint8_t>(
           reinterpret_cast<const uint8_t*>(data),

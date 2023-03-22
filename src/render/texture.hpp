@@ -5,8 +5,6 @@
 #include <memory>
 #include <cstdint>
 
-namespace render {
-
 /// Container for storing pixel data.
 class Texture {
   public:
@@ -73,7 +71,5 @@ class Texture {
   uint8_t m_channels;
   std::unique_ptr<uint8_t[]> m_data;
 };
-
-} // namespace render
 
 #endif
