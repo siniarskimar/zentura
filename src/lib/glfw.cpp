@@ -38,7 +38,7 @@ GLFWLibrary::GLFWLibrary() {
   if(!glfwInit()) {
     const char* desc = nullptr;
     glfwGetError(&desc);
-    throw InitializationError(desc ? desc : "Failed to initialize GLFW");
+    throw GLFWInitError(desc ? desc : "Failed to initialize GLFW");
   }
 }
 

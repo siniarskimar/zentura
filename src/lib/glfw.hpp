@@ -11,19 +11,19 @@
 
 namespace glfw {
 
-class InitializationError : public std::exception {
+class GLFWInitError : public std::exception {
   public:
-  InitializationError(const char* what) noexcept : m_what(what) {}
+  GLFWInitError(const char* what) noexcept : m_what(what) {}
 
   // NOLINTNEXTLINE(modernize-pass-by-value)
-  InitializationError(int err, const std::string& what) noexcept : m_what(what) {}
+  GLFWInitError(int err, const std::string& what) noexcept : m_what(what) {}
 
-  InitializationError(const InitializationError&) noexcept = default;
-  InitializationError(InitializationError&&) noexcept = delete;
-  InitializationError& operator=(const InitializationError& other) noexcept = default;
-  InitializationError& operator=(InitializationError&&) noexcept = delete;
+  GLFWInitError(const GLFWInitError&) noexcept = default;
+  GLFWInitError(GLFWInitError&&) noexcept = delete;
+  GLFWInitError& operator=(const GLFWInitError& other) noexcept = default;
+  GLFWInitError& operator=(GLFWInitError&&) noexcept = delete;
 
-  ~InitializationError() override = default;
+  ~GLFWInitError() override = default;
 
   [[nodiscard]] const char* what() const noexcept override {
     return m_what.c_str();
