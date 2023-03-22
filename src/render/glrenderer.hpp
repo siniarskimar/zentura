@@ -1,13 +1,13 @@
 #ifndef GL_RENDERER_H
 #define GL_RENDERER_H
 
-#include "gl/gl.hpp"
+#include "render/gl.hpp"
 #include <vector>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
-#include "gl/shader.hpp"
+#include "render/glshader.hpp"
 #include "render/texture.hpp"
 #include "render/renderer.hpp"
 #include "render/vertex.hpp"

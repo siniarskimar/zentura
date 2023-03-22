@@ -1,4 +1,4 @@
-#include "./renderer.hpp"
+#include "./glrenderer.hpp"
 #include <GLFW/glfw3.h>
 #include <optional>
 #include <stdexcept>

@@ -6,7 +6,7 @@
 #include <vector>
 #include <string>
 #include <string_view>
-#include "gl/gl.hpp"
+#include "render/gl.hpp"
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>

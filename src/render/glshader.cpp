@@ -1,5 +1,5 @@
-#include "gl/shader.hpp"
-#include "gl.hpp"
+#include "render/glshader.hpp"
+#include "render/gl.hpp"
 #include <optional>
 #include <string_view>
 #include <fmt/core.h>
