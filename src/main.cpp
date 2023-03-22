@@ -10,7 +10,7 @@
 #include <freetype/freetype.h>
 
 #include "ui/window.hpp"
-#include "lib/glfw/glfw.hpp"
+#include "lib/glfw.hpp"
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
@@ -64,7 +64,7 @@ std::optional<std::string> getMonospaceFont() noexcept {
 
 int main(int argc, const char* argv[]) {
 
-  glfw::GLFWLibrary glfwLibrary;
+  GLFWLibrary glfwLibrary;
 
   auto monospaceFontPath = getMonospaceFont();
   if(!monospaceFontPath.has_value()) {
