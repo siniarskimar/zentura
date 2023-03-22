@@ -4,7 +4,7 @@ executable('zen',
   'render/glad/glad.c',
   'render/glshader.cpp',
   'stb_image.c',
-  'lib/glfw/glfw.cpp',
+  'lib/glfw.cpp',
   'render/glrenderer.cpp',
   'render/texture.cpp',
   dependencies: [
