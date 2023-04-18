@@ -126,7 +126,7 @@ void GLRenderer::submitQuad(
   m_indexBuffer.push_back(kIndexCount + 0);
 }
 
-void GLRenderer::submitQuad(
+void GLRenderer::submitTexturedQuad(
     const glm::vec3 position, const glm::vec2 size, std::shared_ptr<Texture> texture) {
 
   glm::vec2 textureCoords[4];
