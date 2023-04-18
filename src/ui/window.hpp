@@ -32,9 +32,15 @@ class Window {
   /// Change the title of a window.
   void setTitle(const std::string& title);
 
-  private:
+  void makeContextCurrent();
+
+  bool shouldClose();
+
+  // TODO: this function should not belong here
+  void pollEvents();
   GLFWwindow* getGLFWHandle();
 
+  private:
   using WindowHandlePtr =
       std::unique_ptr<GLFWwindow, std::function<decltype(glfwDestroyWindow)>>;
 

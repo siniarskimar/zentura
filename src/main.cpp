@@ -9,13 +9,13 @@
 #include <ft2build.h>
 #include <freetype/freetype.h>
 
+#include "render/glrenderer.hpp"
 #include "ui/window.hpp"
+
 #include "lib/glfw.hpp"
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
-
-#include <GLFW/glfw3.h>
 
 /// Gets the path of systems default monospace font.
 std::optional<std::string> getMonospaceFont() noexcept {
@@ -78,7 +78,16 @@ int main(int argc, const char* argv[]) {
     fmt::print(stderr, "Failed to create window: {}", glfwGetError(nullptr));
     return 2;
   }
-  window->runLoop();
+  GLRenderer renderer(window.value());
+  while(!window->shouldClose()) {
+    window->pollEvents();
+    renderer.clearFramebuffer();
+
+    renderer.submitQuad({-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f});
+
+    renderer.flush();
+    renderer.swapWindowBuffers();
+  }
 
   return 0;
 }

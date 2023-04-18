@@ -30,7 +30,7 @@ static const char* const kEmbedShaderSimpleFrag =
 in vec4 vertex_color;
 in vec2 vertex_textureCoords;
 
-uniform sampler2D texture;
+uniform sampler2D tex;
 uniform bool enableTexture;
 
 out vec4 frag_color;
@@ -38,21 +38,23 @@ out vec4 frag_color;
 void main() {
   frag_color = vertex_color;
   if(enableTexture) {
-    frag_color = texture(textureAtlas, vertex_textureCoords);
+    frag_color = texture(tex, vertex_textureCoords);
   }
 }
     
 )";
 
-GLRenderer::GLRenderer()
+GLRenderer::GLRenderer(ui::Window& window)
     : m_vao(0),
       m_dataBufferObject(0),
       m_indexBufferObject(0),
       m_dataBufferObjectSize(0),
-      m_indexBufferObjectSize(0) {
+      m_indexBufferObjectSize(0),
+      m_window(window) {
   constexpr int kPositionAttribLoc = 0;
   constexpr int kColorAttribLoc = 1;
   constexpr int kTextureCoordAttribLoc = 2;
+  window.makeContextCurrent();
 
   auto quadProgram =
       GLShaderProgram::compile(kEmbedShaderSimpleVertex, kEmbedShaderSimpleFrag);
@@ -207,4 +209,8 @@ void GLRenderer::uploadIndexBuffer(const void* data, GLsizeiptr size) {
   } else {
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, size, data);
   }
+}
+
+void GLRenderer::swapWindowBuffers() {
+  glfwSwapBuffers(m_window.getGLFWHandle());
 }

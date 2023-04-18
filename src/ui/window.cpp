@@ -32,8 +32,19 @@ GLFWwindow* Window::getGLFWHandle() {
   return m_window.get();
 }
 
+void Window::makeContextCurrent() {
+  glfwMakeContextCurrent(getGLFWHandle());
+}
+
+bool Window::shouldClose() {
+  return glfwWindowShouldClose(getGLFWHandle());
+}
+
 void Window::setTitle(const std::string& title) {
   glfwSetWindowTitle(m_window.get(), title.c_str());
 }
 
+void Window::pollEvents() {
+  glfwPollEvents();
+}
 } // namespace ui

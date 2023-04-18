@@ -39,6 +39,8 @@ class GLRenderer {
   /// Clear current frambuffer.
   void clearFramebuffer();
 
+  void swapWindowBuffers();
+
   private:
   void bindVAO();
   void uploadDataBuffer(const void* data, GLsizeiptr size);
