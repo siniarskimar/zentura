@@ -8,13 +8,12 @@
 #include <optional>
 #include <memory>
 #include <functional>
-#include "render/renderer.hpp"
 
 namespace ui {
 class Window {
   public:
   /// \{
-  Window(GLFWwindow* handle);
+  Window(GLFWwindow*);
   Window(Window&&) = default;
   Window& operator=(Window&&) = default;
   /// \}
@@ -33,12 +32,6 @@ class Window {
   /// Change the title of a window.
   void setTitle(const std::string& title);
 
-  /// Go into main window loop.
-  void runLoop();
-
-  /// Get a reference to Renderer instance.
-  Renderer& getRenderer();
-
   private:
   GLFWwindow* getGLFWHandle();
 
@@ -46,8 +39,6 @@ class Window {
       std::unique_ptr<GLFWwindow, std::function<decltype(glfwDestroyWindow)>>;
 
   WindowHandlePtr m_window;
-
-  std::unique_ptr<Renderer> m_renderer;
 };
 
 }; // namespace ui
