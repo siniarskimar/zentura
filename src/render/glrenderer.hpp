@@ -2,16 +2,15 @@
 #define GL_RENDERER_H
 
 #include "render/gl.hpp"
+
 #include <vector>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
+#include <cstdint>
 #include <glm/ext/matrix_clip_space.hpp>
 #include "render/glshader.hpp"
 #include "render/texture.hpp"
-#include "render/renderer.hpp"
-#include "render/vertex.hpp"
-#include <map>
 
 /// OpenGL renderer backend.
 class GLRenderer : public Renderer {
@@ -37,53 +36,36 @@ class GLRenderer : public Renderer {
   void clearFramebuffer() override;
 
   private:
-  template <typename K, typename V>
-  using WeakPtrMap = std::map<std::weak_ptr<K>, V, std::owner_less<>>;
+  void bindVAO();
+  void uploadDataBuffer(const void* data, GLsizeiptr size);
+  void uploadIndexBuffer(const void* data, GLsizeiptr size);
 
-  /// Wrapper around OpenGL Vertex Array Object.
-  struct GLVAO {
-    GLuint glId;
-    GLuint dataBufferId;
-    GLuint indexBufferId;
-    uint32_t dataBufferSize;
-    uint32_t indexBufferSize;
+  struct Vertex {
+    glm::vec3 position{};
+    glm::vec4 color{};
+    uint32_t textureIndex{};
+    glm::vec2 textureCoord{};
 
-    GLVAO();
-    GLVAO(const GLVAO&) = delete;
-    GLVAO& operator=(const GLVAO&) = delete;
-    GLVAO(GLVAO&&);
-    GLVAO& operator=(GLVAO&&);
-    ~GLVAO();
+    Vertex(glm::vec3 position, glm::vec4 color) : position(position), color(color) {}
 
-    void bind();
-    void uploadDataBuffer(const void* data, GLsizeiptr size);
-    void uploadIndexBuffer(const void* data, GLsizeiptr size);
-  };
-
-  struct TextureBoundingBox {
-    unsigned int x;
-    unsigned int y;
-    unsigned int width;
-    unsigned int height;
-  };
-
-  struct TextureAtlas {
-    std::shared_ptr<Texture> textureAtlas;
-    WeakPtrMap<Texture, TextureBoundingBox> boundingBoxes;
-    std::optional<TextureBoundingBox> fit(std::shared_ptr<Texture> texture);
+    Vertex(
+        glm::vec3 position, glm::vec4 color, uint32_t textureIdx, glm::vec2 textureCoord)
+        : position(position),
+          color(color),
+          textureIndex(textureIdx),
+          textureCoord(textureCoord) {}
   };
 
   private:
+  GLuint m_vao;
+  GLuint m_dataBufferObject;
+  GLuint m_indexBufferObject;
+  uint32_t m_dataBufferObjectSize;
+  uint32_t m_indexBufferObjectSize;
+
   std::vector<Vertex> m_dataBuffer;
   std::vector<uint32_t> m_indexBuffer;
-  GLVAO m_vao;
   GLShaderProgram m_quadProgram;
-  std::vector<TextureAtlas> m_textureAtlases;
-  std::vector<std::shared_ptr<Texture>> m_boundTextures;
-  std::map<
-      std::weak_ptr<Texture>, std::reference_wrapper<TextureAtlas>, std::owner_less<>>
-      m_textureToAtlasMap;
-  std::map<std::weak_ptr<Texture>, GLuint, std::owner_less<>> m_textureToObjectMap;
 };
 
 #endif
