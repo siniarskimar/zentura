@@ -30,7 +30,7 @@ static const char* const kEmbedShaderSimpleFrag =
 in vec4 vertex_color;
 in vec2 vertex_textureCoords;
 
-uniform sampler2D textureAtlas;
+uniform sampler2D texture;
 uniform bool enableTexture;
 
 out vec4 frag_color;
@@ -44,9 +44,12 @@ void main() {
     
 )";
 
-static unsigned int maxSupportedTextureSize = 1024;
-
-GLRenderer::GLRenderer() {
+GLRenderer::GLRenderer()
+    : m_vao(0),
+      m_dataBufferObject(0),
+      m_indexBufferObject(0),
+      m_dataBufferObjectSize(0),
+      m_indexBufferObjectSize(0) {
   constexpr int kPositionAttribLoc = 0;
   constexpr int kColorAttribLoc = 1;
   constexpr int kTextureCoordAttribLoc = 2;
@@ -59,50 +62,38 @@ GLRenderer::GLRenderer() {
   }
   m_quadProgram = std::move(quadProgram.value());
 
-  GLint getResult = 0;
-  GLCall(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &getResult));
-  maxSupportedTextureSize = getResult;
+  glGenVertexArrays(1, &m_vao);
+  glGenBuffers(1, &m_dataBufferObject);
+  glGenBuffers(1, &m_indexBufferObject);
+
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  m_textureAtlases.reserve(16);
-  {
-    TextureAtlas atlas = {
-        std::make_shared<Texture>(maxSupportedTextureSize, maxSupportedTextureSize, 4)};
-    GLuint textureObject = 0;
-    glGenTextures(1, &textureObject);
-    glBindTexture(GL_TEXTURE_2D, textureObject);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    GLCall(glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA8, atlas.textureAtlas->getWidth(),
-        atlas.textureAtlas->getHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
-    m_textureToObjectMap.insert({atlas.textureAtlas, textureObject});
+  bindVAO();
+  glBindBuffer(GL_ARRAY_BUFFER, m_dataBufferObject);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBufferObject);
 
-    // templates fail on me here
-    m_textureAtlases.emplace_back(std::move(atlas));
-  }
-
-  m_vao.bind();
-  GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_vao.dataBufferId));
-
-  GLCall(glEnableVertexAttribArray(kPositionAttribLoc));
-  GLCall(glVertexAttribPointer(
+  glEnableVertexAttribArray(kPositionAttribLoc);
+  glVertexAttribPointer(
       kPositionAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-      reinterpret_cast<const void*>(offsetof(Vertex, position))));
+      reinterpret_cast<const void*>(offsetof(Vertex, position)));
 
-  GLCall(glEnableVertexAttribArray(kColorAttribLoc));
-  GLCall(glVertexAttribPointer(
+  glEnableVertexAttribArray(kColorAttribLoc);
+  glVertexAttribPointer(
       kColorAttribLoc, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-      reinterpret_cast<const void*>(offsetof(Vertex, color))));
+      reinterpret_cast<const void*>(offsetof(Vertex, color)));
 
-  GLCall(glEnableVertexAttribArray(kTextureCoordAttribLoc));
-  GLCall(glVertexAttribPointer(
+  glEnableVertexAttribArray(kTextureCoordAttribLoc);
+  glVertexAttribPointer(
       kTextureCoordAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-      reinterpret_cast<const void*>(offsetof(Vertex, textureCoord))));
+      reinterpret_cast<const void*>(offsetof(Vertex, textureCoord)));
+}
+
+GLRenderer::~GLRenderer() {
+  glDeleteBuffers(1, &m_dataBufferObject);
+  glDeleteBuffers(1, &m_indexBufferObject);
+  glDeleteVertexArrays(1, &m_vao);
 }
 
 void GLRenderer::clearFramebuffer() {
@@ -131,55 +122,11 @@ void GLRenderer::submitTexturedQuad(
 
   glm::vec2 textureCoords[4];
   GLuint textureObject{};
-  TextureBoundingBox boundingBox{};
-  unsigned int kAtlasWidth{};
-  unsigned int kAtlasHeight{};
 
-  if(m_textureToAtlasMap.contains(texture)) {
-    // Get texture atlas
-    TextureAtlas& atlas = m_textureToAtlasMap.at(texture);
-    textureObject = m_textureToObjectMap.at(atlas.textureAtlas);
-
-    boundingBox = atlas.boundingBoxes.at(texture);
-    kAtlasWidth = atlas.textureAtlas->getWidth();
-    kAtlasHeight = atlas.textureAtlas->getHeight();
-    GLCall(glActiveTexture(GL_TEXTURE1));
-    GLCall(glBindTexture(GL_TEXTURE_2D, textureObject));
-
-    // then calculate texture coords from the bounding box
-  } else {
-    // Try and fit texture into existing texture atlas
-    // if that fails, allocate new texture atlas and fit texture into it
-
-    // .. for now just use single texture atlas
-    auto& atlas = m_textureAtlases[0];
-    textureObject = m_textureToObjectMap.at(atlas.textureAtlas);
-    auto fitResult = atlas.fit(texture);
-    if(!fitResult) {
-      throw std::runtime_error("TODO: implement multiple texture atlases");
-    }
-    boundingBox = fitResult.value();
-    kAtlasWidth = atlas.textureAtlas->getWidth();
-    kAtlasHeight = atlas.textureAtlas->getHeight();
-    m_textureToAtlasMap.insert({texture, atlas});
-    GLCall(glActiveTexture(GL_TEXTURE1));
-    GLCall(glBindTexture(GL_TEXTURE_2D, textureObject));
-    GLCall(glTexSubImage2D(
-        GL_TEXTURE_2D, 0, boundingBox.x, boundingBox.y, boundingBox.width,
-        boundingBox.height, GL_RGBA, GL_UNSIGNED_BYTE, texture->getTextureData().data()));
-  }
-  textureCoords[0] = {
-      boundingBox.x / static_cast<double>(kAtlasWidth),
-      boundingBox.y / static_cast<double>(kAtlasHeight)};
-  textureCoords[1] = {
-      (boundingBox.x + boundingBox.width) / static_cast<double>(kAtlasWidth),
-      boundingBox.y / static_cast<double>(kAtlasHeight)};
-  textureCoords[2] = {
-      (boundingBox.x + boundingBox.width) / static_cast<double>(kAtlasWidth),
-      (boundingBox.y + boundingBox.height) / static_cast<double>(kAtlasHeight)};
-  textureCoords[3] = {
-      boundingBox.x / static_cast<double>(kAtlasWidth),
-      (boundingBox.y + boundingBox.height) / static_cast<double>(kAtlasHeight)};
+  textureCoords[0] = {0.0f, 0.0f};
+  textureCoords[1] = {1.0f, 0.0f};
+  textureCoords[2] = {1.0f, 1.0f};
+  textureCoords[3] = {0.0f, 1.0f};
 
   m_dataBuffer.emplace_back(
       position, glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0,
@@ -194,30 +141,30 @@ void GLRenderer::submitTexturedQuad(
       position - glm::vec3(0.0f, size.y, 0.0f),
       glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0, textureCoords[3]);
 
-  const uint32_t kIndexCount = m_indexBuffer.size() * 4 / 6;
-  m_indexBuffer.push_back(kIndexCount + 0);
-  m_indexBuffer.push_back(kIndexCount + 1);
-  m_indexBuffer.push_back(kIndexCount + 2);
-  m_indexBuffer.push_back(kIndexCount + 2);
-  m_indexBuffer.push_back(kIndexCount + 3);
-  m_indexBuffer.push_back(kIndexCount + 0);
+  const uint32_t indexCount = m_indexBuffer.size() * 4 / 6;
+  m_indexBuffer.push_back(indexCount + 0);
+  m_indexBuffer.push_back(indexCount + 1);
+  m_indexBuffer.push_back(indexCount + 2);
+  m_indexBuffer.push_back(indexCount + 2);
+  m_indexBuffer.push_back(indexCount + 3);
+  m_indexBuffer.push_back(indexCount + 0);
 
   m_quadProgram.use();
-  m_quadProgram.setUniformSafe("textureAtlas", textureObject);
+  m_quadProgram.setUniformSafe("texture", textureObject);
   m_quadProgram.setUniformSafe("enableTexture", true);
   flush();
 }
 
 void GLRenderer::flush() {
-  m_vao.uploadDataBuffer(
+  uploadDataBuffer(
       m_dataBuffer.data(), static_cast<GLsizeiptr>(m_dataBuffer.size() * sizeof(Vertex)));
-  m_vao.uploadIndexBuffer(
+  uploadIndexBuffer(
       m_indexBuffer.data(),
       static_cast<GLsizeiptr>(m_indexBuffer.size() * sizeof(uint32_t)));
   m_quadProgram.use();
   m_quadProgram.setUniformMatrixSafe(
       "u_proj", glm::ortho(0.0f, 400.0f, 0.0f, 400.0f, -1.0f, 1.0f));
-  m_vao.bind();
+  bindVAO();
   GLCall(glDrawElements(GL_TRIANGLES, m_indexBuffer.size(), GL_UNSIGNED_INT, nullptr));
   m_dataBuffer.erase(m_dataBuffer.begin(), m_dataBuffer.end());
   m_indexBuffer.erase(m_indexBuffer.begin(), m_indexBuffer.end());
@@ -225,93 +172,38 @@ void GLRenderer::flush() {
 }
 
 unsigned int GLRenderer::maxTextureSize() {
+  static unsigned int maxSupportedTextureSize = 1024;
+  static bool cached = false;
+  if(cached == false) {
+    GLint getResult = 0;
+    GLCall(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &getResult));
+    maxSupportedTextureSize = getResult;
+    cached = true;
+  }
   return maxSupportedTextureSize;
 }
 
-std::optional<GLRenderer::TextureBoundingBox> GLRenderer::TextureAtlas::fit(
-    std::shared_ptr<Texture> texture) {
-  // TODO: implement this function
-  if(boundingBoxes.contains(texture)) {
-    return boundingBoxes.at(texture);
-  }
-  TextureBoundingBox boundingBox = {0, 0, texture->getWidth(), texture->getHeight()};
-  boundingBoxes.clear();
-  boundingBoxes.insert({texture, boundingBox});
-  return boundingBox;
+void GLRenderer::bindVAO() {
+  GLCall(glBindVertexArray(m_vao));
 }
 
-GLRenderer::GLVAO::GLVAO()
-    : glId(0),
-      dataBufferId(0),
-      indexBufferId(0),
-      dataBufferSize(),
-      indexBufferSize() {
-  glGenVertexArrays(1, &glId);
-  glGenBuffers(1, &dataBufferId);
-  glGenBuffers(1, &indexBufferId);
-  glBindVertexArray(glId);
-  glBindBuffer(GL_ARRAY_BUFFER, dataBufferId);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferId);
-}
+void GLRenderer::uploadDataBuffer(const void* data, GLsizeiptr size) {
+  glBindBuffer(GL_ARRAY_BUFFER, m_dataBufferObject);
 
-GLRenderer::GLVAO::~GLVAO() {
-  // We have to check if object exists
-  // in case move happened
-  if(dataBufferId != 0) {
-    glDeleteBuffers(1, &dataBufferId);
-  }
-  if(indexBufferId != 0) {
-    glDeleteBuffers(1, &indexBufferId);
-  }
-  if(glId != 0) {
-    glDeleteVertexArrays(1, &glId);
-  }
-}
-
-GLRenderer::GLVAO::GLVAO(GLRenderer::GLVAO&& other)
-    : glId(other.glId),
-      dataBufferId(other.dataBufferId),
-      indexBufferId(other.indexBufferId),
-      dataBufferSize(other.dataBufferSize),
-      indexBufferSize(other.indexBufferSize) {
-  other.dataBufferId = 0;
-  other.indexBufferId = 0;
-  other.glId = 0;
-}
-
-GLRenderer::GLVAO& GLRenderer::GLVAO::operator=(GLRenderer::GLVAO&& other) {
-  glId = other.glId;
-  other.glId = 0;
-  dataBufferId = other.dataBufferId;
-  other.dataBufferId = 0;
-  indexBufferId = other.indexBufferId;
-  other.indexBufferId = 0;
-  dataBufferSize = other.dataBufferSize;
-  indexBufferSize = other.indexBufferSize;
-
-  return *this;
-}
-
-void GLRenderer::GLVAO::bind() {
-  GLCall(glBindVertexArray(glId));
-}
-
-void GLRenderer::GLVAO::uploadDataBuffer(const void* data, GLsizeiptr size) {
-  glBindBuffer(GL_ARRAY_BUFFER, dataBufferId);
-
-  if(size > dataBufferSize) {
+  if(size > m_dataBufferObjectSize) {
     glBufferData(GL_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW);
-    dataBufferSize = size;
+    m_dataBufferObjectSize = size;
   } else {
     glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
   }
 }
 
-void GLRenderer::GLVAO::uploadIndexBuffer(const void* data, GLsizeiptr size) {
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferId);
+void GLRenderer::uploadIndexBuffer(const void* data, GLsizeiptr size) {
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBufferObject);
 
-  if(size > indexBufferSize) {
+  if(size > m_indexBufferObjectSize) {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, data, GL_DYNAMIC_DRAW);
+    m_indexBufferObjectSize = size;
   } else {
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, size, data);
   }
