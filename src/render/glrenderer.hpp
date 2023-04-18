@@ -13,27 +13,25 @@
 #include "render/texture.hpp"
 
 /// OpenGL renderer backend.
-class GLRenderer : public Renderer {
+class GLRenderer {
   public:
   GLRenderer();
 
   /// Submit a quad for rendering.
-  void submitQuad(
-      const glm::vec3 position, const glm::vec2 size, const glm::vec4 color) override;
+  void submitQuad(const glm::vec3 position, const glm::vec2 size, const glm::vec4 color);
 
   /// Submit a texture quad for rendering.
   void submitQuad(
-      const glm::vec3 position, const glm::vec2 size,
-      std::shared_ptr<Texture> texture) override;
+      const glm::vec3 position, const glm::vec2 size, std::shared_ptr<Texture> texture);
 
   /// Get maximum rectangular texture size ( NxN ).
-  unsigned int maxTextureSize() override;
+  unsigned int maxTextureSize();
 
   /// Render current batch to default framebuffer.
-  void flush() override;
+  void flush();
 
   /// Clear current frambuffer.
-  void clearFramebuffer() override;
+  void clearFramebuffer();
 
   private:
   void bindVAO();
