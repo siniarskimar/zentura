@@ -16,6 +16,6 @@ CheckOptions:
   - { key: readability-identifier-naming.TemplateParameterCase, value: CamelCase }
   - { key: readability-identifier-naming.TypeAliasCase, value: CamelCase }
   - { key: readability-identifier-naming.TypedefCase, value: CamelCase }
-  - { key: readability-identifier-naming.ConstexprVariableCase, value: CamelCase}
-  - { key: readability-identifier-naming.ConstantCase, value: CamelCase }
+  - { key: readability-identifier-naming.ConstexprVariableCase, value: camelBack}
+  - { key: readability-identifier-naming.ConstantCase, value: camelBack }
   - { key: readability-identifier-naming.ConstantParameterCase, value: camelBack}
