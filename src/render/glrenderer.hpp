@@ -11,11 +11,17 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include "render/glshader.hpp"
 #include "render/texture.hpp"
+#include "ui/window.hpp"
 
 /// OpenGL renderer backend.
 class GLRenderer {
   public:
-  GLRenderer();
+  GLRenderer(ui::Window& window);
+  GLRenderer(const GLRenderer&) = delete;
+  GLRenderer(GLRenderer&&) = delete;
+  GLRenderer& operator=(const GLRenderer&) = delete;
+  GLRenderer& operator=(GLRenderer&&) = delete;
+  ~GLRenderer();
 
   /// Submit a quad for rendering.
   void submitQuad(const glm::vec3 position, const glm::vec2 size, const glm::vec4 color);
@@ -64,6 +70,7 @@ class GLRenderer {
   std::vector<Vertex> m_dataBuffer;
   std::vector<uint32_t> m_indexBuffer;
   GLShaderProgram m_quadProgram;
+  ui::Window& m_window;
 };
 
 #endif
