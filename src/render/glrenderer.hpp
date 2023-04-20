@@ -9,6 +9,8 @@
 #include <glm/vec4.hpp>
 #include <cstdint>
 #include <glm/ext/matrix_clip_space.hpp>
+#include <map>
+
 #include "render/glshader.hpp"
 #include "render/texture.hpp"
 #include "ui/window.hpp"
@@ -16,6 +18,8 @@
 /// OpenGL renderer backend.
 class GLRenderer {
   public:
+  using TextureId = uint32_t;
+
   GLRenderer(ui::Window& window);
   GLRenderer(const GLRenderer&) = delete;
   GLRenderer(GLRenderer&&) = delete;
@@ -28,7 +32,7 @@ class GLRenderer {
 
   /// Submit a texture quad for rendering.
   void submitTexturedQuad(
-      const glm::vec3 position, const glm::vec2 size, std::shared_ptr<Texture> texture);
+      const glm::vec3 position, const glm::vec2 size, TextureId texture);
 
   /// Get maximum rectangular texture size ( NxN ).
   unsigned int maxTextureSize();
@@ -41,7 +45,18 @@ class GLRenderer {
 
   void swapWindowBuffers();
 
+  TextureId newTexture(GLsizei width, GLsizei height);
+  TextureId newTexture(std::shared_ptr<Texture> data);
+
+  void uploadTextureData(TextureId texture, std::shared_ptr<Texture> data);
+
+  // TODO: implement this
+  void blitTexture(
+      TextureId destination, int lod, GLsizei srcWidth, GLsizei srcHeight, GLint xdest,
+      GLint ydest, std::shared_ptr<Texture> src);
+
   private:
+  TextureId newTextureId();
   void bindVAO();
   void uploadDataBuffer(const void* data, GLsizeiptr size);
   void uploadIndexBuffer(const void* data, GLsizeiptr size);
@@ -73,6 +88,7 @@ class GLRenderer {
   std::vector<uint32_t> m_indexBuffer;
   GLShaderProgram m_quadProgram;
   ui::Window& m_window;
+  std::map<TextureId, GLuint> m_textures;
 };
 
 #endif

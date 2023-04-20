@@ -95,6 +95,9 @@ GLRenderer::GLRenderer(ui::Window& window)
 }
 
 GLRenderer::~GLRenderer() {
+  for(auto pair: m_textures) {
+    glDeleteTextures(1, &pair.second);
+  }
   glDeleteBuffers(1, &m_dataBufferObject);
   glDeleteBuffers(1, &m_indexBufferObject);
   glDeleteVertexArrays(1, &m_vao);
@@ -122,10 +125,10 @@ void GLRenderer::submitQuad(
 }
 
 void GLRenderer::submitTexturedQuad(
-    const glm::vec3 position, const glm::vec2 size, std::shared_ptr<Texture> texture) {
+    const glm::vec3 position, const glm::vec2 size, TextureId texture) {
 
   glm::vec2 textureCoords[4];
-  GLuint textureObject{};
+  GLuint textureObject = m_textures.at(texture);
 
   textureCoords[0] = {0.0f, 0.0f};
   textureCoords[1] = {1.0f, 0.0f};
@@ -233,4 +236,87 @@ void GLRenderer::uploadIndexBuffer(const void* data, GLsizeiptr size) {
 
 void GLRenderer::swapWindowBuffers() {
   glfwSwapBuffers(m_window.getGLFWHandle());
+}
+
+GLRenderer::TextureId GLRenderer::newTexture(GLsizei width, GLsizei height) {
+  static TextureId nextId = 1;
+  GLuint textureObject = 0;
+
+  glGenTextures(1, &textureObject);
+  if(textureObject == 0) [[unlikely]] {
+    throw std::runtime_error("Failed to create OpenGL texture");
+  }
+  auto textureId = nextId;
+  nextId++;
+  GLuint currentTexture = 0;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
+
+  glBindTexture(GL_TEXTURE_2D, textureObject);
+  glTexImage2D(
+      GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindTexture(GL_TEXTURE_2D, currentTexture);
+
+  m_textures.insert({textureId, textureObject});
+  return textureId;
+}
+
+GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<Texture> data) {
+  static TextureId nextId = 1;
+  GLuint textureObject = 0;
+
+  glGenTextures(1, &textureObject);
+  if(textureObject == 0) [[unlikely]] {
+    throw std::runtime_error("Failed to create OpenGL texture");
+  }
+  auto textureId = nextId;
+  nextId++;
+
+  if(data->getChannelCount() < 4) {
+    data = std::make_shared<Texture>(data->expandToRGBA());
+  }
+
+  GLuint currentTexture = 0;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
+
+  glBindTexture(GL_TEXTURE_2D, textureObject);
+  glTexImage2D(
+      GL_TEXTURE_2D, 0, GL_RGBA8, data->getWidth(), data->getHeight(), 0, GL_RGBA,
+      GL_UNSIGNED_BYTE, data->getTextureData().data());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindTexture(GL_TEXTURE_2D, currentTexture);
+
+  m_textures.insert({textureId, textureObject});
+  return textureId;
+}
+
+void GLRenderer::uploadTextureData(TextureId texture, std::shared_ptr<Texture> data) {
+  auto textureObject = m_textures.at(texture);
+  GLuint currentTexture = 0;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
+
+  glBindTexture(GL_TEXTURE_2D, textureObject);
+
+  auto channels = data->getChannelCount();
+
+  if(channels < 4) {
+    data = std::make_shared<Texture>(data->expandToRGBA());
+  }
+
+  glTexImage2D(
+      GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<int>(data->getWidth()),
+      static_cast<int>(data->getHeight()), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+      data->getTextureData().data());
+
+  if(currentTexture != textureObject) {
+    glBindTexture(GL_TEXTURE_2D, currentTexture);
+  }
 }
