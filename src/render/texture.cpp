@@ -1,6 +1,9 @@
 #include "./texture.hpp"
 #include <cstring>
 #include <stdexcept>
+#include <fmt/core.h>
+#include <cstdio>
+#include "stb_image.h"
 
 Texture::Texture(unsigned int width, unsigned int height, uint8_t channels)
     : m_width(width),
@@ -116,4 +119,75 @@ Texture Texture::expandToRGBA() const {
     }
   }
   return resultTexture;
+}
+
+std::shared_ptr<Texture> loadImage(const std::string_view path) {
+  int width = 0;
+  int height = 0;
+  int channels = 0;
+
+  uint8_t* data = stbi_load(path.data(), &width, &height, &channels, 0);
+  if(data == nullptr) {
+    fmt::print(stderr, "{}\n", stbi_failure_reason());
+    return nullptr;
+  }
+
+  fmt::print(
+      "loaded image {}: width={}, height={}, channels={}\n", path, width, height,
+      channels);
+
+  auto texture = std::make_shared<Texture>(
+      width, height, channels, std::span(data, data + (width * height * channels)));
+  stbi_image_free(data);
+  return texture;
+}
+
+bool exportTextureDataPPM(std::shared_ptr<Texture> data, const std::string_view path) {
+  FILE* f = fopen(path.data(), "w");
+  if(f == nullptr) {
+    fmt::print(stderr, "Failed to open {}\n", path.data());
+    return false;
+  }
+  {
+    auto str = fmt::format("P3\n{} {}\n255\n", data->getWidth(), data->getHeight());
+    fputs(str.c_str(), f);
+  }
+
+  for(unsigned int y = 0; y < data->getHeight(); y++) {
+    for(unsigned int x = 0; x < data->getWidth(); x++) {
+      auto pixel = data->at(x, y);
+      {
+        auto str = fmt::format("{} {} {}\n", pixel[0], pixel[1], pixel[2]);
+        fputs(str.c_str(), f);
+      }
+    }
+  }
+  fclose(f);
+  return true;
+}
+
+bool exportTextureDataPPM(
+    const uint8_t* data, int width, int height, int channels,
+    const std::string_view path) {
+  FILE* f = fopen(path.data(), "w");
+  if(f == nullptr) {
+    fmt::print(stderr, "Failed to open {}\n", path.data());
+    return false;
+  }
+  {
+    auto str = fmt::format("P3\n{} {}\n255\n", width, height);
+    fputs(str.c_str(), f);
+  }
+
+  for(unsigned int y = 0; y < height; y++) {
+    for(unsigned int x = 0; x < width; x++) {
+      auto pixel = data + (y * width + x) * channels;
+      {
+        auto str = fmt::format("{} {} {}\n", pixel[0], pixel[1], pixel[2]);
+        fputs(str.c_str(), f);
+      }
+    }
+  }
+  fclose(f);
+  return true;
 }

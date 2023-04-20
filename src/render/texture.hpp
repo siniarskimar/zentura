@@ -64,4 +64,16 @@ class Texture {
   std::unique_ptr<uint8_t[]> m_data;
 };
 
+/// Loads an image from specified path
+std::shared_ptr<Texture> loadImage(const std::string_view path);
+
+/// Exports image data to PPM file.
+/// Used for debugging
+/// \{
+bool exportTextureDataPPM(std::shared_ptr<Texture> data, const std::string_view path);
+bool exportTextureDataPPM(
+    const uint8_t* data, int width, int height, int channels,
+    const std::string_view path);
+/// \}
+
 #endif
