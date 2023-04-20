@@ -79,11 +79,24 @@ int main(int argc, const char* argv[]) {
     return 2;
   }
   GLRenderer renderer(window.value());
+
+  auto textureData1 = loadImage("share/zen/test_image_grayscale.png");
+  if(textureData1 == nullptr) {
+    fmt::print(stderr, "Failed to load 'share/zen/test_image.png'\n");
+    return 2;
+  }
+  textureData1 = std::make_shared<Texture>(textureData1->expandToRGBA());
+
+  auto texture1 = renderer.newTexture(textureData1);
+  // auto texture2 = renderer.newTexture(textureData2);
+  // auto texture3 = renderer.newTexture(textureData3);
+  // auto texture4 = renderer.newTexture(textureData4);
+
   while(!window->shouldClose()) {
     window->pollEvents();
     renderer.clearFramebuffer();
 
-    renderer.submitQuad({-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f});
+    renderer.submitTexturedQuad({-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, texture1);
 
     renderer.flush();
     renderer.swapWindowBuffers();
