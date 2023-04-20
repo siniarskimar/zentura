@@ -1,5 +1,6 @@
 #include "./glrenderer.hpp"
 #include <GLFW/glfw3.h>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 
@@ -7,7 +8,7 @@ static const char* const kEmbedShaderSimpleVertex =
     R"(
 #version 330 core
 
-layout (location = 0) in vec2 position;
+layout (location = 0) in vec3 position;
 layout (location = 1) in vec4 color;
 layout (location = 2) in vec2 textureCoords;
 
@@ -16,7 +17,7 @@ out int vertex_textureIndex;
 out vec2 vertex_textureCoords;
 
 void main() {
-  gl_Position = vec4(position.xy, 0.0, 1.0);
+  gl_Position = vec4(position.xyz, 1.0);
   vertex_color = color;
   vertex_textureCoords = textureCoords;
 }
