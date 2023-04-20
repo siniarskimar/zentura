@@ -96,9 +96,9 @@ Texture Texture::expandToRGBA() const {
         break;
       case 2:
         destData[0] = srcData[0];
-        destData[1] = srcData[1];
-        destData[2] = 0;
-        destData[3] = 255;
+        destData[1] = srcData[0];
+        destData[2] = srcData[0];
+        destData[3] = srcData[1];
         break;
       case 3:
         destData[0] = srcData[0];
