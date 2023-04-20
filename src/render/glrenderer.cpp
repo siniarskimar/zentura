@@ -180,11 +180,9 @@ void GLRenderer::flush() {
   m_quadProgram.use();
   m_quadProgram.setUniformMatrixSafe(
       "u_proj", glm::ortho(0.0f, 400.0f, 0.0f, 400.0f, -1.0f, 1.0f));
-  bindVAO();
   GLCall(glDrawElements(GL_TRIANGLES, m_indexBuffer.size(), GL_UNSIGNED_INT, nullptr));
   m_dataBuffer.erase(m_dataBuffer.begin(), m_dataBuffer.end());
   m_indexBuffer.erase(m_indexBuffer.begin(), m_indexBuffer.end());
-  m_quadProgram.setUniformSafe("enableTexture", false);
 }
 
 unsigned int GLRenderer::maxTextureSize() {
