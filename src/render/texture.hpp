@@ -23,14 +23,6 @@ class Texture {
       unsigned int width, unsigned int height, uint8_t channels,
       const std::span<const uint8_t> data);
 
-  // NOTE: This might be useful
-  // Texture(unsigned int width, unsigned int height, uint8_t channels, const
-  // std::span<uint8_t[]>&& data);
-
-  // NOTE: Consider implementing this function
-  // void combine(const Texture& source, unsigned int sourceX, unsigned int sourceY,
-  // unsigned int regionWidth, unsigned int regionHeight);
-
   /// \{
   Texture(const Texture&);
   Texture& operator=(const Texture&);
