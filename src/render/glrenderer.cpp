@@ -153,13 +153,21 @@ void GLRenderer::submitTexturedQuad(
   m_indexBuffer.push_back(indexCount + 3);
   m_indexBuffer.push_back(indexCount + 0);
 
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, textureObject);
+
   m_quadProgram.use();
-  m_quadProgram.setUniformSafe("texture", textureObject);
+  m_quadProgram.setUniformSafe("tex", 1);
   m_quadProgram.setUniformSafe("enableTexture", true);
   flush();
+  m_quadProgram.setUniformSafe("enableTexture", false);
 }
 
 void GLRenderer::flush() {
+  if(m_dataBuffer.size() == 0) {
+    return;
+  }
+  bindVAO();
   uploadDataBuffer(
       m_dataBuffer.data(), static_cast<GLsizeiptr>(m_dataBuffer.size() * sizeof(Vertex)));
   uploadIndexBuffer(
