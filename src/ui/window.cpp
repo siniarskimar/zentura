@@ -23,9 +23,7 @@ std::optional<Window> Window::create(
 
 Window::Window(GLFWwindow* handle)
     : m_window(WindowHandlePtr(handle, glfwDestroyWindow)) {
-  glfwMakeContextCurrent(m_window.get());
   glfwSetWindowUserPointer(m_window.get(), this);
-  gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
 }
 
 GLFWwindow* Window::getGLFWHandle() {

@@ -56,6 +56,8 @@ GLRenderer::GLRenderer(ui::Window& window)
   constexpr int kTextureCoordAttribLoc = 2;
   window.makeContextCurrent();
 
+  gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
+
   auto quadProgram =
       GLShaderProgram::compile(kEmbedShaderSimpleVertex, kEmbedShaderSimpleFrag);
 
