@@ -46,14 +46,14 @@ class GLRenderer {
   void swapWindowBuffers();
 
   TextureId newTexture(GLsizei width, GLsizei height);
-  TextureId newTexture(std::shared_ptr<Texture> data);
+  TextureId newTexture(std::shared_ptr<TextureData> data);
 
-  void uploadTextureData(TextureId texture, std::shared_ptr<Texture> data);
+  void uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data);
 
   // TODO: implement this
   void blitTexture(
       TextureId destination, int lod, GLsizei srcWidth, GLsizei srcHeight, GLint xdest,
-      GLint ydest, std::shared_ptr<Texture> src);
+      GLint ydest, std::shared_ptr<TextureData> src);
 
   private:
   TextureId newTextureId();

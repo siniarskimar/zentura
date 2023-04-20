@@ -264,7 +264,7 @@ GLRenderer::TextureId GLRenderer::newTexture(GLsizei width, GLsizei height) {
   return textureId;
 }
 
-GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<Texture> data) {
+GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<TextureData> data) {
   static TextureId nextId = 1;
   GLuint textureObject = 0;
 
@@ -276,7 +276,7 @@ GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<Texture> data) {
   nextId++;
 
   if(data->getChannelCount() < 4) {
-    data = std::make_shared<Texture>(data->expandToRGBA());
+    data = std::make_shared<TextureData>(data->expandToRGBA());
   }
 
   GLuint currentTexture = 0;
@@ -297,7 +297,7 @@ GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<Texture> data) {
   return textureId;
 }
 
-void GLRenderer::uploadTextureData(TextureId texture, std::shared_ptr<Texture> data) {
+void GLRenderer::uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data) {
   auto textureObject = m_textures.at(texture);
   GLuint currentTexture = 0;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
@@ -307,7 +307,7 @@ void GLRenderer::uploadTextureData(TextureId texture, std::shared_ptr<Texture> d
   auto channels = data->getChannelCount();
 
   if(channels < 4) {
-    data = std::make_shared<Texture>(data->expandToRGBA());
+    data = std::make_shared<TextureData>(data->expandToRGBA());
   }
 
   glTexImage2D(

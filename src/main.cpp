@@ -85,7 +85,7 @@ int main(int argc, const char* argv[]) {
     fmt::print(stderr, "Failed to load 'share/zen/test_image.png'\n");
     return 2;
   }
-  textureData1 = std::make_shared<Texture>(textureData1->expandToRGBA());
+  textureData1 = std::make_shared<TextureData>(textureData1->expandToRGBA());
 
   auto texture1 = renderer.newTexture(textureData1);
   // auto texture2 = renderer.newTexture(textureData2);

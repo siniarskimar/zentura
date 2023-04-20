@@ -6,11 +6,11 @@
 #include <cstdint>
 
 /// Container for storing pixel data.
-class Texture {
+class TextureData {
   public:
 
   /// Constructs an empty Texture.
-  Texture(unsigned int width, unsigned int height, uint8_t channels);
+  TextureData(unsigned int width, unsigned int height, uint8_t channels);
 
   /// Constructs a Texture from existing pixel data.
   /// Resulting Texture class holds a copy of provided data.
@@ -19,22 +19,22 @@ class Texture {
   /// @param height texture height
   /// @param channels number of source data channels
   /// @param data source data
-  Texture(
+  TextureData(
       unsigned int width, unsigned int height, uint8_t channels,
       const std::span<const uint8_t> data);
 
   /// \{
-  Texture(const Texture&);
-  Texture& operator=(const Texture&);
+  TextureData(const TextureData&);
+  TextureData& operator=(const TextureData&);
   /// \}
 
   /// \{
-  Texture(Texture&&) = default;
-  Texture& operator=(Texture&&) = default;
+  TextureData(TextureData&&) = default;
+  TextureData& operator=(TextureData&&) = default;
   /// \}
-  ~Texture() = default;
+  ~TextureData() = default;
 
-  [[nodiscard]] Texture expandToRGBA() const;
+  [[nodiscard]] TextureData expandToRGBA() const;
 
   /// Get texture width.
   [[nodiscard]] unsigned int getWidth() const;
@@ -65,12 +65,12 @@ class Texture {
 };
 
 /// Loads an image from specified path
-std::shared_ptr<Texture> loadImage(const std::string_view path);
+std::shared_ptr<TextureData> loadImage(const std::string_view path);
 
 /// Exports image data to PPM file.
 /// Used for debugging
 /// \{
-bool exportTextureDataPPM(std::shared_ptr<Texture> data, const std::string_view path);
+bool exportTextureDataPPM(std::shared_ptr<TextureData> data, const std::string_view path);
 bool exportTextureDataPPM(
     const uint8_t* data, int width, int height, int channels,
     const std::string_view path);
