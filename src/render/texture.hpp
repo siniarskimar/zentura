@@ -72,7 +72,7 @@ std::shared_ptr<TextureData> loadImage(const std::string_view path);
 /// \{
 bool exportTextureDataPPM(std::shared_ptr<TextureData> data, const std::string_view path);
 bool exportTextureDataPPM(
-    const uint8_t* data, int width, int height, int channels,
+    const std::span<const uint8_t> data, int width, int height, int channels,
     const std::string_view path);
 /// \}
 
