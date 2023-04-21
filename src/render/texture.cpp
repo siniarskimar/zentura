@@ -62,22 +62,16 @@ const std::span<uint8_t> TextureData::at(unsigned int x, unsigned int y) {
   if(x >= m_width || y >= m_height) {
     throw std::out_of_range("Tried to index Texture data out of range");
   }
-  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-  auto begin = m_data.get() + y * getWidth() * m_channels + x * m_channels;
-  auto end = begin + m_channels;
-  // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-  return {begin, end};
+  const auto offset = y * getWidth() * m_channels + x * m_channels;
+  return std::span(m_data.get(), getTextureSize()).subspan(offset, m_channels);
 }
 
 const std::span<const uint8_t> TextureData::at(unsigned int x, unsigned int y) const {
   if(x >= m_width || y >= m_height) {
     throw std::out_of_range("Tried to index Texture data out of range");
   }
-  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-  auto begin = m_data.get() + y * getWidth() * m_channels + x * m_channels;
-  auto end = begin + m_channels;
-  // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-  return {begin, end};
+  const auto offset = y * getWidth() * m_channels + x * m_channels;
+  return std::span(m_data.get(), getTextureSize()).subspan(offset, m_channels);
 }
 
 TextureData TextureData::expandToRGBA() const {
