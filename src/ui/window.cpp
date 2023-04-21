@@ -13,7 +13,7 @@ std::optional<Window> Window::create(
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-  auto window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+  auto* window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
 
   if(window == nullptr) {
     return std::nullopt;
@@ -35,7 +35,7 @@ void Window::makeContextCurrent() {
 }
 
 bool Window::shouldClose() {
-  return glfwWindowShouldClose(getGLFWHandle());
+  return glfwWindowShouldClose(getGLFWHandle()) != 0;
 }
 
 void Window::setTitle(const std::string& title) {

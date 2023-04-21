@@ -29,6 +29,9 @@ class Window {
   static std::optional<Window> create(
       const int width, const int height, const std::string& title);
 
+  /// Calls glfwPollEvents
+  static void pollEvents();
+
   /// Change the title of a window.
   void setTitle(const std::string& title);
 
@@ -36,8 +39,6 @@ class Window {
 
   bool shouldClose();
 
-  // TODO: this function should not belong here
-  void pollEvents();
   GLFWwindow* getGLFWHandle();
 
   private:

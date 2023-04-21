@@ -2,7 +2,10 @@
 #include <cstring>
 #include <stdexcept>
 #include <fmt/core.h>
+#include <fmt/ostream.h>
 #include <cstdio>
+#include <fstream>
+#include <limits>
 #include "stb_image.h"
 
 TextureData::TextureData(unsigned int width, unsigned int height, uint8_t channels)
@@ -80,8 +83,8 @@ TextureData TextureData::expandToRGBA() const {
     return *this;
   }
   TextureData resultTexture(getWidth(), getHeight(), 4);
-  for(auto y = 0; y < getHeight(); y++) {
-    for(auto x = 0; x < getWidth(); x++) {
+  for(unsigned int y = 0; y < getHeight(); y++) {
+    for(unsigned int x = 0; x < getWidth(); x++) {
       auto destData = resultTexture.at(x, y);
       auto srcData = at(x, y);
       switch(srcChannels) {
@@ -126,10 +129,6 @@ std::shared_ptr<TextureData> loadImage(const std::string_view path) {
     return nullptr;
   }
 
-  fmt::print(
-      "loaded image {}: width={}, height={}, channels={}\n", path, width, height,
-      channels);
-
   auto texture = std::make_shared<TextureData>(
       width, height, channels, std::span(data, data + (width * height * channels)));
   stbi_image_free(data);
@@ -138,51 +137,53 @@ std::shared_ptr<TextureData> loadImage(const std::string_view path) {
 
 bool exportTextureDataPPM(
     std::shared_ptr<TextureData> data, const std::string_view path) {
-  FILE* f = fopen(path.data(), "w");
-  if(f == nullptr) {
-    fmt::print(stderr, "Failed to open {}\n", path.data());
-    return false;
+  const auto width = data->getWidth();
+  const auto height = data->getHeight();
+  const auto channels = data->getChannelCount();
+  constexpr auto intMax = std::numeric_limits<int>::max();
+
+  if(width > intMax) {
+    throw std::runtime_error(
+        "exportTextureDataPPM(TextureData): width is outside of signed int range");
   }
-  {
-    auto str = fmt::format("P3\n{} {}\n255\n", data->getWidth(), data->getHeight());
-    fputs(str.c_str(), f);
+  if(height > intMax) {
+    throw std::runtime_error(
+        "exportTextureDataPPM(TextureData): height is outside of signed int range");
   }
 
-  for(unsigned int y = 0; y < data->getHeight(); y++) {
-    for(unsigned int x = 0; x < data->getWidth(); x++) {
-      auto pixel = data->at(x, y);
-      {
-        auto str = fmt::format("{} {} {}\n", pixel[0], pixel[1], pixel[2]);
-        fputs(str.c_str(), f);
-      }
-    }
-  }
-  fclose(f);
-  return true;
+  return exportTextureDataPPM(
+      data->getTextureData(), static_cast<int>(width), static_cast<int>(height), channels,
+      path);
 }
 
 bool exportTextureDataPPM(
-    const uint8_t* data, int width, int height, int channels,
+    const std::span<const uint8_t> data, int width, int height, int channels,
     const std::string_view path) {
-  FILE* f = fopen(path.data(), "w");
-  if(f == nullptr) {
+
+  if(width < 0) {
+    throw std::runtime_error("exportTextureDataPPM(span): width is negative");
+  }
+
+  if(height < 0) {
+    throw std::runtime_error("exportTextureDataPPM(span): height is negative");
+  }
+
+  // TODO: handle cases where the number of channels is not 3
+
+  std::ofstream file(path.data());
+  if(!file.is_open()) {
     fmt::print(stderr, "Failed to open {}\n", path.data());
     return false;
   }
-  {
-    auto str = fmt::format("P3\n{} {}\n255\n", width, height);
-    fputs(str.c_str(), f);
-  }
 
-  for(unsigned int y = 0; y < height; y++) {
-    for(unsigned int x = 0; x < width; x++) {
-      auto pixel = data + (y * width + x) * channels;
-      {
-        auto str = fmt::format("{} {} {}\n", pixel[0], pixel[1], pixel[2]);
-        fputs(str.c_str(), f);
-      }
+  fmt::print(file, "P3\n{} {}\n255\n", width, height);
+
+  for(int y = 0; y < height; y++) {
+    for(int x = 0; x < width; x++) {
+      auto pixel = data.subspan((y * width + x) * channels, channels);
+
+      fmt::print(file, "{} {} {}\n", pixel[0], pixel[1], pixel[2]);
     }
   }
-  fclose(f);
   return true;
 }

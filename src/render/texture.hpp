@@ -1,3 +1,4 @@
+/// @file
 #ifndef RENDER_TEXTURE_H
 #define RENDER_TEXTURE_H
 
@@ -67,13 +68,12 @@ class TextureData {
 /// Loads an image from specified path
 std::shared_ptr<TextureData> loadImage(const std::string_view path);
 
-/// Exports image data to PPM file.
-/// Used for debugging
-/// \{
+/// Exports texture data to PPM file.
 bool exportTextureDataPPM(std::shared_ptr<TextureData> data, const std::string_view path);
+
+/// Exports texture data to PPM file.
 bool exportTextureDataPPM(
     const std::span<const uint8_t> data, int width, int height, int channels,
     const std::string_view path);
-/// \}
 
 #endif

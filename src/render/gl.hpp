@@ -5,8 +5,8 @@
 #include <cstdio>
 
 inline int glClearError() {
-  while(glGetError())
-    ;
+  while(glGetError()) {
+  }
   return 0;
 }
 

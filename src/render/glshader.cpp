@@ -89,16 +89,20 @@ std::optional<GLShaderProgram> GLShaderProgram::compile(
   return program;
 }
 
+// This function changes global state
+// NOLINTBEGIN(readability-make-member-function-const)
 void GLShaderProgram::use() {
   GLCall(glUseProgram(getGLObjectID()));
 }
+
+// NOLINTEND(readability-make-member-function-const)
 
 GLuint GLShaderProgram::getGLObjectID() const noexcept {
   return m_glId;
 }
 
 GLint GLShaderProgram::getUniformLocation(const std::string& name) {
-  if(m_locCache.count(name)) {
+  if(m_locCache.contains(name)) {
     return m_locCache.at(name);
   }
   auto loc = GLCall(glGetUniformLocation(getGLObjectID(), name.data()));
@@ -107,7 +111,7 @@ GLint GLShaderProgram::getUniformLocation(const std::string& name) {
 }
 
 GLint GLShaderProgram::getUniformLocation(const std::string& name) const {
-  if(m_locCache.count(name)) {
+  if(m_locCache.contains(name)) {
     return m_locCache.at(name);
   }
   auto loc = GLCall(glGetUniformLocation(getGLObjectID(), name.data()));
@@ -115,7 +119,7 @@ GLint GLShaderProgram::getUniformLocation(const std::string& name) const {
 }
 
 GLint GLShaderProgram::getAttribLocation(const std::string& name) {
-  if(m_locCache.count(name)) {
+  if(m_locCache.contains(name)) {
     return m_locCache.at(name);
   }
   auto loc = GLCall(glGetAttribLocation(getGLObjectID(), name.data()));
@@ -124,7 +128,7 @@ GLint GLShaderProgram::getAttribLocation(const std::string& name) {
 }
 
 GLint GLShaderProgram::getAttribLocation(const std::string& name) const {
-  if(m_locCache.count(name)) {
+  if(m_locCache.contains(name)) {
     return m_locCache.at(name);
   }
   auto loc = GLCall(glGetAttribLocation(getGLObjectID(), name.data()));

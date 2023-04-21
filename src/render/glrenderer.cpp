@@ -104,9 +104,12 @@ GLRenderer::~GLRenderer() {
   glDeleteVertexArrays(1, &m_vao);
 }
 
+// NOLINTBEGIN(readability-convert-member-functions-to-static)
 void GLRenderer::clearFramebuffer() {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
+
+// NOLINTEND(readability-convert-member-functions-to-static)
 
 void GLRenderer::submitQuad(
     const glm::vec3 position, const glm::vec2 size, const glm::vec4 color) {
@@ -168,7 +171,7 @@ void GLRenderer::submitTexturedQuad(
 }
 
 void GLRenderer::flush() {
-  if(m_dataBuffer.size() == 0) {
+  if(m_dataBuffer.empty()) {
     return;
   }
   bindVAO();
@@ -188,7 +191,7 @@ void GLRenderer::flush() {
 unsigned int GLRenderer::maxTextureSize() {
   static unsigned int maxSupportedTextureSize = 1024;
   static bool cached = false;
-  if(cached == false) {
+  if(!cached) {
     GLint getResult = 0;
     GLCall(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &getResult));
     maxSupportedTextureSize = getResult;
@@ -197,9 +200,12 @@ unsigned int GLRenderer::maxTextureSize() {
   return maxSupportedTextureSize;
 }
 
+// NOLINTBEGIN(readability-make-member-function-const)
 void GLRenderer::bindVAO() {
   GLCall(glBindVertexArray(m_vao));
 }
+
+// NOLINTEND(readability-make-member-function-const)
 
 void GLRenderer::uploadDataBuffer(const void* data, GLsizeiptr size) {
   GLuint currentBuffer = 0;

@@ -35,7 +35,7 @@ class GLRenderer {
       const glm::vec3 position, const glm::vec2 size, TextureId texture);
 
   /// Get maximum rectangular texture size ( NxN ).
-  unsigned int maxTextureSize();
+  static unsigned int maxTextureSize();
 
   /// Render current batch to default framebuffer.
   void flush();
@@ -67,6 +67,7 @@ class GLRenderer {
     uint32_t textureIndex{};
     glm::vec2 textureCoord{};
 
+    // Required for emplace_back
     Vertex(glm::vec3 position, glm::vec4 color) : position(position), color(color) {}
 
     Vertex(
@@ -77,7 +78,6 @@ class GLRenderer {
           textureCoord(textureCoord) {}
   };
 
-  private:
   GLuint m_vao;
   GLuint m_dataBufferObject;
   GLuint m_indexBufferObject;

@@ -13,9 +13,6 @@ class GLFWInitError : public std::exception {
   public:
   GLFWInitError(const char* what) noexcept : m_what(what) {}
 
-  // NOLINTNEXTLINE(modernize-pass-by-value)
-  GLFWInitError(int err, const std::string& what) noexcept : m_what(what) {}
-
   GLFWInitError(const GLFWInitError&) noexcept = default;
   GLFWInitError(GLFWInitError&&) noexcept = delete;
   GLFWInitError& operator=(const GLFWInitError& other) noexcept = default;
