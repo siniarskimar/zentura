@@ -4,6 +4,7 @@ Checks: >
   bugprone-*,
   -bugprone-easily-swappable-parameters,
   misc-*,
+  -misc-non-private-member-variables-in-classes,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-pro-type-reinterpret-cast,
   -cppcoreguidelines-avoid-c-arrays,
