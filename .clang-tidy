@@ -10,6 +10,7 @@ Checks: >
   -cppcoreguidelines-avoid-c-arrays,
   -cppcoreguidelines-avoid-non-const-global-variables,
   -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
   modernize-*,
   -modernize-use-trailing-return-type,
   -modernize-avoid-c-arrays,
