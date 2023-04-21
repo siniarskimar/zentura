@@ -47,6 +47,7 @@ class GLRenderer {
 
   TextureId newTexture(GLsizei width, GLsizei height);
   TextureId newTexture(std::shared_ptr<TextureData> data);
+  TextureId newTexture(std::nullptr_t) = delete;
 
   void uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data);
 

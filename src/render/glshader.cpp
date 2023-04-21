@@ -5,7 +5,7 @@
 #include <fmt/core.h>
 
 GLuint compileShader(GLenum type, const std::string_view source) {
-  GLuint shader = GLCall(glCreateShader(type));
+  const GLuint shader = GLCall(glCreateShader(type));
 
   const GLchar* shaderSources[1] = {source.data()};
 

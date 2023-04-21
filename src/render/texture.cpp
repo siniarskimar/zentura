@@ -6,13 +6,15 @@
 #include <cstdio>
 #include <fstream>
 #include <limits>
+#include <cassert>
 #include "stb_image.h"
 
 TextureData::TextureData(unsigned int width, unsigned int height, uint8_t channels)
     : m_width(width),
       m_height(height),
       m_channels(channels),
-      m_data(std::make_unique<uint8_t[]>(width * height * channels)) {}
+      m_data(
+          std::make_unique<uint8_t[]>(static_cast<size_t>(width) * height * channels)) {}
 
 TextureData::TextureData(
     unsigned int width, unsigned int height, uint8_t channels,
@@ -20,7 +22,8 @@ TextureData::TextureData(
     : m_width(width),
       m_height(height),
       m_channels(channels),
-      m_data(std::make_unique<uint8_t[]>(width * height * channels)) {
+      m_data(
+          std::make_unique<uint8_t[]>(static_cast<size_t>(width) * height * channels)) {
   memcpy(m_data.get(), data.data(), getTextureSize());
 }
 
@@ -53,7 +56,7 @@ uint8_t TextureData::getChannelCount() const {
   return m_channels;
 }
 
-const std::span<uint8_t> TextureData::getTextureData() const {
+std::span<uint8_t> TextureData::getTextureData() const {
   return {m_data.get(), getTextureSize()};
 }
 
@@ -61,7 +64,7 @@ unsigned int TextureData::getTextureSize() const {
   return m_width * m_height * m_channels;
 }
 
-const std::span<uint8_t> TextureData::at(unsigned int x, unsigned int y) {
+std::span<uint8_t> TextureData::at(unsigned int x, unsigned int y) {
   if(x >= m_width || y >= m_height) {
     throw std::out_of_range("Tried to index Texture data out of range");
   }
@@ -69,7 +72,7 @@ const std::span<uint8_t> TextureData::at(unsigned int x, unsigned int y) {
   return std::span(m_data.get(), getTextureSize()).subspan(offset, m_channels);
 }
 
-const std::span<const uint8_t> TextureData::at(unsigned int x, unsigned int y) const {
+std::span<const uint8_t> TextureData::at(unsigned int x, unsigned int y) const {
   if(x >= m_width || y >= m_height) {
     throw std::out_of_range("Tried to index Texture data out of range");
   }
@@ -130,7 +133,8 @@ std::shared_ptr<TextureData> loadImage(const std::string_view path) {
   }
 
   auto texture = std::make_shared<TextureData>(
-      width, height, channels, std::span(data, data + (width * height * channels)));
+      width, height, channels,
+      std::span(data, static_cast<size_t>(width) * height * channels));
   stbi_image_free(data);
   return texture;
 }
@@ -169,6 +173,7 @@ bool exportTextureDataPPM(
   }
 
   // TODO: handle cases where the number of channels is not 3
+  assert(channels == 3 && "Not implemented");
 
   std::ofstream file(path.data());
   if(!file.is_open()) {
@@ -180,7 +185,8 @@ bool exportTextureDataPPM(
 
   for(int y = 0; y < height; y++) {
     for(int x = 0; x < width; x++) {
-      auto pixel = data.subspan((y * width + x) * channels, channels);
+      auto pixel =
+          data.subspan((static_cast<size_t>(y) * width + x) * channels, channels);
 
       fmt::print(file, "{} {} {}\n", pixel[0], pixel[1], pixel[2]);
     }

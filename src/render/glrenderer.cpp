@@ -132,7 +132,7 @@ void GLRenderer::submitTexturedQuad(
     const glm::vec3 position, const glm::vec2 size, TextureId texture) {
 
   glm::vec2 textureCoords[4];
-  GLuint textureObject = m_textures.at(texture);
+  const GLuint textureObject = m_textures.at(texture);
 
   textureCoords[0] = {0.0f, 0.0f};
   textureCoords[1] = {1.0f, 0.0f};
@@ -273,6 +273,17 @@ GLRenderer::TextureId GLRenderer::newTexture(GLsizei width, GLsizei height) {
 GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<TextureData> data) {
   static TextureId nextId = 1;
   GLuint textureObject = 0;
+  const auto width = data->getWidth();
+  const auto height = data->getHeight();
+
+  if(width > std::numeric_limits<GLsizei>::max()) {
+    throw std::runtime_error(
+        "GLRenderer::newTexture(TextureData): width is outside of GLsizei range");
+  }
+  if(height > std::numeric_limits<GLsizei>::max()) {
+    throw std::runtime_error(
+        "GLRenderer::newTexture(TextureData): height is outside of GLsizei range");
+  }
 
   glGenTextures(1, &textureObject);
   if(textureObject == 0) [[unlikely]] {
@@ -290,8 +301,9 @@ GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<TextureData> data) 
 
   glBindTexture(GL_TEXTURE_2D, textureObject);
   glTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA8, data->getWidth(), data->getHeight(), 0, GL_RGBA,
-      GL_UNSIGNED_BYTE, data->getTextureData().data());
+      GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<GLsizei>(width),
+      static_cast<GLsizei>(height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+      data->getTextureData().data());
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -304,7 +316,7 @@ GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<TextureData> data) 
 }
 
 void GLRenderer::uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data) {
-  auto textureObject = m_textures.at(texture);
+  const auto textureObject = m_textures.at(texture);
   GLuint currentTexture = 0;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
 

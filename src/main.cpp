@@ -66,7 +66,7 @@ std::optional<std::string> getMonospaceFont() noexcept {
 
 int main(int /*argc*/, const char* /*argv*/[]) {
 
-  GLFWLibrary glfwLibrary;
+  const GLFWLibrary glfwLibrary;
 
   auto monospaceFontPath = getMonospaceFont();
   if(!monospaceFontPath.has_value()) {

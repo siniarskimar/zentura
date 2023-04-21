@@ -50,12 +50,12 @@ class TextureData {
   [[nodiscard]] unsigned int getTextureSize() const;
 
   /// Get texture data.
-  [[nodiscard]] const std::span<uint8_t> getTextureData() const;
+  [[nodiscard]] std::span<uint8_t> getTextureData() const;
 
   /// Access a single pixel.
   /// \{
-  [[nodiscard]] const std::span<uint8_t> at(unsigned int x, unsigned int y);
-  [[nodiscard]] const std::span<const uint8_t> at(unsigned int x, unsigned int y) const;
+  [[nodiscard]] std::span<uint8_t> at(unsigned int x, unsigned int y);
+  [[nodiscard]] std::span<const uint8_t> at(unsigned int x, unsigned int y) const;
   /// \}
 
   private:
