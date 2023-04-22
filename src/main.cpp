@@ -84,8 +84,6 @@ int main(int /*argc*/, const char* /*argv*/[]) {
 
   auto textureData1 = loadImage("share/zen/test_image_grayscale.png");
   auto textureData2 = loadImage("share/zen/test_image.jpg");
-  auto textureData3 = loadImage("share/zen/marek-piwnicki-8Hd1IVrDpEc-unsplash.jpg");
-  auto textureData4 = loadImage("share/zen/caleb-woods-QPm1dbfq6Vk-unsplash.jpg");
   if(textureData1 == nullptr) {
     fmt::print(stderr, "Failed to load 'share/zen/test_image_grayscale.png'\n");
     return 2;
@@ -94,27 +92,13 @@ int main(int /*argc*/, const char* /*argv*/[]) {
     fmt::print(stderr, "Failed to load 'share/zen/test_image.png'\n");
     return 2;
   }
-  if(textureData3 == nullptr) {
-    fmt::print(
-        stderr, "Failed to load 'share/zen/marek-piwnicki-8Hd1IVrDpEc-unsplash.png'\n");
-    return 2;
-  }
-  if(textureData4 == nullptr) {
-    fmt::print(
-        stderr, "Failed to load 'share/zen/caleb-woods-QPm1dbfq6Vk-unsplash.png'\n");
-    return 2;
-  }
   textureData1 = std::make_shared<TextureData>(textureData1->expandToRGBA());
   textureData2 = std::make_shared<TextureData>(textureData2->expandToRGBA());
-  textureData3 = std::make_shared<TextureData>(textureData3->expandToRGBA());
-  textureData4 = std::make_shared<TextureData>(textureData4->expandToRGBA());
 
   exportTextureDataPPM(textureData1, "out.ppm");
 
   auto texture1 = renderer.newTexture(textureData1);
   auto texture2 = renderer.newTexture(textureData2);
-  auto texture3 = renderer.newTexture(textureData3);
-  auto texture4 = renderer.newTexture(textureData4);
 
   while(!window->shouldClose()) {
     window->pollEvents();
@@ -122,8 +106,6 @@ int main(int /*argc*/, const char* /*argv*/[]) {
 
     renderer.submitTexturedQuad({-1.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, texture1);
     renderer.submitTexturedQuad({-1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}, texture2);
-    renderer.submitTexturedQuad({0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, texture3);
-    renderer.submitTexturedQuad({0.0f, 0.0f, 0.0f}, {1.0f, 1.0f}, texture4);
 
     renderer.flush();
     renderer.swapWindowBuffers();
