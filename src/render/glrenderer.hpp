@@ -43,12 +43,19 @@ class GLRenderer {
   /// Clear current frambuffer.
   void clearFramebuffer();
 
+  /// Swap framebuffers of a window `this` renderer is bound to
   void swapWindowBuffers();
 
+  /// Creates a new empty texture
   TextureId newTexture(GLsizei width, GLsizei height);
+
+  /// Create a new texture from TextureData
   TextureId newTexture(std::shared_ptr<TextureData> data);
+
+  /// Disallows passing nullptr directly
   TextureId newTexture(std::nullptr_t) = delete;
 
+  /// Upload/change texture data
   void uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data);
 
   // TODO: implement this
@@ -57,9 +64,17 @@ class GLRenderer {
       GLint ydest, std::shared_ptr<TextureData> src);
 
   private:
+
+  /// Generate new TextureId
   TextureId newTextureId();
+
+  /// Bind `this` renderer's VAO
   void bindVAO();
+
+  /// Upload vertex data to GPU
   void uploadDataBuffer(const void* data, GLsizeiptr size);
+
+  /// Upload vertex indecies to GPU
   void uploadIndexBuffer(const void* data, GLsizeiptr size);
 
   struct Vertex {

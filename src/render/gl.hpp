@@ -1,9 +1,12 @@
-#pragma once
+/// @file
+#ifndef GL_H
+#define GL_H
 
 #include "glad/glad.h"
 #include <fmt/core.h>
 #include <cstdio>
 
+/// Clear OpenGL error queue
 inline int glClearError() {
   while(glGetError()) {
   }
@@ -16,3 +19,5 @@ inline int glClearError() {
   while(auto error = glGetError()) { \
     fmt::print(stderr, "{}:{} [OPENGL {:#x}]\n", __FILE__, __LINE__, error); \
   }
+
+#endif
