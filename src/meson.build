@@ -1,4 +1,4 @@
-executable('zen',
+zen_exe = executable('zen',
   'main.cpp',
   'ui/window.cpp',
   'render/glad/glad.c',
@@ -19,5 +19,6 @@ executable('zen',
     include_directories('include'),
     include_directories('pch')
   ],
-  cpp_pch: 'pch/pch.hpp'
+  cpp_pch: 'pch/pch.hpp',
+  install: true
 )

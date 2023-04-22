@@ -6,6 +6,8 @@ project('zen', ['c','cpp'],
   meson_version: '>=0.64.0'
 )
 
+fs = import('fs')
+
 doxygen = find_program('doxygen', required: false)
 python = find_program('python3')
 
@@ -27,6 +29,9 @@ if libOpenGL.found()
 else
   opengl_dependencies += [dependency('gl')]
 endif
+
+subdir('src')
+subdir('share')
 
 if doxygen.found() and get_option('build_devdocs')
   run_target('devdoc',
@@ -52,4 +57,11 @@ if get_option('build_userdocs')
   )
 endif
 
-subdir('src')
+run_target('run',
+  command: [
+    python,
+    meson.project_source_root() / 'scripts' / 'run.py',
+    '@BUILD_ROOT@'
+  ],
+  depends: zen_exe
+)
