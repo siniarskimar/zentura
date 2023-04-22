@@ -2,88 +2,94 @@
 #define GL_RENDERER_H
 
 #include "render/gl.hpp"
+
 #include <vector>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
+#include <cstdint>
 #include <glm/ext/matrix_clip_space.hpp>
-#include "render/glshader.hpp"
-#include "render/texture.hpp"
-#include "render/renderer.hpp"
-#include "render/vertex.hpp"
 #include <map>
 
+#include "render/glshader.hpp"
+#include "render/texture.hpp"
+#include "ui/window.hpp"
+
 /// OpenGL renderer backend.
-class GLRenderer : public Renderer {
+class GLRenderer {
   public:
-  GLRenderer();
+  using TextureId = uint32_t;
+
+  GLRenderer(ui::Window& window);
+  GLRenderer(const GLRenderer&) = delete;
+  GLRenderer(GLRenderer&&) = delete;
+  GLRenderer& operator=(const GLRenderer&) = delete;
+  GLRenderer& operator=(GLRenderer&&) = delete;
+  ~GLRenderer();
 
   /// Submit a quad for rendering.
-  void submitQuad(
-      const glm::vec3 position, const glm::vec2 size, const glm::vec4 color) override;
+  void submitQuad(const glm::vec3 position, const glm::vec2 size, const glm::vec4 color);
 
   /// Submit a texture quad for rendering.
-  void submitQuad(
-      const glm::vec3 position, const glm::vec2 size,
-      std::shared_ptr<Texture> texture) override;
+  void submitTexturedQuad(
+      const glm::vec3 position, const glm::vec2 size, TextureId texture);
 
   /// Get maximum rectangular texture size ( NxN ).
-  unsigned int maxTextureSize() override;
+  static unsigned int maxTextureSize();
 
   /// Render current batch to default framebuffer.
-  void flush() override;
+  void flush();
 
   /// Clear current frambuffer.
-  void clearFramebuffer() override;
+  void clearFramebuffer();
+
+  void swapWindowBuffers();
+
+  TextureId newTexture(GLsizei width, GLsizei height);
+  TextureId newTexture(std::shared_ptr<TextureData> data);
+  TextureId newTexture(std::nullptr_t) = delete;
+
+  void uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data);
+
+  // TODO: implement this
+  void blitTexture(
+      TextureId destination, int lod, GLsizei srcWidth, GLsizei srcHeight, GLint xdest,
+      GLint ydest, std::shared_ptr<TextureData> src);
 
   private:
-  template <typename K, typename V>
-  using WeakPtrMap = std::map<std::weak_ptr<K>, V, std::owner_less<>>;
+  TextureId newTextureId();
+  void bindVAO();
+  void uploadDataBuffer(const void* data, GLsizeiptr size);
+  void uploadIndexBuffer(const void* data, GLsizeiptr size);
 
-  /// Wrapper around OpenGL Vertex Array Object.
-  struct GLVAO {
-    GLuint glId;
-    GLuint dataBufferId;
-    GLuint indexBufferId;
-    uint32_t dataBufferSize;
-    uint32_t indexBufferSize;
+  struct Vertex {
+    glm::vec3 position{};
+    glm::vec4 color{};
+    uint32_t textureIndex{};
+    glm::vec2 textureCoord{};
 
-    GLVAO();
-    GLVAO(const GLVAO&) = delete;
-    GLVAO& operator=(const GLVAO&) = delete;
-    GLVAO(GLVAO&&);
-    GLVAO& operator=(GLVAO&&);
-    ~GLVAO();
+    // Required for emplace_back
+    Vertex(glm::vec3 position, glm::vec4 color) : position(position), color(color) {}
 
-    void bind();
-    void uploadDataBuffer(const void* data, GLsizeiptr size);
-    void uploadIndexBuffer(const void* data, GLsizeiptr size);
+    Vertex(
+        glm::vec3 position, glm::vec4 color, uint32_t textureIdx, glm::vec2 textureCoord)
+        : position(position),
+          color(color),
+          textureIndex(textureIdx),
+          textureCoord(textureCoord) {}
   };
 
-  struct TextureBoundingBox {
-    unsigned int x;
-    unsigned int y;
-    unsigned int width;
-    unsigned int height;
-  };
+  GLuint m_vao;
+  GLuint m_dataBufferObject;
+  GLuint m_indexBufferObject;
+  uint32_t m_dataBufferObjectSize;
+  uint32_t m_indexBufferObjectSize;
 
-  struct TextureAtlas {
-    std::shared_ptr<Texture> textureAtlas;
-    WeakPtrMap<Texture, TextureBoundingBox> boundingBoxes;
-    std::optional<TextureBoundingBox> fit(std::shared_ptr<Texture> texture);
-  };
-
-  private:
   std::vector<Vertex> m_dataBuffer;
   std::vector<uint32_t> m_indexBuffer;
-  GLVAO m_vao;
   GLShaderProgram m_quadProgram;
-  std::vector<TextureAtlas> m_textureAtlases;
-  std::vector<std::shared_ptr<Texture>> m_boundTextures;
-  std::map<
-      std::weak_ptr<Texture>, std::reference_wrapper<TextureAtlas>, std::owner_less<>>
-      m_textureToAtlasMap;
-  std::map<std::weak_ptr<Texture>, GLuint, std::owner_less<>> m_textureToObjectMap;
+  ui::Window& m_window;
+  std::map<TextureId, GLuint> m_textures;
 };
 
 #endif

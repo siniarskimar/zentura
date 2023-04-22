@@ -1,3 +1,4 @@
+/// @file
 #ifndef RENDER_TEXTURE_H
 #define RENDER_TEXTURE_H
 
@@ -6,11 +7,11 @@
 #include <cstdint>
 
 /// Container for storing pixel data.
-class Texture {
+class TextureData {
   public:
 
   /// Constructs an empty Texture.
-  Texture(unsigned int width, unsigned int height, uint8_t channels);
+  TextureData(unsigned int width, unsigned int height, uint8_t channels);
 
   /// Constructs a Texture from existing pixel data.
   /// Resulting Texture class holds a copy of provided data.
@@ -19,30 +20,22 @@ class Texture {
   /// @param height texture height
   /// @param channels number of source data channels
   /// @param data source data
-  Texture(
+  TextureData(
       unsigned int width, unsigned int height, uint8_t channels,
       const std::span<const uint8_t> data);
 
-  // NOTE: This might be useful
-  // Texture(unsigned int width, unsigned int height, uint8_t channels, const
-  // std::span<uint8_t[]>&& data);
-
-  // NOTE: Consider implementing this function
-  // void combine(const Texture& source, unsigned int sourceX, unsigned int sourceY,
-  // unsigned int regionWidth, unsigned int regionHeight);
-
   /// \{
-  Texture(const Texture&);
-  Texture& operator=(const Texture&);
+  TextureData(const TextureData&);
+  TextureData& operator=(const TextureData&);
   /// \}
 
   /// \{
-  Texture(Texture&&) = default;
-  Texture& operator=(Texture&&) = default;
+  TextureData(TextureData&&) = default;
+  TextureData& operator=(TextureData&&) = default;
   /// \}
-  ~Texture() = default;
+  ~TextureData() = default;
 
-  [[nodiscard]] Texture expandToRGBA() const;
+  [[nodiscard]] TextureData expandToRGBA() const;
 
   /// Get texture width.
   [[nodiscard]] unsigned int getWidth() const;
@@ -57,12 +50,12 @@ class Texture {
   [[nodiscard]] unsigned int getTextureSize() const;
 
   /// Get texture data.
-  [[nodiscard]] const std::span<uint8_t> getTextureData() const;
+  [[nodiscard]] std::span<uint8_t> getTextureData() const;
 
   /// Access a single pixel.
   /// \{
-  [[nodiscard]] const std::span<uint8_t> at(unsigned int x, unsigned int y);
-  [[nodiscard]] const std::span<const uint8_t> at(unsigned int x, unsigned int y) const;
+  [[nodiscard]] std::span<uint8_t> at(unsigned int x, unsigned int y);
+  [[nodiscard]] std::span<const uint8_t> at(unsigned int x, unsigned int y) const;
   /// \}
 
   private:
@@ -71,5 +64,16 @@ class Texture {
   uint8_t m_channels;
   std::unique_ptr<uint8_t[]> m_data;
 };
+
+/// Loads an image from specified path
+std::shared_ptr<TextureData> loadImage(const std::string_view path);
+
+/// Exports texture data to PPM file.
+bool exportTextureDataPPM(std::shared_ptr<TextureData> data, const std::string_view path);
+
+/// Exports texture data to PPM file.
+bool exportTextureDataPPM(
+    const std::span<const uint8_t> data, int width, int height, int channels,
+    const std::string_view path);
 
 #endif

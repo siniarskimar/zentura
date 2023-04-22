@@ -45,10 +45,10 @@ GLFWLibrary::GLFWLibrary() {
     }
   });
 
-  if(!glfwInit()) {
+  if(glfwInit() == 0) {
     const char* desc = nullptr;
     glfwGetError(&desc);
-    throw GLFWInitError(desc ? desc : "Failed to initialize GLFW");
+    throw GLFWInitError(desc != nullptr ? desc : "Failed to initialize GLFW");
   }
 }
 
