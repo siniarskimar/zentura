@@ -95,8 +95,6 @@ int main(int /*argc*/, const char* /*argv*/[]) {
   textureData1 = std::make_shared<TextureData>(textureData1->expandToRGBA());
   textureData2 = std::make_shared<TextureData>(textureData2->expandToRGBA());
 
-  exportTextureDataPPM(textureData1, "out.ppm");
-
   auto texture1 = renderer.newTexture(textureData1);
   auto texture2 = renderer.newTexture(textureData2);
 

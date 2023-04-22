@@ -12,7 +12,7 @@
 #include <map>
 
 #include "render/glshader.hpp"
-#include "render/texture.hpp"
+#include "render/texturedata.hpp"
 #include "ui/window.hpp"
 
 /// OpenGL renderer backend.

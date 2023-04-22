@@ -1,4 +1,4 @@
-#include "./texture.hpp"
+#include "./texturedata.hpp"
 #include <cstring>
 #include <stdexcept>
 #include <fmt/core.h>

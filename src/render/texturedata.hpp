@@ -1,6 +1,6 @@
 /// @file
-#ifndef RENDER_TEXTURE_H
-#define RENDER_TEXTURE_H
+#ifndef RENDER_TEXTUREDATA_H
+#define RENDER_TEXTUREDATA_H
 
 #include <span>
 #include <memory>

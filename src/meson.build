@@ -6,7 +6,7 @@ zen_exe = executable('zen',
   'stb_image.c',
   'lib/glfw.cpp',
   'render/glrenderer.cpp',
-  'render/texture.cpp',
+  'render/texturedata.cpp',
   dependencies: [
     opengl_dependencies,
     libGLFW,
