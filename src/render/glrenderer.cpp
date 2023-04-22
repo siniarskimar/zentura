@@ -273,6 +273,11 @@ GLRenderer::TextureId GLRenderer::newTexture(GLsizei width, GLsizei height) {
 GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<TextureData> data) {
   static TextureId nextId = 1;
   GLuint textureObject = 0;
+
+  if(data == nullptr) {
+    throw std::logic_error("GLRenderer(TextureData): data is nullptr");
+  }
+
   const auto width = data->getWidth();
   const auto height = data->getHeight();
 
