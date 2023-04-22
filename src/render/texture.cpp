@@ -172,23 +172,27 @@ bool exportTextureDataPPM(
     throw std::runtime_error("exportTextureDataPPM(span): height is negative");
   }
 
-  // TODO: handle cases where the number of channels is not 3
-  assert(channels == 3 && "Not implemented");
+  if(channels > 4) {
+    //  NOTE: this could just be an error message
+    throw std::runtime_error(
+        "exportTextureDataPPM(span): can't deal with more than 4 channels");
+  }
 
-  std::ofstream file(path.data());
+  std::ofstream file(path.data(), std::ios::binary | std::ios::out);
   if(!file.is_open()) {
     fmt::print(stderr, "Failed to open {}\n", path.data());
     return false;
   }
+  const int version = channels == 4 ? 6 : channels + 3;
 
-  fmt::print(file, "P3\n{} {}\n255\n", width, height);
+  fmt::print(file, "P{}\n{} {}\n255\n", version, width, height);
 
   for(int y = 0; y < height; y++) {
     for(int x = 0; x < width; x++) {
       auto pixel =
           data.subspan((static_cast<size_t>(y) * width + x) * channels, channels);
 
-      fmt::print(file, "{} {} {}\n", pixel[0], pixel[1], pixel[2]);
+      file.write(reinterpret_cast<const char*>(pixel.data()), version - 3);
     }
   }
   return true;
