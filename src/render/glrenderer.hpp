@@ -22,9 +22,7 @@ class GLRenderer {
 
   GLRenderer(ui::Window& window);
   GLRenderer(const GLRenderer&) = delete;
-  GLRenderer(GLRenderer&&) = delete;
   GLRenderer& operator=(const GLRenderer&) = delete;
-  GLRenderer& operator=(GLRenderer&&) = delete;
   ~GLRenderer();
 
   /// Submit a quad for rendering.
