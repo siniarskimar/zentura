@@ -8,12 +8,13 @@
 #include <memory>
 #include <fontconfig/fontconfig.h>
 #include <freetype/freetype.h>
+#include <iostream>
 
 #include "render/glrenderer.hpp"
 #include "ui/window.hpp"
 #include <SDL2/SDL.h>
 
-/// Gets the path of systems default monospace font.
+/// Get the path of systems default monospace font.
 std::optional<std::string> getMonospaceFont() noexcept {
   FcConfig* config = FcInitLoadConfigAndFonts();
   if(config == nullptr) {
@@ -58,6 +59,7 @@ std::optional<std::string> getMonospaceFont() noexcept {
   return std::make_optional(std::move(result));
 }
 
+/// Wrapper class over SDL_Init and SDL_Quit
 struct SDLContext {
   SDLContext() : m_ok(SDL_Init(SDL_INIT_VIDEO) == 0) {}
 
@@ -90,12 +92,15 @@ int main(int /*argc*/, const char* /*argv*/[]) {
   }
   fmt::print("{}\n", monospaceFontPath.value());
 
-  auto [window, windowCreateError] = ui::Window::create(800, 600, "zen");
-  if(!window.has_value()) {
+  auto [createdWindow, windowCreateError] = ui::Window::create(800, 600, "zen");
+  if(!createdWindow.has_value()) {
     fmt::print(stderr, "Failed to create window: {}", windowCreateError);
     return 2;
   }
-  GLRenderer renderer(window.value());
+
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+  ui::Window window = std::move(createdWindow.value());
+  GLRenderer renderer(window);
 
   auto textureData1 = loadImage("share/zen/test_image_grayscale.png");
   auto textureData2 = loadImage("share/zen/test_image.jpg");
@@ -113,20 +118,33 @@ int main(int /*argc*/, const char* /*argv*/[]) {
   auto texture1 = renderer.newTexture(textureData1);
   auto texture2 = renderer.newTexture(textureData2);
 
-  while(!window->shouldClose()) {
+  SDL_StartTextInput();
+  while(!window.shouldClose()) {
     SDL_Event ev;
     while(SDL_PollEvent(&ev) != 0) {
       switch(ev.type) {
       case SDL_WINDOWEVENT:
-        auto* windowEvent = reinterpret_cast<SDL_WindowEvent*>(&ev);
-        switch(windowEvent->event) {
+        switch(ev.window.event) {
         case SDL_WINDOWEVENT_CLOSE:
-          window->notifyClose();
+          window.notifyClose();
           break;
         default:
           break;
         }
         break;
+      case SDL_QUIT:
+        window.notifyClose();
+        break;
+      case SDL_TEXTINPUT:
+        fmt::print("{}", ev.text.text);
+        std::cout.flush();
+        break;
+      case SDL_KEYDOWN:
+        switch(ev.key.keysym.sym) {
+        case SDLK_RETURN:
+          fmt::print("\n");
+          break;
+        }
       }
     }
     renderer.clearFramebuffer();
@@ -137,6 +155,7 @@ int main(int /*argc*/, const char* /*argv*/[]) {
     renderer.flush();
     renderer.swapWindowBuffers();
   }
+  SDL_StopTextInput();
 
   return 0;
 }
