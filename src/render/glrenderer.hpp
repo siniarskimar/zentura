@@ -11,6 +11,8 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <map>
 
+#include <SDL2/SDL.h>
+
 #include "render/glshader.hpp"
 #include "render/texturedata.hpp"
 #include "ui/window.hpp"
@@ -103,6 +105,7 @@ class GLRenderer {
   GLShaderProgram m_quadProgram;
   ui::Window& m_window;
   std::map<TextureId, GLuint> m_textures;
+  SDL_GLContext m_sdlGlContext;
 };
 
 #endif

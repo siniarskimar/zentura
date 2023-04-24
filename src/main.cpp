@@ -3,21 +3,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <vector>
 #include <fmt/core.h>
 #include <cstdio>
 #include <memory>
 #include <fontconfig/fontconfig.h>
-#include <ft2build.h>
 #include <freetype/freetype.h>
 
 #include "render/glrenderer.hpp"
 #include "ui/window.hpp"
-
-#include "lib/glfw.hpp"
-#include <glm/vec2.hpp>
-#include <glm/vec4.hpp>
-#include <glm/ext/matrix_clip_space.hpp>
+#include <SDL2/SDL.h>
 
 /// Gets the path of systems default monospace font.
 std::optional<std::string> getMonospaceFont() noexcept {
@@ -64,9 +58,30 @@ std::optional<std::string> getMonospaceFont() noexcept {
   return std::make_optional(std::move(result));
 }
 
-int main(int /*argc*/, const char* /*argv*/[]) {
+struct SDLContext {
+  SDLContext() : m_ok(SDL_Init(SDL_INIT_VIDEO) == 0) {}
 
-  const GLFWLibrary glfwLibrary;
+  SDLContext(const SDLContext&) = delete;
+  SDLContext& operator=(const SDLContext&) = delete;
+
+  ~SDLContext() {
+    SDL_Quit();
+  }
+
+  [[nodiscard]] inline bool isOk() const noexcept {
+    return m_ok;
+  }
+
+  private:
+  bool m_ok{};
+};
+
+int main(int /*argc*/, const char* /*argv*/[]) {
+  SDLContext sdlContext;
+  if(!sdlContext.isOk()) {
+    fmt::print(stderr, "Failed to initialize SDL2: {}", SDL_GetError());
+    return 2;
+  }
 
   auto monospaceFontPath = getMonospaceFont();
   if(!monospaceFontPath.has_value()) {
@@ -75,9 +90,9 @@ int main(int /*argc*/, const char* /*argv*/[]) {
   }
   fmt::print("{}\n", monospaceFontPath.value());
 
-  auto window = ui::Window::create(800, 600, "zen");
+  auto [window, windowCreateError] = ui::Window::create(800, 600, "zen");
   if(!window.has_value()) {
-    fmt::print(stderr, "Failed to create window: {}", glfwGetError(nullptr));
+    fmt::print(stderr, "Failed to create window: {}", windowCreateError);
     return 2;
   }
   GLRenderer renderer(window.value());
@@ -99,7 +114,21 @@ int main(int /*argc*/, const char* /*argv*/[]) {
   auto texture2 = renderer.newTexture(textureData2);
 
   while(!window->shouldClose()) {
-    window->pollEvents();
+    SDL_Event ev;
+    while(SDL_PollEvent(&ev) != 0) {
+      switch(ev.type) {
+      case SDL_WINDOWEVENT:
+        auto* windowEvent = reinterpret_cast<SDL_WindowEvent*>(&ev);
+        switch(windowEvent->event) {
+        case SDL_WINDOWEVENT_CLOSE:
+          window->notifyClose();
+          break;
+        default:
+          break;
+        }
+        break;
+      }
+    }
     renderer.clearFramebuffer();
 
     renderer.submitTexturedQuad({-1.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, texture1);

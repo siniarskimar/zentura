@@ -5,44 +5,54 @@
 
 namespace ui {
 
-std::optional<Window> Window::create(
+std::tuple<std::optional<Window>, std::string_view> Window::create(
     const int width, const int height, const std::string& title) {
 
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-  auto* window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+  // NOTE: In the future window flags should be composed dynamically
+  // mainly for the purpose of multiple render backends
+  auto* window = SDL_CreateWindow(
+      title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height,
+      SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
 
   if(window == nullptr) {
-    return std::nullopt;
+    return {std::nullopt, SDL_GetError()};
   }
-  return {window};
+  return {window, "No error"};
 }
 
-Window::Window(GLFWwindow* handle)
-    : m_window(WindowHandlePtr(handle, glfwDestroyWindow)) {
-  glfwSetWindowUserPointer(m_window.get(), this);
+Window::Window(SDL_Window* handle) : m_window(handle), m_shouldClose(false) {}
+
+Window::Window(Window&& other)
+    : m_window(other.m_window),
+      m_shouldClose(other.m_shouldClose) {
+  other.m_window = nullptr;
 }
 
-GLFWwindow* Window::getGLFWHandle() {
-  return m_window.get();
+Window& Window::operator=(Window&& other) {
+  m_window = other.m_window;
+  other.m_window = nullptr;
+  m_shouldClose = other.m_shouldClose;
+  return *this;
 }
 
-void Window::makeContextCurrent() {
-  glfwMakeContextCurrent(getGLFWHandle());
+Window::~Window() {
+  SDL_DestroyWindow(m_window);
 }
 
-bool Window::shouldClose() {
-  return glfwWindowShouldClose(getGLFWHandle()) != 0;
+SDL_Window* Window::getHandle() {
+  return m_window;
+}
+
+void Window::notifyClose() {
+  m_shouldClose = true;
+}
+
+bool Window::shouldClose() const {
+  return m_shouldClose;
 }
 
 void Window::setTitle(const std::string& title) {
-  glfwSetWindowTitle(m_window.get(), title.c_str());
+  SDL_SetWindowTitle(getHandle(), title.c_str());
 }
 
-void Window::pollEvents() {
-  glfwPollEvents();
-}
 } // namespace ui

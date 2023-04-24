@@ -6,27 +6,27 @@
 #include <string_view>
 #include <string>
 #include <optional>
-#include <memory>
 #include <functional>
+#include <SDL2/SDL.h>
+#include <utility>
 
 namespace ui {
 class Window {
   public:
-  /// \{
-  Window(GLFWwindow*);
-  Window(Window&&) = default;
-  Window& operator=(Window&&) = default;
-  /// \}
+  /// Takes ownership over window handle
+  Window(SDL_Window*);
 
   /// Window should not be copied.
-  /// \{
   Window(const Window&) = delete;
   Window& operator=(const Window&) = delete;
-  /// \}
-  ~Window() = default;
+
+  Window(Window&&);
+  Window& operator=(Window&&);
+
+  ~Window();
 
   /// Create a new window.
-  static std::optional<Window> create(
+  static std::tuple<std::optional<Window>, std::string_view> create(
       const int width, const int height, const std::string& title);
 
   /// Calls glfwPollEvents
@@ -35,17 +35,16 @@ class Window {
   /// Change the title of a window.
   void setTitle(const std::string& title);
 
-  void makeContextCurrent();
+  void notifyClose();
 
-  bool shouldClose();
+  [[nodiscard]] bool shouldClose() const;
 
-  GLFWwindow* getGLFWHandle();
+  SDL_Window* getHandle();
 
   private:
-  using WindowHandlePtr =
-      std::unique_ptr<GLFWwindow, std::function<decltype(glfwDestroyWindow)>>;
 
-  WindowHandlePtr m_window;
+  SDL_Window* m_window;
+  bool m_shouldClose;
 };
 
 }; // namespace ui

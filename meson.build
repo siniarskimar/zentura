@@ -15,9 +15,7 @@ opengl_dependencies = []
 
 libOpenGL = dependency('opengl', required: false)
 
-# TODO: install glfw3 wrap and provide option to switch to use it when
-#       requested
-libGLFW = dependency('glfw3', required: true)
+libSDL2 = dependency('sdl2', required: true)
 
 libfmt = dependency('fmt', version: '9.1.0>=', required: true)
 libglm = dependency('glm', version: '0.9.9.8>=', required: true)

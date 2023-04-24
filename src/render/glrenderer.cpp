@@ -51,13 +51,18 @@ GLRenderer::GLRenderer(ui::Window& window)
       m_indexBufferObject(0),
       m_dataBufferObjectSize(0),
       m_indexBufferObjectSize(0),
-      m_window(window) {
+      m_window(window),
+      m_sdlGlContext(SDL_GL_CreateContext(window.getHandle())) {
   constexpr int kPositionAttribLoc = 0;
   constexpr int kColorAttribLoc = 1;
   constexpr int kTextureCoordAttribLoc = 2;
-  window.makeContextCurrent();
 
-  gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
+  if(m_sdlGlContext == nullptr) {
+    throw std::runtime_error(
+        fmt::format("Failed to create OpenGL context: {}", SDL_GetError()));
+  }
+
+  gladLoadGLLoader(reinterpret_cast<GLADloadproc>(SDL_GL_GetProcAddress));
 
   auto quadProgram =
       GLShaderProgram::compile(kEmbedShaderSimpleVertex, kEmbedShaderSimpleFrag);
@@ -240,7 +245,7 @@ void GLRenderer::uploadIndexBuffer(const void* data, GLsizeiptr size) {
 }
 
 void GLRenderer::swapWindowBuffers() {
-  glfwSwapBuffers(m_window.getGLFWHandle());
+  SDL_GL_SwapWindow(m_window.getHandle());
 }
 
 GLRenderer::TextureId GLRenderer::newTexture(GLsizei width, GLsizei height) {
