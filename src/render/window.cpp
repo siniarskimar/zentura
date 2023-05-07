@@ -1,9 +1,6 @@
 #include "render/glrenderer.hpp"
 #include "./window.hpp"
 #include <memory>
-#include "stb_image.h"
-
-namespace ui {
 
 std::tuple<std::optional<Window>, std::string_view> Window::create(
     const int width, const int height, const std::string& title) {
@@ -54,5 +51,3 @@ bool Window::shouldClose() const {
 void Window::setTitle(const std::string& title) {
   SDL_SetWindowTitle(getHandle(), title.c_str());
 }
-
-} // namespace ui

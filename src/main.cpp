@@ -11,7 +11,7 @@
 #include <iostream>
 
 #include "render/glrenderer.hpp"
-#include "ui/window.hpp"
+#include "render/window.hpp"
 #include <SDL2/SDL.h>
 
 /// Get the path of systems default monospace font.
@@ -92,14 +92,14 @@ int main(int /*argc*/, const char* /*argv*/[]) {
   }
   fmt::print("{}\n", monospaceFontPath.value());
 
-  auto [createdWindow, windowCreateError] = ui::Window::create(800, 600, "zen");
+  auto [createdWindow, windowCreateError] = Window::create(800, 600, "zen");
   if(!createdWindow.has_value()) {
     fmt::print(stderr, "Failed to create window: {}", windowCreateError);
     return 2;
   }
 
   // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-  ui::Window window = std::move(createdWindow.value());
+  Window window = std::move(createdWindow.value());
   GLRenderer renderer(window);
 
   auto textureData1 = loadImage("share/zen/test_image_grayscale.png");

@@ -10,7 +10,6 @@
 #include <SDL2/SDL.h>
 #include <utility>
 
-namespace ui {
 class Window {
   public:
   /// Takes ownership over window handle
@@ -46,7 +45,5 @@ class Window {
   SDL_Window* m_window;
   bool m_shouldClose;
 };
-
-}; // namespace ui
 
 #endif

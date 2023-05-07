@@ -45,7 +45,7 @@ void main() {
     
 )";
 
-GLRenderer::GLRenderer(ui::Window& window)
+GLRenderer::GLRenderer(Window& window)
     : m_vao(0),
       m_dataBufferObject(0),
       m_indexBufferObject(0),

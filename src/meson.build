@@ -1,6 +1,6 @@
 zen_exe = executable('zen',
   'main.cpp',
-  'ui/window.cpp',
+  'render/window.cpp',
   'render/glad/glad.c',
   'render/glshader.cpp',
   'stb_image.c',

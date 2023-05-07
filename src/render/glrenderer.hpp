@@ -15,14 +15,14 @@
 
 #include "render/glshader.hpp"
 #include "render/texturedata.hpp"
-#include "ui/window.hpp"
+#include "render/window.hpp"
 
 /// OpenGL renderer backend.
 class GLRenderer {
   public:
   using TextureId = uint32_t;
 
-  GLRenderer(ui::Window& window);
+  GLRenderer(Window& window);
   GLRenderer(const GLRenderer&) = delete;
   GLRenderer& operator=(const GLRenderer&) = delete;
   ~GLRenderer();
@@ -103,7 +103,7 @@ class GLRenderer {
   std::vector<Vertex> m_dataBuffer;
   std::vector<uint32_t> m_indexBuffer;
   GLShaderProgram m_quadProgram;
-  ui::Window& m_window;
+  Window& m_window;
   std::map<TextureId, GLuint> m_textures;
   SDL_GLContext m_sdlGlContext;
 };
