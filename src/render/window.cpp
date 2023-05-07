@@ -2,7 +2,7 @@
 #include "./window.hpp"
 #include <memory>
 
-std::tuple<std::optional<Window>, std::string_view> Window::create(
+rd::expected<Window, std::string_view> createWindow(
     const int width, const int height, const std::string& title) {
 
   // NOTE: In the future window flags should be composed dynamically
@@ -12,9 +12,9 @@ std::tuple<std::optional<Window>, std::string_view> Window::create(
       SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
 
   if(window == nullptr) {
-    return {std::nullopt, SDL_GetError()};
+    return rd::unexpected(SDL_GetError());
   }
-  return {window, "No error"};
+  return window;
 }
 
 Window::Window(SDL_Window* handle) : m_window(handle), m_shouldClose(false) {}

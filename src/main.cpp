@@ -92,14 +92,13 @@ int main(int /*argc*/, const char* /*argv*/[]) {
   }
   fmt::print("{}\n", monospaceFontPath.value());
 
-  auto [createdWindow, windowCreateError] = Window::create(800, 600, "zen");
-  if(!createdWindow.has_value()) {
-    fmt::print(stderr, "Failed to create window: {}", windowCreateError);
+  auto createWindowResult = createWindow(800, 600, "zen");
+  if(!createWindowResult.has_value()) {
+    fmt::print(stderr, "Failed to create window: {}", createWindowResult.error());
     return 2;
   }
 
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-  Window window = std::move(createdWindow.value());
+  Window window = std::move(createWindowResult.value());
   GLRenderer renderer(window);
 
   auto textureData1 = loadImage("share/zen/test_image_grayscale.png");

@@ -9,6 +9,7 @@
 #include <functional>
 #include <SDL2/SDL.h>
 #include <utility>
+#include "expected.hpp"
 
 class Window {
   public:
@@ -23,10 +24,6 @@ class Window {
   Window& operator=(Window&&);
 
   ~Window();
-
-  /// Create a new window.
-  static std::tuple<std::optional<Window>, std::string_view> create(
-      const int width, const int height, const std::string& title);
 
   /// Calls glfwPollEvents
   static void pollEvents();
@@ -45,5 +42,9 @@ class Window {
   SDL_Window* m_window;
   bool m_shouldClose;
 };
+
+/// Create a new window.
+rd::expected<Window, std::string_view> createWindow(
+    const int width, const int height, const std::string& title);
 
 #endif
