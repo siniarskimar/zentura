@@ -68,9 +68,6 @@ class GLRenderer {
   /// Generate new TextureId
   TextureId newTextureId();
 
-  /// Bind `this` renderer's VAO
-  void bindVAO();
-
   /// Upload vertex data to GPU
   void uploadDataBuffer(const void* data, GLsizeiptr size);
 

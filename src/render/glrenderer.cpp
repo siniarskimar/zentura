@@ -80,7 +80,7 @@ GLRenderer::GLRenderer(Window& window)
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  bindVAO();
+  glBindVertexArray(m_vao);
   glBindBuffer(GL_ARRAY_BUFFER, m_dataBufferObject);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBufferObject);
 
@@ -179,7 +179,7 @@ void GLRenderer::flush() {
   if(m_dataBuffer.empty()) {
     return;
   }
-  bindVAO();
+  glBindVertexArray(m_vao);
   uploadDataBuffer(
       m_dataBuffer.data(), static_cast<GLsizeiptr>(m_dataBuffer.size() * sizeof(Vertex)));
   uploadIndexBuffer(
@@ -204,13 +204,6 @@ unsigned int GLRenderer::maxTextureSize() {
   }
   return maxSupportedTextureSize;
 }
-
-// NOLINTBEGIN(readability-make-member-function-const)
-void GLRenderer::bindVAO() {
-  GLCall(glBindVertexArray(m_vao));
-}
-
-// NOLINTEND(readability-make-member-function-const)
 
 void GLRenderer::uploadDataBuffer(const void* data, GLsizeiptr size) {
   GLuint currentBuffer = 0;
