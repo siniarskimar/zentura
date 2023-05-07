@@ -223,7 +223,7 @@ void GLRenderer::uploadDataBuffer(const void* data, GLsizeiptr size) {
 
 void GLRenderer::uploadIndexBuffer(const void* data, GLsizeiptr size) {
   GLuint currentBuffer = 0;
-  glGetIntegerv(GL_ARRAY_BUFFER_BINDING, reinterpret_cast<int*>(&currentBuffer));
+  glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, reinterpret_cast<int*>(&currentBuffer));
 
   if(currentBuffer != m_indexBufferObject) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBufferObject);
