@@ -149,20 +149,17 @@ void GLRenderer::submitTexturedQuad(
   textureCoords[2] = {1.0f, 1.0f};
   textureCoords[3] = {0.0f, 1.0f};
 
-  m_dataBuffer.emplace_back(
-      position, glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0,
-      textureCoords[0]);
-  m_dataBuffer.emplace_back(
-      position + glm::vec3(size.x, 0.0f, 0.0f),
-      glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0, textureCoords[1]);
-  m_dataBuffer.emplace_back(
-      position + glm::vec3(size.x, -size.y, 0.0f),
-      glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0, textureCoords[2]);
-  m_dataBuffer.emplace_back(
-      position - glm::vec3(0.0f, size.y, 0.0f),
-      glm::vec4{247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f}, 0, textureCoords[3]);
+  constexpr glm::vec4 color = {247 / 255.0f, 5 / 255.0f, 118 / 255.0f, 1.0f};
 
-  const uint32_t indexCount = m_indexBuffer.size() * 4 / 6;
+  m_dataBuffer.emplace_back(position, color, 0, textureCoords[0]);
+  m_dataBuffer.emplace_back(
+      position + glm::vec3(size.x, 0.0f, 0.0f), color, 0, textureCoords[1]);
+  m_dataBuffer.emplace_back(
+      position + glm::vec3(size.x, -size.y, 0.0f), color, 0, textureCoords[2]);
+  m_dataBuffer.emplace_back(
+      position - glm::vec3(0.0f, size.y, 0.0f), color, 0, textureCoords[3]);
+
+  const uint32_t indexCount = (m_indexBuffer.size() / 6) * 4;
   m_indexBuffer.push_back(indexCount + 0);
   m_indexBuffer.push_back(indexCount + 1);
   m_indexBuffer.push_back(indexCount + 2);
