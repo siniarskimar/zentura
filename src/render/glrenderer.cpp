@@ -134,7 +134,12 @@ void GLRenderer::submitQuad(
 }
 
 void GLRenderer::submitTexturedQuad(
-    const glm::vec3 position, const glm::vec2 size, TextureId texture) {
+    const glm::vec3 position, const glm::vec2 size, Texture texture) {
+
+  if(!m_dataBuffer.empty()) {
+    m_quadProgram.setUniformSafe("enableTexture", false);
+    flush();
+  }
 
   glm::vec2 textureCoords[4];
   const GLuint textureObject = m_textures.at(texture);
@@ -172,7 +177,6 @@ void GLRenderer::submitTexturedQuad(
   m_quadProgram.setUniformSafe("tex", 1);
   m_quadProgram.setUniformSafe("enableTexture", true);
   flush();
-  m_quadProgram.setUniformSafe("enableTexture", false);
 }
 
 void GLRenderer::flush() {
@@ -241,43 +245,34 @@ void GLRenderer::swapWindowBuffers() {
   SDL_GL_SwapWindow(m_window.getHandle());
 }
 
-GLRenderer::TextureId GLRenderer::newTexture(GLsizei width, GLsizei height) {
-  static TextureId nextId = 1;
+Texture GLRenderer::newTexture(GLsizei width, GLsizei height) {
   GLuint textureObject = 0;
 
   glGenTextures(1, &textureObject);
   if(textureObject == 0) [[unlikely]] {
     throw std::runtime_error("Failed to create OpenGL texture");
   }
-  auto textureId = nextId;
-  nextId++;
-  GLuint currentTexture = 0;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
+  auto textureId = newTextureId();
 
   glBindTexture(GL_TEXTURE_2D, textureObject);
   glTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+      GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  glBindTexture(GL_TEXTURE_2D, currentTexture);
+  Texture tex{textureId, 0};
 
-  m_textures.insert({textureId, textureObject});
-  return textureId;
+  m_textures.insert({tex, textureObject});
+  return tex;
 }
 
-GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<TextureData> data) {
-  static TextureId nextId = 1;
+Texture GLRenderer::newTexture(const TextureData& data) {
   GLuint textureObject = 0;
 
-  if(data == nullptr) {
-    throw std::logic_error("GLRenderer(TextureData): data is nullptr");
-  }
-
-  const auto width = data->getWidth();
-  const auto height = data->getHeight();
+  const auto width = data.getWidth();
+  const auto height = data.getHeight();
 
   if(width > std::numeric_limits<GLsizei>::max()) {
     throw std::runtime_error(
@@ -292,51 +287,63 @@ GLRenderer::TextureId GLRenderer::newTexture(std::shared_ptr<TextureData> data) 
   if(textureObject == 0) [[unlikely]] {
     throw std::runtime_error("Failed to create OpenGL texture");
   }
-  auto textureId = nextId;
-  nextId++;
+  auto textureId = newTextureId();
 
-  if(data->getChannelCount() < 4) {
-    data = std::make_shared<TextureData>(data->expandToRGBA());
-  }
-
-  GLuint currentTexture = 0;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
-
-  glBindTexture(GL_TEXTURE_2D, textureObject);
-  glTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<GLsizei>(width),
-      static_cast<GLsizei>(height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
-      data->getTextureData().data());
+  uploadTextureDataImpl(textureObject, data);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  glBindTexture(GL_TEXTURE_2D, currentTexture);
+  Texture tex{textureId, data.getChannelCount()};
 
-  m_textures.insert({textureId, textureObject});
-  return textureId;
+  m_textures.insert({tex, textureObject});
+  return tex;
 }
 
-void GLRenderer::uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data) {
+void GLRenderer::uploadTextureData(Texture texture, const TextureData& data) {
   const auto textureObject = m_textures.at(texture);
-  GLuint currentTexture = 0;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, reinterpret_cast<GLint*>(&currentTexture));
+  uploadTextureDataImpl(textureObject, data);
+}
 
-  glBindTexture(GL_TEXTURE_2D, textureObject);
+void GLRenderer::uploadTextureDataImpl(GLuint texture, const TextureData& data) {
+  glBindTexture(GL_TEXTURE_2D, texture);
 
-  auto channels = data->getChannelCount();
+  const auto channels = data.getChannelCount();
 
-  if(channels < 4) {
-    data = std::make_shared<TextureData>(data->expandToRGBA());
+  switch(channels) {
+  case 1:
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_R8, static_cast<int>(data.getWidth()),
+        static_cast<int>(data.getHeight()), 0, GL_RED, GL_UNSIGNED_BYTE,
+        data.getTextureData().data());
+    break;
+  case 2:
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RG8, static_cast<int>(data.getWidth()),
+        static_cast<int>(data.getHeight()), 0, GL_RG, GL_UNSIGNED_BYTE,
+        data.getTextureData().data());
+    break;
+  case 3:
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGB8, static_cast<int>(data.getWidth()),
+        static_cast<int>(data.getHeight()), 0, GL_RGB, GL_UNSIGNED_BYTE,
+        data.getTextureData().data());
+    break;
+  case 4:
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<int>(data.getWidth()),
+        static_cast<int>(data.getHeight()), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+        data.getTextureData().data());
+    break;
+
+  default:
+    throw std::logic_error("Tried to upload Texture data with more than 4 channels");
+    break;
   }
+}
 
-  glTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<int>(data->getWidth()),
-      static_cast<int>(data->getHeight()), 0, GL_RGBA, GL_UNSIGNED_BYTE,
-      data->getTextureData().data());
-
-  if(currentTexture != textureObject) {
-    glBindTexture(GL_TEXTURE_2D, currentTexture);
-  }
+uint32_t GLRenderer::newTextureId() {
+  static uint32_t idCount = 0;
+  return idCount++;
 }

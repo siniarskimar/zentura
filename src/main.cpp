@@ -100,20 +100,30 @@ int main(int /*argc*/, const char* /*argv*/[]) {
 
   Window window = std::move(createWindowResult.value());
   GLRenderer renderer(window);
+  TextureData textureData1(0, 0, 1);
+  TextureData textureData2(0, 0, 1);
 
-  auto textureData1 = loadImage("share/zen/test_image_grayscale.png");
-  auto textureData2 = loadImage("share/zen/test_image.jpg");
-  if(textureData1 == nullptr) {
-    fmt::print(stderr, "Failed to load 'share/zen/test_image_grayscale.png'\n");
-    return 2;
-  }
-  if(textureData2 == nullptr) {
-    fmt::print(stderr, "Failed to load 'share/zen/test_image.png'\n");
-    return 2;
-  }
-  textureData1 = std::make_shared<TextureData>(textureData1->expandToRGBA());
-  textureData2 = std::make_shared<TextureData>(textureData2->expandToRGBA());
+  {
+    auto texture = loadImage("share/zen/test_image_grayscale.png");
 
+    if(!texture.has_value()) {
+      fmt::print(stderr, "Failed to load 'share/zen/test_image_grayscale.png'\n");
+      return 2;
+    }
+    textureData1 = std::move(texture.value());
+  }
+
+  {
+    auto texture = loadImage("share/zen/test_image.jpg");
+
+    if(!texture.has_value()) {
+      fmt::print(stderr, "Failed to load 'share/zen/test_image.jpg'\n");
+      return 2;
+    }
+    textureData2 = std::move(texture.value());
+  }
+
+  textureData1 = textureData1.expandToRGBA();
   auto texture1 = renderer.newTexture(textureData1);
   auto texture2 = renderer.newTexture(textureData2);
 

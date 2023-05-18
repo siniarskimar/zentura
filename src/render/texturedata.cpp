@@ -121,7 +121,7 @@ TextureData TextureData::expandToRGBA() const {
   return resultTexture;
 }
 
-std::shared_ptr<TextureData> loadImage(const std::string_view path) {
+std::optional<TextureData> loadImage(const std::string_view path) {
   int width = 0;
   int height = 0;
   int channels = 0;
@@ -129,10 +129,10 @@ std::shared_ptr<TextureData> loadImage(const std::string_view path) {
   uint8_t* data = stbi_load(path.data(), &width, &height, &channels, 0);
   if(data == nullptr) {
     fmt::print(stderr, "{}\n", stbi_failure_reason());
-    return nullptr;
+    return std::nullopt;
   }
 
-  auto texture = std::make_shared<TextureData>(
+  TextureData texture(
       width, height, channels,
       std::span(data, static_cast<size_t>(width) * height * channels));
   stbi_image_free(data);

@@ -66,7 +66,7 @@ class TextureData {
 };
 
 /// Loads an image from specified path
-std::shared_ptr<TextureData> loadImage(const std::string_view path);
+std::optional<TextureData> loadImage(const std::string_view path);
 
 /// Exports texture data to PPM file.
 bool exportTextureDataPPM(std::shared_ptr<TextureData> data, const std::string_view path);

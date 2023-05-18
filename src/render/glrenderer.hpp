@@ -10,17 +10,19 @@
 #include <cstdint>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <map>
+#include <utility>
 
 #include <SDL2/SDL.h>
 
 #include "render/glshader.hpp"
 #include "render/texturedata.hpp"
 #include "render/window.hpp"
+#include "expected.hpp"
+#include "render/texture.hpp"
 
 /// OpenGL renderer backend.
 class GLRenderer {
   public:
-  using TextureId = uint32_t;
 
   GLRenderer(Window& window);
   GLRenderer(const GLRenderer&) = delete;
@@ -32,7 +34,7 @@ class GLRenderer {
 
   /// Submit a texture quad for rendering.
   void submitTexturedQuad(
-      const glm::vec3 position, const glm::vec2 size, TextureId texture);
+      const glm::vec3 position, const glm::vec2 size, Texture texture);
 
   /// Get maximum rectangular texture size ( NxN ).
   static unsigned int maxTextureSize();
@@ -47,26 +49,26 @@ class GLRenderer {
   void swapWindowBuffers();
 
   /// Creates a new empty texture
-  TextureId newTexture(GLsizei width, GLsizei height);
+  Texture newTexture(GLsizei width, GLsizei height);
 
   /// Create a new texture from TextureData
-  TextureId newTexture(std::shared_ptr<TextureData> data);
-
-  /// Disallows passing nullptr directly
-  TextureId newTexture(std::nullptr_t) = delete;
+  Texture newTexture(const TextureData& data);
 
   /// Upload/change texture data
-  void uploadTextureData(TextureId texture, std::shared_ptr<TextureData> data);
+  void uploadTextureData(Texture texture, const TextureData& data);
 
   // TODO: implement this
   void blitTexture(
-      TextureId destination, int lod, GLsizei srcWidth, GLsizei srcHeight, GLint xdest,
-      GLint ydest, std::shared_ptr<TextureData> src);
+      Texture destination, int lod, GLsizei srcWidth, GLsizei srcHeight, GLint xdest,
+      GLint ydest, const TextureData& src);
 
   private:
 
   /// Generate new TextureId
-  TextureId newTextureId();
+  uint32_t newTextureId();
+
+  /// Upload/change texture data
+  void uploadTextureDataImpl(GLuint texture, const TextureData& data);
 
   /// Upload vertex data to GPU
   void uploadDataBuffer(const void* data, GLsizeiptr size);
@@ -101,7 +103,7 @@ class GLRenderer {
   std::vector<uint32_t> m_indexBuffer;
   GLShaderProgram m_quadProgram;
   Window& m_window;
-  std::map<TextureId, GLuint> m_textures;
+  std::map<Texture, GLuint> m_textures;
   SDL_GLContext m_sdlGlContext;
 };
 
