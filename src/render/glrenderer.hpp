@@ -54,8 +54,8 @@ class GLRenderer {
   /// Create a new texture from TextureData
   Texture newTexture(const TextureData& data);
 
-  /// Upload/change texture data
-  void uploadTextureData(Texture texture, const TextureData& data);
+  /// Upload/update texture data
+  void uploadTextureData(Texture& texture, const TextureData& data);
 
   // TODO: implement this
   void blitTexture(

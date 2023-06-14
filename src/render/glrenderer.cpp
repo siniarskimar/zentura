@@ -257,9 +257,10 @@ Texture GLRenderer::newTexture(const TextureData& data) {
   return tex;
 }
 
-void GLRenderer::uploadTextureData(Texture texture, const TextureData& data) {
+void GLRenderer::uploadTextureData(Texture& texture, const TextureData& data) {
   const auto textureObject = m_textures.at(texture);
   uploadTextureDataImpl(textureObject, data);
+  texture.channels = data.getChannelCount();
 }
 
 void GLRenderer::uploadTextureDataImpl(GLuint texture, const TextureData& data) {
