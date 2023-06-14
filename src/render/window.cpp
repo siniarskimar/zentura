@@ -5,6 +5,9 @@
 rd::expected<Window, std::string_view> createWindow(
     const int width, const int height, const std::string& title) {
 
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
   // NOTE: In the future window flags should be composed dynamically
   // mainly for the purpose of multiple render backends
   auto* window = SDL_CreateWindow(
