@@ -78,6 +78,7 @@ class GLRenderer {
   struct Vertex {
     glm::vec3 position{};
     glm::vec4 color{};
+    // TODO: Remove textureIndex
     uint32_t textureIndex{};
     glm::vec2 textureCoord{};
 
