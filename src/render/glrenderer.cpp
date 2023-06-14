@@ -261,6 +261,8 @@ void GLRenderer::uploadTextureData(Texture& texture, const TextureData& data) {
   const auto textureObject = m_textures.at(texture);
   uploadTextureDataImpl(textureObject, data);
   texture.channels = data.getChannelCount();
+  texture.width = data.getWidth();
+  texture.height = data.getHeight();
 }
 
 void GLRenderer::uploadTextureDataImpl(GLuint texture, const TextureData& data) {
