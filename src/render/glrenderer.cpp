@@ -267,36 +267,35 @@ void GLRenderer::uploadTextureDataImpl(GLuint texture, const TextureData& data) 
 
   const auto channels = data.getChannelCount();
 
+  auto internalFormat = 0;
+  auto format = 0;
+
   switch(channels) {
   case 1:
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_R8, static_cast<int>(data.getWidth()),
-        static_cast<int>(data.getHeight()), 0, GL_RED, GL_UNSIGNED_BYTE,
-        data.getTextureData().data());
+    format = GL_RED;
+    internalFormat = GL_R8;
     break;
   case 2:
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RG8, static_cast<int>(data.getWidth()),
-        static_cast<int>(data.getHeight()), 0, GL_RG, GL_UNSIGNED_BYTE,
-        data.getTextureData().data());
+    format = GL_RG;
+    internalFormat = GL_RG8;
     break;
   case 3:
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGB8, static_cast<int>(data.getWidth()),
-        static_cast<int>(data.getHeight()), 0, GL_RGB, GL_UNSIGNED_BYTE,
-        data.getTextureData().data());
+    format = GL_RGB;
+    internalFormat = GL_RGB8;
     break;
   case 4:
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<int>(data.getWidth()),
-        static_cast<int>(data.getHeight()), 0, GL_RGBA, GL_UNSIGNED_BYTE,
-        data.getTextureData().data());
+    format = GL_RGBA;
+    internalFormat = GL_RGBA8;
     break;
-
   default:
     throw std::logic_error("Tried to upload Texture data with more than 4 channels");
     break;
   }
+
+  glTexImage2D(
+      GL_TEXTURE_2D, 0, internalFormat, static_cast<int>(data.getWidth()),
+      static_cast<int>(data.getHeight()), 0, format, GL_UNSIGNED_BYTE,
+      data.getTextureData().data());
 }
 
 uint32_t GLRenderer::newTextureId() {
