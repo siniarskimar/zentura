@@ -33,8 +33,7 @@ class GLRenderer {
   void submitQuad(const glm::vec3 position, const glm::vec2 size, const glm::vec4 color);
 
   /// Submit a texture quad for rendering.
-  void submitTexturedQuad(
-      const glm::vec3 position, const glm::vec2 size, Texture texture);
+  void submitTexturedQuad(const glm::vec3 position, const glm::vec2 size, Texture tex);
 
   /// Get maximum rectangular texture size ( NxN ).
   static unsigned int maxTextureSize();
