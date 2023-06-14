@@ -72,7 +72,7 @@ class GLRenderer {
   /// Upload vertex data to GPU
   void uploadDataBuffer(const void* data, GLsizeiptr size);
 
-  /// Upload vertex indecies to GPU
+  /// Upload vertex indicies to GPU
   void uploadIndexBuffer(const void* data, GLsizeiptr size);
 
   struct Vertex {
