@@ -49,7 +49,7 @@ class GLRenderer {
   void swapWindowBuffers();
 
   /// Creates a new empty texture
-  Texture newTexture(GLsizei width, GLsizei height);
+  Texture newTexture(GLsizei width, GLsizei height, uint8_t channels);
 
   /// Create a new texture from TextureData
   Texture newTexture(const TextureData& data);

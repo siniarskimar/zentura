@@ -201,24 +201,47 @@ void GLRenderer::swapWindowBuffers() {
   SDL_GL_SwapWindow(m_window.getHandle());
 }
 
-Texture GLRenderer::newTexture(GLsizei width, GLsizei height) {
+Texture GLRenderer::newTexture(GLsizei width, GLsizei height, uint8_t channels) {
   GLuint textureObject = 0;
 
   glGenTextures(1, &textureObject);
-  if(textureObject == 0) [[unlikely]] {
+  if(textureObject == 0) {
     throw std::runtime_error("Failed to create OpenGL texture");
   }
   auto textureId = newTextureId();
+  auto internalFormat = 0;
+  auto format = 0;
+
+  switch(channels) {
+  case 1:
+    format = GL_RED;
+    internalFormat = GL_R8;
+    break;
+  case 2:
+    format = GL_RG;
+    internalFormat = GL_RG8;
+    break;
+  case 3:
+    format = GL_RGB;
+    internalFormat = GL_RGB8;
+    break;
+  case 4:
+    format = GL_RGBA;
+    internalFormat = GL_RGBA8;
+    break;
+  }
 
   glBindTexture(GL_TEXTURE_2D, textureObject);
   glTexImage2D(
-      GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+      GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE,
+      nullptr);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  Texture tex{textureId, 0};
+  Texture tex{
+      textureId, channels, static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 
   m_textures.insert({tex, textureObject});
   return tex;
