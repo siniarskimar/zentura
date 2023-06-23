@@ -1,6 +1,7 @@
 project('zen', ['c','cpp'],
   default_options: [
-    'cpp_std=c++20'
+    'cpp_std=c++20',
+    'warning_level=2'
   ],
   license: 'Apache-2.0',
   meson_version: '>=0.64.0'
@@ -30,6 +31,9 @@ if libOpenGL.found()
 else
   opengl_dependencies += [dependency('gl')]
 endif
+
+libglad_proj = subproject('glad')
+libglad = libglad_proj.get_variable('libglad_dep')
 
 subdir('src')
 subdir('share')

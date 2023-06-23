@@ -49,6 +49,7 @@
 
 # Ignore downloaded subprojects
 subprojects/*/
+!subprojects/glad
 !subprojects/nothings_stb
 
 # Ignore CPython cache

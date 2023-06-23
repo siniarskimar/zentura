@@ -1,7 +1,6 @@
 zen_exe = executable('zen',
   'main.cpp',
   'render/window.cpp',
-  'render/glad/glad.c',
   'render/glshader.cpp',
   'render/glrenderer.cpp',
   'render/texturedata.cpp',
@@ -12,6 +11,7 @@ zen_exe = executable('zen',
     libglm,
     libfontconfig,
     libfreetype,
+    libglad,
     stb_image
   ],
   include_directories: [
