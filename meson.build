@@ -28,6 +28,9 @@ else
   opengl_dependencies += [dependency('gl')]
 endif
 
+libglad_proj = subproject('glad')
+libglad = libglad_proj.get_variable('libglad_dep')
+
 subdir('src')
 subdir('share')
 
