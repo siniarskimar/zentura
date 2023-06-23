@@ -22,6 +22,9 @@ libglm = dependency('glm', version: '0.9.9.8>=', required: true)
 libfontconfig = dependency('fontconfig', required: true)
 libfreetype = dependency('freetype2', required: true)
 
+nothings_stb_proj = subproject('nothings_stb')
+stb_image = nothings_stb_proj.get_variable('stb_image_dep')
+
 if libOpenGL.found()
   opengl_dependencies += [libOpenGL]
 else

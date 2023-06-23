@@ -49,6 +49,7 @@
 
 # Ignore downloaded subprojects
 subprojects/*/
+!subprojects/nothings_stb
 
 # Ignore CPython cache
 __pycache__/
