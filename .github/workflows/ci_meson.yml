@@ -23,6 +23,7 @@ jobs:
       with:
         python-version: '3.x'
     - run: pip install meson ninja
+    - run: sudo apt-get install -y mesa-common-dev
     - run: meson setup builddir/
       env:
         CC: gcc
