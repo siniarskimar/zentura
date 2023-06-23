@@ -3,7 +3,6 @@ zen_exe = executable('zen',
   'render/window.cpp',
   'render/glad/glad.c',
   'render/glshader.cpp',
-  'stb_image.c',
   'render/glrenderer.cpp',
   'render/texturedata.cpp',
   dependencies: [
@@ -12,7 +11,8 @@ zen_exe = executable('zen',
     libfmt,
     libglm,
     libfontconfig,
-    libfreetype
+    libfreetype,
+    stb_image
   ],
   include_directories: [
     include_directories('include'),
