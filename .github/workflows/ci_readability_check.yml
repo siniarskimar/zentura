@@ -26,9 +26,16 @@ jobs:
       with:
         python-version: '3.x'
     - run: pip install meson ninja
-    - run: sudo apt-get install -y mesa-common-dev
+    - run: sudo apt-get install -y mesa-common-dev cmake
     - run: meson setup builddir/
       env:
         CC: gcc
     - run: ./scripts/check-readability.py builddir/
+    - uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: build.ninja
+        path: builddir/build.ninja
+        if-no-files-found: error
+        retention-days: 30
   

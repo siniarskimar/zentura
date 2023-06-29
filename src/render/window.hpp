@@ -2,12 +2,11 @@
 #define WINDOW_H
 #pragma once
 
-#include <GLFW/glfw3.h>
 #include <string_view>
 #include <string>
 #include <optional>
 #include <functional>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <utility>
 #include "expected.hpp"
 
