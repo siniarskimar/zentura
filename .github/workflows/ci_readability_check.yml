@@ -31,4 +31,11 @@ jobs:
       env:
         CC: gcc
     - run: ./scripts/check-readability.py builddir/
+    - uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: build.ninja
+        path: builddir/build.ninja
+        if-no-files-found: error
+        retention-days: 30
   
