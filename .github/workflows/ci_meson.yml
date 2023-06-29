@@ -2,6 +2,8 @@ name: ci_meson
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "**.c"
       - "**.cpp"
