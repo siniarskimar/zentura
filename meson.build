@@ -70,3 +70,11 @@ run_target('run',
   ],
   depends: zen_exe
 )
+
+run_target('clang-format',
+  command: [
+    python,
+    meson.project_source_root() / 'scripts' / 'clang-format.py',
+    '--format'
+  ]
+)
