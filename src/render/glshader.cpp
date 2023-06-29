@@ -56,7 +56,7 @@ GLShaderProgram::~GLShaderProgram() {
 }
 
 std::optional<GLShaderProgram> GLShaderProgram::compile(
-    const std::string_view vertexSource, const std::string_view fragmentSource) {
+    const std::string_view& vertexSource, const std::string_view& fragmentSource) {
   auto vertexShader = compileShader(GL_VERTEX_SHADER, vertexSource);
   auto fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
 

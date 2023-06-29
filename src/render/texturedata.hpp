@@ -22,7 +22,7 @@ class TextureData {
   /// @param data source data
   TextureData(
       unsigned int width, unsigned int height, uint8_t channels,
-      const std::span<const uint8_t> data);
+      const std::span<const uint8_t>& data);
 
   /// \{
   TextureData(const TextureData&);
@@ -66,14 +66,15 @@ class TextureData {
 };
 
 /// Loads an image from specified path
-std::optional<TextureData> loadImage(const std::string_view path);
-
-/// Exports texture data to PPM file.
-bool exportTextureDataPPM(std::shared_ptr<TextureData> data, const std::string_view path);
+std::optional<TextureData> loadImage(const std::string_view& path);
 
 /// Exports texture data to PPM file.
 bool exportTextureDataPPM(
-    const std::span<const uint8_t> data, int width, int height, int channels,
-    const std::string_view path);
+    std::shared_ptr<TextureData> data, const std::string_view& path);
+
+/// Exports texture data to PPM file.
+bool exportTextureDataPPM(
+    const std::span<const uint8_t>& data, int width, int height, int channels,
+    const std::string_view& path);
 
 #endif
