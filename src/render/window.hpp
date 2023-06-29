@@ -45,6 +45,6 @@ class Window {
 
 /// Create a new window.
 rd::expected<Window, std::string_view> createWindow(
-    const int width, const int height, const std::string& title);
+    int width, int height, const std::string& title);
 
 #endif

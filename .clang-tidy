@@ -15,7 +15,6 @@ Checks: >
   -modernize-use-trailing-return-type,
   -modernize-avoid-c-arrays,
   readability-*,
-  -readability-avoid-const-params-in-decls,
   -readability-magic-numbers,
   -readability-operators-representation,
   -readability-suspicious-call-argument,

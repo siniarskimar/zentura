@@ -37,7 +37,7 @@ class GLShaderProgram {
 
   /// Quickly create GLShaderProgram from vertex shader and fragment shader.
   static std::optional<GLShaderProgram> compile(
-      const std::string_view vertexSource, const std::string_view fragmentSource);
+      const std::string_view& vertexSource, const std::string_view& fragmentSource);
 
   /// Activate OpenGL program.
   void use();

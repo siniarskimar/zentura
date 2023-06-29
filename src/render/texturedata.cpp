@@ -18,7 +18,7 @@ TextureData::TextureData(unsigned int width, unsigned int height, uint8_t channe
 
 TextureData::TextureData(
     unsigned int width, unsigned int height, uint8_t channels,
-    const std::span<const uint8_t> data)
+    const std::span<const uint8_t>& data)
     : m_width(width),
       m_height(height),
       m_channels(channels),
@@ -121,7 +121,7 @@ TextureData TextureData::expandToRGBA() const {
   return resultTexture;
 }
 
-std::optional<TextureData> loadImage(const std::string_view path) {
+std::optional<TextureData> loadImage(const std::string_view& path) {
   int width = 0;
   int height = 0;
   int channels = 0;
@@ -140,7 +140,7 @@ std::optional<TextureData> loadImage(const std::string_view path) {
 }
 
 bool exportTextureDataPPM(
-    std::shared_ptr<TextureData> data, const std::string_view path) {
+    std::shared_ptr<TextureData> data, const std::string_view& path) {
   const auto width = data->getWidth();
   const auto height = data->getHeight();
   const auto channels = data->getChannelCount();
@@ -161,8 +161,8 @@ bool exportTextureDataPPM(
 }
 
 bool exportTextureDataPPM(
-    const std::span<const uint8_t> data, int width, int height, int channels,
-    const std::string_view path) {
+    const std::span<const uint8_t>& data, int width, int height, int channels,
+    const std::string_view& path) {
 
   if(width < 0) {
     throw std::runtime_error("exportTextureDataPPM(span): width is negative");
