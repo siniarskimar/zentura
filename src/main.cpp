@@ -12,7 +12,11 @@
 
 #include "render/glrenderer.hpp"
 #include "render/window.hpp"
-#include <SDL2/SDL.h>
+#include <SDL.h>
+
+#if SDL_MAJOR_VERSION < 2
+#error "SDL2 is required!"
+#endif
 
 /// Get the path of systems default monospace font.
 std::optional<std::string> getMonospaceFont() noexcept {

@@ -6,7 +6,7 @@
 #include <string>
 #include <optional>
 #include <functional>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <utility>
 #include "expected.hpp"
 

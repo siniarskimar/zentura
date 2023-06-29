@@ -12,7 +12,7 @@
 #include <map>
 #include <utility>
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 #include "render/glshader.hpp"
 #include "render/texturedata.hpp"
