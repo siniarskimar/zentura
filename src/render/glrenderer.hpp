@@ -19,6 +19,7 @@
 #include "render/window.hpp"
 #include "expected.hpp"
 #include "render/texture.hpp"
+#include "render/glvertex.hpp"
 
 /// OpenGL renderer backend.
 class GLRenderer {
@@ -75,30 +76,13 @@ class GLRenderer {
   /// Upload vertex indecies to GPU
   void uploadIndexBuffer(const void* data, GLsizeiptr size);
 
-  struct Vertex {
-    glm::vec3 position{};
-    glm::vec4 color{};
-    uint32_t textureIndex{};
-    glm::vec2 textureCoord{};
-
-    // Required for emplace_back
-    Vertex(glm::vec3 position, glm::vec4 color) : position(position), color(color) {}
-
-    Vertex(
-        glm::vec3 position, glm::vec4 color, uint32_t textureIdx, glm::vec2 textureCoord)
-        : position(position),
-          color(color),
-          textureIndex(textureIdx),
-          textureCoord(textureCoord) {}
-  };
-
   GLuint m_vao;
   GLuint m_dataBufferObject;
   GLuint m_indexBufferObject;
   uint32_t m_dataBufferObjectSize;
   uint32_t m_indexBufferObjectSize;
 
-  std::vector<Vertex> m_dataBuffer;
+  std::vector<GLVertex> m_dataBuffer;
   std::vector<uint32_t> m_indexBuffer;
   GLShaderProgram m_quadProgram;
   Window& m_window;

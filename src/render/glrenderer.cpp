@@ -85,18 +85,18 @@ GLRenderer::GLRenderer(Window& window)
 
   glEnableVertexAttribArray(kPositionAttribLoc);
   glVertexAttribPointer(
-      kPositionAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-      reinterpret_cast<const void*>(offsetof(Vertex, position)));
+      kPositionAttribLoc, 3, GL_FLOAT, GL_FALSE, sizeof(GLVertex),
+      reinterpret_cast<const void*>(offsetof(GLVertex, position)));
 
   glEnableVertexAttribArray(kColorAttribLoc);
   glVertexAttribPointer(
-      kColorAttribLoc, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-      reinterpret_cast<const void*>(offsetof(Vertex, color)));
+      kColorAttribLoc, 4, GL_FLOAT, GL_FALSE, sizeof(GLVertex),
+      reinterpret_cast<const void*>(offsetof(GLVertex, color)));
 
   glEnableVertexAttribArray(kTextureCoordAttribLoc);
   glVertexAttribPointer(
-      kTextureCoordAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-      reinterpret_cast<const void*>(offsetof(Vertex, textureCoord)));
+      kTextureCoordAttribLoc, 2, GL_FLOAT, GL_FALSE, sizeof(GLVertex),
+      reinterpret_cast<const void*>(offsetof(GLVertex, textureCoord)));
 }
 
 GLRenderer::~GLRenderer() {
@@ -181,7 +181,8 @@ void GLRenderer::flush() {
   }
   glBindVertexArray(m_vao);
   uploadDataBuffer(
-      m_dataBuffer.data(), static_cast<GLsizeiptr>(m_dataBuffer.size() * sizeof(Vertex)));
+      m_dataBuffer.data(),
+      static_cast<GLsizeiptr>(m_dataBuffer.size() * sizeof(GLVertex)));
   uploadIndexBuffer(
       m_indexBuffer.data(),
       static_cast<GLsizeiptr>(m_indexBuffer.size() * sizeof(uint32_t)));
