@@ -12,5 +12,3 @@ This editor is expected to:
  - Have sane defaults that do not require extensive configuration
  - Treesitter and LSP support
  - Support plugins
-
-[TODO](https://github.com/siniarskimar/zen/issues/1)
