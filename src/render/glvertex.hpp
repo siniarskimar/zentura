@@ -8,10 +8,11 @@ struct GLVertex {
   glm::vec4 color{};
   glm::vec2 textureCoord{};
 
-  // Required for emplace_back
-  GLVertex(glm::vec3 position, glm::vec4 color) : position(position), color(color) {}
+  GLVertex() = default;
 
-  GLVertex(glm::vec3 position, glm::vec4 color, glm::vec2 textureCoord)
+  // NOTE(2023.06.30): Clang does not support CTAD for templated types and explicit
+  // constructor is required (https://github.com/llvm/llvm-project/issues/54049)
+  GLVertex(glm::vec3 position, glm::vec4 color, glm::vec2 textureCoord = {0.0f, 0.0f})
       : position(position),
         color(color),
         textureCoord(textureCoord) {}
