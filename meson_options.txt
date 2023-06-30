@@ -1,2 +1,0 @@
-option('build_userdocs', type: 'boolean', value: true, description: 'Build User Documentation')
-option('build_devdocs', type: 'boolean', value: true, description: 'Build Developer Documentation')
