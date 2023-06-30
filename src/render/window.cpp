@@ -7,6 +7,12 @@ rd::expected<Window, std::string_view> createWindow(
 
   // NOTE: In the future window flags should be composed dynamically
   // mainly for the purpose of multiple render backends
+
+  SDL_GL_ResetAttributes();
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
   auto* window = SDL_CreateWindow(
       title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height,
       SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
