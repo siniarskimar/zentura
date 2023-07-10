@@ -4,43 +4,29 @@ const c = @cImport({
     @cInclude("GLFW/glfw3.h");
 });
 
-const GLbitfield = u32;
-const GLfloat = f32;
-const GLdouble = f64;
-const GLclampf = GLfloat;
-const GLclampd = GLdouble;
-const PGLCLEARCOLOR = *const fn (red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf) callconv(.C) void;
-const PGLCLEAR = *const fn (bitfield: GLbitfield) callconv(.C) void;
-
-const GL_CURRENT_BIT = 0x00000001;
-const GL_POINT_BIT = 0x00000002;
-const GL_LINE_BIT = 0x00000004;
-const GL_POLYGON_BIT = 0x00000008;
-const GL_POLYGON_STIPPLE_BIT = 0x00000010;
-const GL_PIXEL_MODE_BIT = 0x00000020;
-const GL_LIGHTING_BIT = 0x00000040;
-const GL_FOG_BIT = 0x00000080;
-const GL_DEPTH_BUFFER_BIT = 0x00000100;
-const GL_ACCUM_BUFFER_BIT = 0x00000200;
-const GL_STENCIL_BUFFER_BIT = 0x00000400;
-const GL_VIEWPORT_BIT = 0x00000800;
-const GL_TRANSFORM_BIT = 0x00001000;
-const GL_ENABLE_BIT = 0x00002000;
-const GL_COLOR_BUFFER_BIT = 0x00004000;
-const GL_HINT_BIT = 0x00008000;
-const GL_EVAL_BIT = 0x00010000;
-const GL_LIST_BIT = 0x00020000;
-const GL_TEXTURE_BIT = 0x00040000;
-const GL_SCISSOR_BIT = 0x00080000;
-const GL_MULTISAMPLE_BIT = 0x20000000;
-const GL_MULTISAMPLE_BIT_ARB = 0x20000000;
-const GL_MULTISAMPLE_BIT_EXT = 0x20000000;
-const GL_MULTISAMPLE_BIT_3DFX = 0x20000000;
-const GL_ALL_ATTRIB_BITS = 0xFFFFFFFF;
+const gl = @import("./gl.zig");
 
 fn glfwErrorCallback(error_code: c_int, error_msg: [*c]const u8) callconv(.C) void {
     _ = error_code;
     std.log.err("[GLFW] {s}\n", .{error_msg});
+}
+
+fn gl_debugCallback(
+    source: gl.GLenum,
+    target: gl.GLenum,
+    id: gl.GLuint,
+    severity: gl.GLenum,
+    length: gl.GLsizei,
+    message: [*c]const gl.GLchar,
+    userparam: ?*anyopaque,
+) callconv(.C) void {
+    _ = userparam;
+    _ = length;
+    _ = severity;
+    _ = id;
+    _ = source;
+
+    std.log.debug("GLDEBUG [{}] {s}", .{ target, message });
 }
 
 pub fn main() !void {
@@ -51,6 +37,10 @@ pub fn main() !void {
     }
     defer c.glfwTerminate();
 
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 2);
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 1);
+    c.glfwWindowHint(c.GLFW_CONTEXT_DEBUG, c.GLFW_TRUE);
+
     const window = c.glfwCreateWindow(800, 600, "zen", null, null);
     if (window == null) {
         return error.WindowCreationFailed;
@@ -58,33 +48,29 @@ pub fn main() !void {
     defer c.glfwDestroyWindow(window);
 
     c.glfwMakeContextCurrent(window);
-    const glClearColor: ?PGLCLEARCOLOR = @ptrCast(c.glfwGetProcAddress("glClearColor"));
-    const glClear: ?PGLCLEAR = @ptrCast(c.glfwGetProcAddress("glClear"));
+    try gl.loadGL(c.glfwGetProcAddress);
 
-    if (glClearColor == null) {
-        return error.FailedLoadingGLFunction;
+    std.log.info("Loaded OpenGL {s}\n", .{gl.getString(gl.VERSION)});
+
+    if (gl.ARB_debug_output()) {
+        gl.enable(gl.DEBUG_OUTPUT);
+        gl.debugMessageCallback(gl_debugCallback, null);
     }
 
-    if (glClear == null) {
-        return error.FailedLoadingGLFunction;
-    }
-    var prev_time = try std.time.Instant.now();
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
     while (c.glfwWindowShouldClose(window) == c.false) {
         c.glfwPollEvents();
 
-        const curr_time = try std.time.Instant.now();
-        const diff = @as(u64, @divFloor(curr_time.since(prev_time), std.time.ns_per_s));
-        if (diff == 0) {
-            glClearColor.?(1.0, 0.0, 0.0, 1.0);
-        } else if (diff == 1) {
-            glClearColor.?(0.0, 1.0, 0.0, 1.0);
-        } else if (diff == 2) {
-            glClearColor.?(0.0, 0.0, 1.0, 1.0);
-        } else {
-            prev_time = curr_time;
-        }
-        glClear.?(GL_COLOR_BUFFER_BIT);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.begin(gl.TRIANGLES);
+        gl.color3f(1.0, 0.0, 0.0);
+        gl.vertex2f(0.0, 0.5);
+        gl.vertex2f(0.5, -0.5);
+        gl.vertex2f(-0.5, -0.5);
+        gl.end();
+
         c.glfwSwapBuffers(window);
     }
 }
