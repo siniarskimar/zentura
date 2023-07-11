@@ -20,18 +20,10 @@
 *.o
 *.obj
 
-# Precompiled Headers
-*.gch
-*.pch
-
 # Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
 
 # Compiled Static libraries
 *.lai
@@ -44,18 +36,8 @@
 *.out
 *.app
 
-# Ignore clangd .cache/
-.cache/
-
-# Ignore downloaded subprojects
-subprojects/*/
-!subprojects/glad
-!subprojects/nothings_stb
-
 # Ignore CPython cache
 __pycache__/
-# Created by https://www.toptal.com/developers/gitignore/api/zig
-# Edit at https://www.toptal.com/developers/gitignore?templates=zig
 
 ### zig ###
 # Zig programming language
@@ -66,4 +48,3 @@ build/
 build-*/
 docgen_tmp/
 
-# End of https://www.toptal.com/developers/gitignore/api/zig
