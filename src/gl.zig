@@ -121,7 +121,7 @@ pub const DEBUG_TYPE_OTHER: GLenum = 0x8251;
 // mark: Capabilities
 pub const DEBUG_OUTPUT: GLenum = 0x92E0;
 
-/// Function Prototypes
+// mark: GL functions
 const FNPROCGENERIC = *const fn () callconv(.C) void;
 
 const FNDEBUGPROC = *const fn (
