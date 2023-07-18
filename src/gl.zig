@@ -14,6 +14,9 @@ pub const GLclampf = GLfloat;
 pub const GLclampd = GLdouble;
 pub const GLchar = u8;
 
+pub const GLenum = c_int;
+pub const GLbitfield = u32;
+
 pub const GLboolean = enum(u8) {
     FALSE = 0,
     TRUE = 1,
@@ -22,61 +25,28 @@ pub const GLboolean = enum(u8) {
 pub const FALSE = GLboolean.FALSE;
 pub const TRUE = GLboolean.TRUE;
 
-pub const GLbitfield = enum(u32) {
-    CURRENT_BIT = 0x00000001,
-    POINT_BIT = 0x00000002,
-    LINE_BIT = 0x00000004,
-    POLYGON_BIT = 0x00000008,
-    POLYGON_STIPPLE_BIT = 0x00000010,
-    PIXEL_MODE_BIT = 0x00000020,
-    LIGHTING_BIT = 0x00000040,
-    FOG_BIT = 0x00000080,
-    DEPTH_BUFFER_BIT = 0x00000100,
-    ACCUM_BUFFER_BIT = 0x00000200,
-    STENCIL_BUFFER_BIT = 0x00000400,
-    VIEWPORT_BIT = 0x00000800,
-    TRANSFORM_BIT = 0x00001000,
-    ENABLE_BIT = 0x00002000,
-    COLOR_BUFFER_BIT = 0x00004000,
-    HINT_BIT = 0x00008000,
-    EVAL_BIT = 0x00010000,
-    LIST_BIT = 0x00020000,
-    TEXTURE_BIT = 0x00040000,
-    SCISSOR_BIT = 0x00080000,
-    MULTISAMPLE_BIT = 0x20000000,
-    ALL_ATTRIB_BITS = 0xFFFFFFFF,
-};
-
-pub const CURRENT_BIT = GLbitfield.CURRENT_BIT;
-pub const POINT_BIT = GLbitfield.POINT_BIT;
-pub const LINE_BIT = GLbitfield.LINE_BIT;
-pub const POLYGON_BIT = GLbitfield.POLYGON_BIT;
-pub const POLYGON_STIPPLE_BIT = GLbitfield.POLYGON_STIPPLE_BIT;
-pub const PIXEL_MODE_BIT = GLbitfield.PIXEL_MODE_BIT;
-pub const LIGHTING_BIT = GLbitfield.LIGHTING_BIT;
-pub const FOG_BIT = GLbitfield.FOG_BIT;
-pub const DEPTH_BUFFER_BIT = GLbitfield.DEPTH_BUFFER_BIT;
-pub const ACCUM_BUFFER_BIT = GLbitfield.ACCUM_BUFFER_BIT;
-pub const STENCIL_BUFFER_BIT = GLbitfield.STENCIL_BUFFER_BIT;
-pub const VIEWPORT_BIT = GLbitfield.VIEWPORT_BIT;
-pub const TRANSFORM_BIT = GLbitfield.TRANSFORM_BIT;
-pub const ENABLE_BIT = GLbitfield.ENABLE_BIT;
-pub const COLOR_BUFFER_BIT = GLbitfield.COLOR_BUFFER_BIT;
-pub const HINT_BIT = GLbitfield.HINT_BIT;
-pub const EVAL_BIT = GLbitfield.EVAL_BIT;
-pub const LIST_BIT = GLbitfield.LIST_BIT;
-pub const TEXTURE_BIT = GLbitfield.TEXTURE_BIT;
-pub const SCISSOR_BIT = GLbitfield.SCISSOR_BIT;
-pub const MULTISAMPLE_BIT = GLbitfield.MULTISAMPLE_BIT;
-pub const MULTISAMPLE_BIT_ARB = GLbitfield.MULTISAMPLE_BIT;
-pub const MULTISAMPLE_BIT_EXT = GLbitfield.MULTISAMPLE_BIT;
-pub const MULTISAMPLE_BIT_3DFX = GLbitfield.MULTISAMPLE_BIT;
-pub const ALL_ATTRIB_BITS = GLbitfield.ALL_ATTRIB_BITS;
-
-pub const GLenum = c_int;
-
-// There are too many values of GLenum for it to
-// make sense to put in dedicated enum
+pub const CURRENT_BIT: GLbitfield = 0x00000001;
+pub const POINT_BIT: GLbitfield = 0x00000002;
+pub const LINE_BIT: GLbitfield = 0x00000004;
+pub const POLYGON_BIT: GLbitfield = 0x00000008;
+pub const POLYGON_STIPPLE_BIT: GLbitfield = 0x00000010;
+pub const PIXEL_MODE_BIT: GLbitfield = 0x00000020;
+pub const LIGHTING_BIT: GLbitfield = 0x00000040;
+pub const FOG_BIT: GLbitfield = 0x00000080;
+pub const DEPTH_BUFFER_BIT: GLbitfield = 0x00000100;
+pub const ACCUM_BUFFER_BIT: GLbitfield = 0x00000200;
+pub const STENCIL_BUFFER_BIT: GLbitfield = 0x00000400;
+pub const VIEWPORT_BIT: GLbitfield = 0x00000800;
+pub const TRANSFORM_BIT: GLbitfield = 0x00001000;
+pub const ENABLE_BIT: GLbitfield = 0x00002000;
+pub const COLOR_BUFFER_BIT: GLbitfield = 0x00004000;
+pub const HINT_BIT: GLbitfield = 0x00008000;
+pub const EVAL_BIT: GLbitfield = 0x00010000;
+pub const LIST_BIT: GLbitfield = 0x00020000;
+pub const TEXTURE_BIT: GLbitfield = 0x00040000;
+pub const SCISSOR_BIT: GLbitfield = 0x00080000;
+pub const MULTISAMPLE_BIT: GLbitfield = 0x20000000;
+pub const ALL_ATTRIB_BITS: GLbitfield = 0xFFFFFFFF;
 
 pub const POINTS: GLenum = 0x0000;
 pub const LINES: GLenum = 0x0001;
