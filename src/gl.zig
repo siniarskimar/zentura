@@ -80,6 +80,36 @@ pub const GLenumerror = enum(GLenum) {
     CONTEXT_LOST = 0x507,
 };
 
+pub const GLenumshadertype = enum(GLenum) {
+    FRAGMENT_SHADER = 0x8B30,
+    VERTEX_SHADER = 0x8B31,
+};
+
+pub const FRAGMENT_SHADER = GLenumshadertype.FRAGMENT_SHADER;
+pub const VERTEX_SHADER = GLenumshadertype.VERTEX_SHADER;
+
+pub const MAX_FRAGMENT_UNIFORM_COMPONENTS: GLenum = 0x8B49;
+pub const MAX_VERTEX_UNIFORM_COMPONENTS: GLenum = 0x8B4A;
+pub const MAX_VARYING_FLOATS: GLenum = 0x8B4B;
+pub const MAX_VARYING_COMPONENTS: GLenum = MAX_VARYING_FLOATS;
+pub const MAX_VERTEX_TEXTURE_IMAGE_UNITS: GLenum = 0x8B4C;
+pub const MAX_COMBINED_TEXTURE_IMAGE_UNITS: GLenum = 0x8B4D;
+pub const SHADER_TYPE: GLenum = 0x8B4F;
+
+pub const DELETE_STATUS: GLenum = 0x8B80;
+pub const COMPILE_STATUS: GLenum = 0x8B81;
+pub const LINK_STATUS: GLenum = 0x8B82;
+pub const VALIDATE_STATUS: GLenum = 0x8B83;
+pub const INFO_LOG_LENGTH: GLenum = 0x8B84;
+pub const ATTACHED_SHADERS: GLenum = 0x8B85;
+pub const ACTIVE_UNIFORMS: GLenum = 0x8B86;
+pub const ACTIVE_UNIFORM_MAX_LENGTH: GLenum = 0x8B87;
+pub const SHADER_SOURCE_LENGTH: GLenum = 0x8B88;
+pub const ACTIVE_ATTRIBUTES: GLenum = 0x8B89;
+pub const ACTIVE_ATTRIBUTE_MAX_LENGTH: GLenum = 0x8B8A;
+pub const FRAGMENT_SHADER_DERIVATIVE_HINT: GLenum = 0x8B8B;
+pub const SHADING_LANGUAGE_VERSION: GLenum = 0x8B8C;
+pub const CURRENT_PROGRAM: GLenum = 0x8B8D;
 pub const DEBUG_TYPE_ERROR: GLenum = 0x824C;
 pub const DEBUG_TYPE_ERROR_ARB: GLenum = 0x824C;
 pub const DEBUG_TYPE_ERROR_KHR: GLenum = 0x824C;
