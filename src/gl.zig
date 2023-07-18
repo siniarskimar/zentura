@@ -119,30 +119,151 @@ const FNDEBUGPROC = *const fn (
 const PGETPROCADDRESS = *const fn (funcname: [*c]const u8) callconv(.C) ?*const fn () callconv(.C) void;
 
 const PGLCLEARCOLOR = *const fn (red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf) callconv(.C) void;
-const PGLCLEAR = *const fn (bitfield: GLbitfield) callconv(.C) void;
-const PGLBEGIN = *const fn (primitive: GLenum) callconv(.C) void;
-const PGLEND = *const fn () callconv(.C) void;
-const PGLGETSTRING = *const fn (name: GLenum) callconv(.C) [*c]const GLubyte;
-const PGLVERTEX2F = *const fn (x: GLfloat, y: GLfloat) callconv(.C) void;
-const PGLVERTEX3F = *const fn (x: GLfloat, y: GLfloat, z: GLfloat) callconv(.C) void;
-const PGLCOLOR3F = *const fn (r: GLfloat, g: GLfloat, b: GLfloat) callconv(.C) void;
-const PGLGETERROR = *const fn () callconv(.C) GLenumerror;
-const PGLENABLE = *const fn (cap: GLenum) callconv(.C) void;
-const PGLDISABLE = *const fn (cap: GLenum) callconv(.C) void;
-const PGLDEBUGMESSAGECALLBACK = *const fn (callback: ?FNDEBUGPROC, userparam: ?*const anyopaque) callconv(.C) void;
-
 var p_glClearColor: ?PGLCLEARCOLOR = null;
+
+pub fn clearColor(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf) void {
+    p_glClearColor.?(red, green, blue, alpha);
+}
+
+const PGLCLEAR = *const fn (bitfield: GLbitfield) callconv(.C) void;
 var p_glClear: ?PGLCLEAR = null;
+
+pub fn clear(bitmask: GLbitfield) void {
+    p_glClear.?(bitmask);
+}
+
+const PGLBEGIN = *const fn (primitive: GLenum) callconv(.C) void;
 var p_glBegin: ?PGLBEGIN = null;
+
+pub fn begin(primitive: GLenum) void {
+    p_glBegin.?(primitive);
+}
+
+const PGLEND = *const fn () callconv(.C) void;
 var p_glEnd: ?PGLEND = null;
+
+pub fn end() void {
+    p_glEnd.?();
+}
+
+const PGLGETSTRING = *const fn (name: GLenum) callconv(.C) [*c]const GLubyte;
 var p_glGetString: ?PGLGETSTRING = null;
+
+pub fn getString(name: GLenum) [*c]const GLubyte {
+    return p_glGetString.?(name);
+}
+
+const PGLVERTEX2F = *const fn (x: GLfloat, y: GLfloat) callconv(.C) void;
 var p_glVertex2f: ?PGLVERTEX2F = null;
+
+pub fn vertex2f(x: GLfloat, y: GLfloat) void {
+    p_glVertex2f.?(x, y);
+}
+
+const PGLVERTEX3F = *const fn (x: GLfloat, y: GLfloat, z: GLfloat) callconv(.C) void;
 var p_glVertex3f: ?PGLVERTEX3F = null;
+
+pub fn vertex3f(x: GLfloat, y: GLfloat, z: GLfloat) void {
+    p_glVertex3f.?(x, y, z);
+}
+
+const PGLCOLOR3F = *const fn (r: GLfloat, g: GLfloat, b: GLfloat) callconv(.C) void;
 var p_glColor3f: ?PGLCOLOR3F = null;
+
+pub fn color3f(r: GLfloat, g: GLfloat, b: GLfloat) void {
+    p_glColor3f.?(r, g, b);
+}
+
+const PGLGETERROR = *const fn () callconv(.C) GLenumerror;
 var p_glGetError: ?PGLGETERROR = null;
+
+pub fn getError() GLenumerror {
+    return p_glGetError.?();
+}
+
+const PGLENABLE = *const fn (cap: GLenum) callconv(.C) void;
 var p_glEnable: ?PGLENABLE = null;
+
+pub fn enable(cap: GLenum) void {
+    p_glEnable.?(cap);
+}
+
+const PGLDISABLE = *const fn (cap: GLenum) callconv(.C) void;
 var p_glDisable: ?PGLDISABLE = null;
+
+pub fn disable(cap: GLenum) void {
+    p_glDisable.?(cap);
+}
+
+const PGLDEBUGMESSAGECALLBACK = *const fn (callback: ?FNDEBUGPROC, userparam: ?*const anyopaque) callconv(.C) void;
 var p_glDebugMessageCallback: ?PGLDEBUGMESSAGECALLBACK = null;
+
+pub fn debugMessageCallback(callback: ?FNDEBUGPROC, userparam: ?*anyopaque) void {
+    p_glDebugMessageCallback.?(callback, userparam);
+}
+
+const PGLCREATEPROGRAM = *const fn () callconv(.C) GLuint;
+var p_glCreateProgram: ?PGLCREATEPROGRAM = null;
+
+pub fn createProgram() GLuint {
+    return p_glCreateProgram.?();
+}
+
+const PGLCREATESHADER = *const fn (type: GLenum) callconv(.C) GLuint;
+var p_glCreateShader: ?PGLCREATESHADER = null;
+
+pub fn createShader(typ: GLenumshadertype) GLuint {
+    return p_glCreateShader.?(typ);
+}
+
+const PGLGETUNIFORMLOCATION = *const fn (program: GLuint, name: [*c]const GLchar) callconv(.C) GLint;
+var p_glGetUniformLocation: ?PGLGETUNIFORMLOCATION = null;
+
+pub fn getUniformLocation(program: GLuint, name: [*c]const GLchar) GLint {
+    return p_glGetUniformLocation.?(program, name);
+}
+
+const PGLGETATTRIBLOCATION = *const fn (program: GLuint, name: [*c]const GLchar) callconv(.C) GLint;
+var p_glGetAttribLocation: ?PGLGETATTRIBLOCATION = null;
+
+pub fn getAttribLocation(program: GLuint, name: [*c]const GLchar) GLint {
+    return p_glGetAttribLocation.?(program, name);
+}
+
+const PGLSHADERSOURCE = *const fn (shader: GLuint, count: GLsizei, sources: [][*c]const GLchar, length: [*c]const GLint) callconv(.C) void;
+var p_glShaderSource: ?PGLSHADERSOURCE = null;
+
+pub fn shaderSource(shader: GLuint, count: GLsizei, sources: [][*c]const GLchar, length: [*c]const GLint) void {
+    p_glShaderSource.?(shader, count, sources, length);
+}
+
+const PGLATTACHSHADER = *const fn (program: GLuint, shader: GLuint) callconv(.C) void;
+var p_glAttachShader: ?PGLATTACHSHADER = null;
+
+pub fn attachShader(program: GLuint, shader: GLuint) void {
+    p_glAttachShader.?(program, shader);
+}
+
+const PGLLINKPROGRAM = *const fn (program: GLuint) callconv(.C) void;
+var p_glLinkProgram: ?PGLLINKPROGRAM = null;
+
+pub fn linkProgram(program: GLuint) void {
+    p_glLinkProgram.?(program);
+}
+
+const PGLGETSHADERIV = *const fn (shader: GLuint, pname: GLenum, param: *GLint) callconv(.C) void;
+var p_glGetShaderiv: ?PGLGETSHADERIV = null;
+
+pub fn getShaderiv(shader: GLuint, pname: GLenum, param: *GLint) void {
+    p_glGetShaderiv.?(shader, pname, param);
+}
+
+const PGLCOMPILESHADER = *const fn (shader: GLuint) callconv(.C) void;
+var p_glCompileShader: ?PGLCOMPILESHADER = null;
+
+pub fn compileShader(shader: GLuint) void {
+    p_glCompileShader.?(shader);
+}
 
 pub fn isExtensionSupported(name: []const u8) bool {
     const gl_ext_str = std.mem.span(getString(EXTENSIONS));
@@ -183,52 +304,4 @@ pub fn loadGL(getproc: PGETPROCADDRESS) !void {
     if (isExtensionSupported("GL_ARB_debug_output")) {
         p_glDebugMessageCallback = @ptrCast(try loadGLFunction("glDebugMessageCallback", getproc));
     }
-}
-
-pub fn clearColor(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf) void {
-    p_glClearColor.?(red, green, blue, alpha);
-}
-
-pub fn clear(bitmask: GLbitfield) void {
-    p_glClear.?(bitmask);
-}
-
-pub fn begin(primitive: GLenum) void {
-    p_glBegin.?(primitive);
-}
-
-pub fn end() void {
-    p_glEnd.?();
-}
-
-pub fn getString(name: GLenum) [*c]const GLubyte {
-    return p_glGetString.?(name);
-}
-
-pub fn vertex2f(x: GLfloat, y: GLfloat) void {
-    p_glVertex2f.?(x, y);
-}
-
-pub fn vertex3f(x: GLfloat, y: GLfloat, z: GLfloat) void {
-    p_glVertex3f.?(x, y, z);
-}
-
-pub fn color3f(r: GLfloat, g: GLfloat, b: GLfloat) void {
-    p_glColor3f.?(r, g, b);
-}
-
-pub fn getError() GLenumerror {
-    return p_glGetError.?();
-}
-
-pub fn enable(cap: GLenum) void {
-    p_glEnable.?(cap);
-}
-
-pub fn disable(cap: GLenum) void {
-    p_glDisable.?(cap);
-}
-
-pub fn debugMessageCallback(callback: ?FNDEBUGPROC, userparam: ?*anyopaque) void {
-    p_glDebugMessageCallback.?(callback, userparam);
 }
