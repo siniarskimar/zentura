@@ -184,7 +184,7 @@ pub const ParserContext = struct {
     }
 };
 
-fn parseEntityName(parserctx: *ParserContext) ParseError!?[]const u8 {
+fn parseName(parserctx: *ParserContext) ParseError!?[]const u8 {
     const start = parserctx.idx;
     var len: usize = 0;
 
@@ -253,7 +253,7 @@ pub fn parse(parserctx: *ParserContext, allocator: Allocator) !Document {
                 switch (parserctx.next().?) {
                     // Closing tag
                     '/' => {
-                        const name = try parseEntityName(parserctx) orelse return ParseError.ExpectedEntityName;
+                        const name = try parseName(parserctx) orelse return ParseError.ExpectedEntityName;
                         const current = entitystack.getLastOrNull() orelse return ParseError.MismatchedEntityCloseTag;
 
                         if (!std.mem.eql(u8, current.tag, name)) {
@@ -267,7 +267,7 @@ pub fn parse(parserctx: *ParserContext, allocator: Allocator) !Document {
 
                     // XMLDecl
                     '?' => {
-                        const name = try parseEntityName(parserctx) orelse return ParseError.ExpectedEntityName;
+                        const name = try parseName(parserctx) orelse return ParseError.ExpectedEntityName;
 
                         if (!std.mem.eql(u8, name, "xml")) {
                             return ParseError.InvalidEntity;
@@ -300,7 +300,7 @@ pub fn parse(parserctx: *ParserContext, allocator: Allocator) !Document {
                     // Opening tag
                     else => {
                         _ = parserctx.rewind(1);
-                        const name = try parseEntityName(parserctx) orelse return ParseError.UnexpectedEnd;
+                        const name = try parseName(parserctx) orelse return ParseError.UnexpectedEnd;
                         var entity = try Entity.initAlloc(allocator, name, null);
 
                         errdefer allocator.destroy(entity);
