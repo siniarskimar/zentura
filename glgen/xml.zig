@@ -438,7 +438,7 @@ test "parse: attributes" {
 
 test "parse: multiple roots" {
     var parserctx = ParserContext.init("<hello></hello><world></world>", 0);
-    var result = parse(&parserctx, std.testing.allocator);
+    const result = parse(&parserctx, std.testing.allocator);
     try std.testing.expectError(ParseError.MultipleDocumentRoots, result);
 }
 
