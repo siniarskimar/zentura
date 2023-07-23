@@ -367,14 +367,16 @@ test "parse: multiple roots" {
 
 // Error case
 test "parse: entity with invalid name characters" {
-    {
-        var parserctx = ParserContext.init("< hello></hello>", 0);
-        var result = parse(&parserctx, std.testing.allocator);
-        try std.testing.expectError(ParseError.InvalidEntityNameChar, result);
-    }
-    {
-        var parserctx = ParserContext.init("<hello></ hello>", 0);
-        var result = parse(&parserctx, std.testing.allocator);
+    var parsercontexes = std.ArrayList(ParserContext).init(std.testing.allocator);
+    defer parsercontexes.deinit();
+    try parsercontexes.append(ParserContext.init("< hello></hello>", 0));
+    try parsercontexes.append(ParserContext.init("<hello></ hello>", 0));
+    try parsercontexes.append(ParserContext.init("< hello/>", 0));
+    try parsercontexes.append(ParserContext.init("<0hello/>", 0));
+
+    for (0..parsercontexes.items.len) |i| {
+        var parserctx = &parsercontexes.items[i];
+        var result = parse(parserctx, std.testing.allocator);
         try std.testing.expectError(ParseError.InvalidEntityNameChar, result);
     }
 }
