@@ -151,8 +151,8 @@ pub const ParserContext = struct {
             switch (ch) {
                 0x20, 0x09, 0x0D, 0x0A => {},
                 else => {
-                    // We took one alphanumeric for the test
-                    self.rewind(1);
+                    // We took one charactr for the test
+                    _ = self.rewind(1);
 
                     return;
                 },
