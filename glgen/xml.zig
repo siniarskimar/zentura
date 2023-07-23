@@ -10,6 +10,7 @@ pub const Entity = struct {
     children: std.ArrayList(*Entity),
     tag: []const u8,
     textcontent: std.SegmentedList([]const u8, 0),
+    attributes: std.StringHashMap([]const u8),
 
     const Self = @This();
 
@@ -21,6 +22,7 @@ pub const Entity = struct {
         self.parent = parent;
         self.children = std.ArrayList(*Entity).init(allocator);
         self.textcontent = std.SegmentedList([]const u8, 0){};
+        self.attributes = std.StringHashMap([]const u8).init(allocator);
         return self;
     }
 
@@ -36,6 +38,20 @@ pub const Entity = struct {
         }
         self.children.deinit();
         self.textcontent.deinit(self.allocator);
+
+        {
+            var vit = self.attributes.valueIterator();
+            var kit = self.attributes.keyIterator();
+
+            while (vit.next()) |v| {
+                self.allocator.free(v.*);
+            }
+            while (kit.next()) |k| {
+                self.allocator.free(k.*);
+            }
+
+            self.attributes.deinit();
+        }
     }
 
     pub fn appendChild(self: *Self, child: *Entity) !void {
@@ -80,6 +96,8 @@ pub const ParseError = error{
     InvalidEntityNameChar,
     MismatchedEntityCloseTag,
     MultipleDocumentRoots,
+    AttributeWithNoValue,
+    NonEnclosedAttributeValue,
 };
 
 pub const ParserContext = struct {
@@ -203,8 +221,8 @@ fn parseName(parserctx: *ParserContext) ParseError!?[]const u8 {
                 len += 1;
             },
             else => {
-                // whitespace or entity end or entity self close
-                if (ascii.isWhitespace(ch) or ch == '>' or ch == '/') {
+                // whitespace or entity end or entity self close or equal sign
+                if (ascii.isWhitespace(ch) or ch == '>' or ch == '/' or ch == '=') {
                     _ = parserctx.rewind(1);
                     break;
                 }
@@ -318,9 +336,46 @@ pub fn parse(parserctx: *ParserContext, allocator: Allocator) !Document {
                             try entitystack.append(entity);
                         }
 
-                        // TODO: Implement parsing of entity attributes
-
                         const end = ascii.indexOfIgnoreCasePos(parserctx.buffer, parserctx.idx, ">") orelse return ParseError.UnenclosedEntity;
+
+                        while (ascii.indexOfIgnoreCasePos(parserctx.buffer, parserctx.idx, "=")) |eq| {
+                            if (eq > end) {
+                                break;
+                            }
+
+                            parserctx.skipWhitespace();
+                            const attrname = try parseName(parserctx) orelse {
+                                std.debug.print("eof={},\n{s}\n", .{ parserctx.isEof(), parserctx.formatNearBytes() });
+                                return ParseError.UnexpectedEnd;
+                            };
+
+                            parserctx.skipWhitespace();
+                            {
+                                const ch = parserctx.next() orelse return ParseError.UnexpectedEnd;
+                                if (ch != '=') {
+                                    return ParseError.AttributeWithNoValue;
+                                }
+                            }
+                            parserctx.skipWhitespace();
+                            const squote = parserctx.next() orelse return ParseError.UnexpectedEnd;
+
+                            if (squote != '"' and squote != '\'') {
+                                return ParseError.NonEnclosedAttributeValue;
+                            }
+
+                            var attrvalue: []const u8 = parserctx.buffer[parserctx.idx..];
+                            var attrvaluelen: usize = 0;
+
+                            while (parserctx.next()) |ch| {
+                                if (ch == squote) {
+                                    break;
+                                }
+                                attrvaluelen += 1;
+                            }
+
+                            attrvalue = attrvalue[0..attrvaluelen];
+                            try entity.attributes.put(try allocator.dupe(u8, attrname), try allocator.dupe(u8, attrvalue));
+                        }
 
                         // Entity with no content (self-closing)
                         if (parserctx.buffer[end - 1] == '/') {
@@ -357,6 +412,28 @@ test "parse: single entity" {
     try std.testing.expect(result.root != null);
     try std.testing.expect(result.root.?.children.items.len == 0);
     try std.testing.expectEqualSlices(u8, "hello", result.root.?.tag);
+}
+test "parse: attributes" {
+    var parsercontexes = std.ArrayList(ParserContext).init(std.testing.allocator);
+    defer parsercontexes.deinit();
+    try parsercontexes.append(ParserContext.init("<foo hello=\"world\"></foo>", 0));
+    try parsercontexes.append(ParserContext.init("<foo hello='world'></foo>", 0));
+    try parsercontexes.append(ParserContext.init("<foo hello='world'/>", 0));
+
+    for (0..parsercontexes.items.len) |i| {
+        var context = &parsercontexes.items[i];
+        var result = try parse(context, std.testing.allocator);
+        defer result.deinit();
+        try std.testing.expect(result.root != null);
+        try std.testing.expect(result.root.?.children.items.len == 0);
+        try std.testing.expectEqualSlices(u8, "foo", result.root.?.tag);
+        try std.testing.expectEqual(result.root.?.attributes.count(), 1);
+        {
+            const hello_attr = result.root.?.attributes.get("hello");
+            try std.testing.expect(hello_attr != null);
+            try std.testing.expectEqualSlices(u8, hello_attr.?, "world");
+        }
+    }
 }
 
 test "parse: multiple roots" {
