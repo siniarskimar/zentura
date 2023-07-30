@@ -38,6 +38,21 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    const glgen = b.addExecutable(.{
+        .name = "glgen",
+        .root_source_file = .{ .path = "tools/glgen/glgen.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const glgen_cmd = b.addRunArtifact(glgen);
+    if (b.args) |args| {
+        glgen_cmd.addArgs(args);
+    }
+
+    const glgen_step = b.step("glgen", "Generate OpenGL bindings");
+    glgen_step.dependOn(&glgen_cmd.step);
+
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
