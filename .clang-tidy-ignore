@@ -1,4 +1,0 @@
-src/include/*.h
-src/include/*.hpp
-src/stb_image.c
-subprojects/*

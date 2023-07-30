@@ -20,18 +20,10 @@
 *.o
 *.obj
 
-# Precompiled Headers
-*.gch
-*.pch
-
 # Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
 
 # Compiled Static libraries
 *.lai
@@ -44,13 +36,15 @@
 *.out
 *.app
 
-# Ignore clangd .cache/
-.cache/
-
-# Ignore downloaded subprojects
-subprojects/*/
-!subprojects/glad
-!subprojects/nothings_stb
-
 # Ignore CPython cache
 __pycache__/
+
+### zig ###
+# Zig programming language
+
+zig-cache/
+zig-out/
+build/
+build-*/
+docgen_tmp/
+
