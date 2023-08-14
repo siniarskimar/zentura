@@ -18,18 +18,22 @@ pub fn build(b: *std.build.Builder) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const exe = b.addExecutable(.{
+    const zcmdargs = b.createModule(.{
+        .source_file = .{ .path = "src/zcmdargs.zig" },
+    });
+
+    const zen = b.addExecutable(.{
         .name = "zen",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
-    exe.linkSystemLibrary("glfw");
-    exe.linkLibC();
+    zen.linkSystemLibrary("glfw");
+    zen.linkLibC();
 
-    b.installArtifact(exe);
+    b.installArtifact(zen);
 
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(zen);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
@@ -44,6 +48,7 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
+    glgen.addModule("zcmdargs", zcmdargs);
 
     const glgen_cmd = b.addRunArtifact(glgen);
     if (b.args) |args| {
@@ -53,12 +58,24 @@ pub fn build(b: *std.build.Builder) void {
     const glgen_step = b.step("glgen", "Generate OpenGL bindings");
     glgen_step.dependOn(&glgen_cmd.step);
 
-    const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&unit_tests.step);
+
+    {
+        const unit_tests = b.addTest(.{
+            .root_source_file = .{ .path = zen.root_src.?.path },
+            .target = target,
+            .optimize = optimize,
+        });
+        const test_run = b.addRunArtifact(unit_tests);
+        test_step.dependOn(&test_run.step);
+    }
+    {
+        const zcmdargs_tests = b.addTest(.{
+            .root_source_file = .{ .path = zcmdargs.source_file.path },
+            .target = target,
+            .optimize = optimize,
+        });
+        const test_run = b.addRunArtifact(zcmdargs_tests);
+        test_step.dependOn(&test_run.step);
+    }
 }
