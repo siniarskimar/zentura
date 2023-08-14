@@ -1,0 +1,22 @@
+name: 'Zig code formatting check'
+
+on:
+  push:
+    paths:
+      - '**.zig'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - '**.zig'
+
+jobs:
+  linux-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.11.0
+      - run: zig fmt --check src/
+
