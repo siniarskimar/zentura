@@ -88,6 +88,4 @@ pub fn main() !void {
         return err;
     };
     defer document.deinit();
-
-    std.log.info("Done!", .{});
 }

@@ -44,7 +44,7 @@ pub fn build(b: *std.build.Builder) void {
 
     const glgen = b.addExecutable(.{
         .name = "glgen",
-        .root_source_file = .{ .path = "tools/glgen/glgen.zig" },
+        .root_source_file = .{ .path = "src/glgen/glgen.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -76,6 +76,15 @@ pub fn build(b: *std.build.Builder) void {
             .optimize = optimize,
         });
         const test_run = b.addRunArtifact(zcmdargs_tests);
+        test_step.dependOn(&test_run.step);
+    }
+    {
+        const glgen_tests = b.addTest(.{
+            .root_source_file = .{ .path = glgen.root_src.?.path },
+            .target = target,
+            .optimize = optimize,
+        });
+        const test_run = b.addRunArtifact(glgen_tests);
         test_step.dependOn(&test_run.step);
     }
 }
