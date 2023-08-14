@@ -39,7 +39,7 @@ pub fn main() !void {
 
     c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 2);
     c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 1);
-    c.glfwWindowHint(c.GLFW_CONTEXT_DEBUG, c.GLFW_TRUE);
+    c.glfwWindowHint(c.GLFW_OPENGL_DEBUG_CONTEXT, c.GLFW_TRUE);
 
     const window = c.glfwCreateWindow(800, 600, "zen", null, null);
     if (window == null) {
