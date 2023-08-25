@@ -1,9 +1,10 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Type = std.builtin.Type;
-const builtin = @import("builtin");
+const ArgIterator = std.process.ArgIterator;
 
-pub fn SliceIter(comptime T: type) type {
+pub fn SliceIterator(comptime T: type) type {
     return struct {
         const Self = @This();
 
@@ -19,434 +20,396 @@ pub fn SliceIter(comptime T: type) type {
     };
 }
 
-pub const ParserDescription = struct {
-    options: []const Option = &[_]Option{},
-    positionals: []const Positional = &[_]Positional{},
-    // argument_names: []const []const u8 = &[_][]const u8{},
-
-    pub const Option = struct {
-        name: []const u8,
-        short_name: ?u8 = null,
-
-        /// Expected value type,
-        /// void indicates that option is valueless
-        value_type: type = void,
-        default_value: ?*const anyopaque = null,
-    };
-
-    pub const Positional = struct {
-        name: []const u8,
-
-        /// Expected value type
-        /// cannot be void
-        value_type: type,
-
-        /// Replaces positional name on the help page
-        /// <value_type> -> <docstring>
-        docstring: ?[]const u8 = null,
-
-        required: bool = true,
-    };
-
-    const Self = @This();
-
-    pub fn addOption(comptime self: *Self, comptime argument: Option) void {
-        self.options = self.options ++ [_]Option{argument};
+pub fn ParseResult(comptime Spec: type) type {
+    if (@typeInfo(Spec) != .Struct) {
+        @compileError("Option specification has to be a struct!");
     }
 
-    pub fn addPositional(comptime self: *Self, comptime argument: Positional) void {
-        self.positionals = self.positionals ++ [_]Positional{argument};
+    const spec_info = @typeInfo(Spec).Struct;
+    if (spec_info.is_tuple) {
+        @compileError("Option specification cannot be a tuple!");
     }
 
-    pub fn constructResultType(comptime self: *const Self) type {
-        var fields: [self.positionals.len + self.options.len]Type.StructField = undefined;
-        for (self.positionals, 0..) |positional, idx| {
-            if (positional.value_type == void) {
-                @compileError("A positional argument cannot have a value type of void");
-            }
-            const final_type = @Type(.{ .Optional = .{ .child = positional.value_type } });
-            fields[idx] = .{
-                .name = positional.name,
-                .type = final_type,
-                .default_value = &@as(final_type, null),
-                .is_comptime = false,
-                .alignment = 0,
-            };
-        }
-        for (self.options, self.positionals.len..) |option, idx| {
-            const final_type = switch (option.value_type) {
+    const OptionContainer = blk: {
+        var fields: [spec_info.fields.len]Type.StructField = undefined;
+
+        for (spec_info.fields, 0..) |field, idx| {
+            if (@typeInfo(field.type) == .Optional)
+                @compileError("optional types are disallowed");
+
+            // void -> bool
+            // []void -> i32
+            // T -> ?T
+            const FinalType = if (field.default_value) |_| field.type else switch (field.type) {
                 void => bool,
-                []void => u32,
-                else => |T| @Type(.{ .Optional = .{ .child = T } }),
+                []void => i32,
+                else => @Type(.{ .Optional = .{ .child = field.type } }),
             };
-            const default_value: ?*const anyopaque = blk: {
-                if (option.default_value != null) {
-                    break :blk option.default_value;
-                }
 
-                switch (option.value_type) {
-                    void => break :blk &false,
-                    []void => break :blk &@as(final_type, 0),
-                    else => |T| break :blk &@as(?T, null),
-                }
+            const default: ?*const anyopaque = if (field.default_value) |_|
+                field.default_value
+            else switch (field.type) {
+                void => &false,
+                []void => &@as(FinalType, 0),
+                else => |T| &@as(?T, null),
             };
+
+            // @compileLog(field.type, FinalType, default);
             fields[idx] = .{
-                .name = option.name,
-                .type = final_type,
-                .default_value = default_value,
+                .name = field.name,
+                .type = FinalType,
+                .default_value = default,
                 .is_comptime = false,
                 .alignment = 0,
             };
         }
-        // Duplicate fields will be caught by @Type
-        const ArgumentContainer = @Type(.{ .Struct = .{
-            .layout = .Auto,
-            .fields = &fields,
-            .decls = &[_]Type.Declaration{},
-            .is_tuple = false,
-        } });
 
-        return struct {
-            args: ArgumentContainer = ArgumentContainer{},
-        };
-    }
-};
+        break :blk @Type(.{
+            .Struct = .{
+                .layout = .Auto,
+                .fields = &fields,
+                .decls = &[_]Type.Declaration{},
+                .is_tuple = false,
+            },
+        });
+    };
 
-fn parseBoolean(buffer: []const u8) ?bool {
-    // zig fmt: off
-    return
-        if (std.mem.eql(u8, buffer, "true")) true
-        else if (std.mem.eql(u8, buffer, "false")) false
-        else return null;
-    // zig fmt: on
-}
-
-const ParseError = error{
-    ExpectedValue,
-    BadValue,
-    InvalidOptionName,
-    UnknownOption,
-    NotAnOption,
-} || std.fmt.ParseIntError || std.fmt.ParseFloatError;
-
-const Diagnostics = struct {
-    // TODO: Provide diagnostics for the end user
-};
-
-const ParseErrorWrapper = struct {
-    err: ParseError,
-    stacktrace: ?*std.builtin.StackTrace,
-
-    fn init(err: ParseError, stacktrace: ?*std.builtin.StackTrace) ParseErrorWrapper {
-        return .{ .err = err, .stacktrace = stacktrace };
-    }
-};
-
-pub fn ArgumentParser(comptime comptime_parser: ParserDescription) type {
     return struct {
+        options: OptionContainer,
+        allocator: Allocator,
+        unknown: std.ArrayList([]const u8),
+
         const Self = @This();
-        const Result = comptime_parser.constructResultType();
 
-        /// A slightly modified std.ComptimeStringMap
-        const ParserDispatcher = constructParserDispather();
-
-        const ParseContext = struct {
-            parse_result: *Result,
-            argument_iterator: *SliceIter([]const u8),
-            positional_idx: usize = 0,
-            current_argument: ?[]const u8 = null,
-            current_option_name: ?[]const u8 = null,
-            argument_eql: ?usize = null,
-            diagnostics: ?*Diagnostics = null,
-
-            fn loadOption(self: *@This(), argument: []const u8) bool {
-                if (argument.len < 2) {
-                    return false;
-                }
-                const maybe_eql = std.mem.indexOf(u8, argument, "=");
-                const optname_end = if (maybe_eql) |eql| eql else argument.len;
-                const optname_start = switch (argument[0]) {
-                    else => return false,
-                    '-' => switch (argument[1]) {
-                        else => @as(usize, 1),
-                        '-' => @as(usize, 2),
-                    },
-                };
-
-                self.argument_eql = maybe_eql;
-                self.current_option_name = argument[optname_start..optname_end];
-                self.current_argument = argument;
-                return true;
-            }
-        };
-
-        const ValueParserFn = fn (ctx: *ParseContext) ?ParseErrorWrapper;
-
-        fn parseValue(
-            comptime OptionValueType: type,
-            comptime ResultType: type,
-            currentvalue: *ResultType,
-            valuebuffer: []const u8,
-        ) ParseError!ResultType {
-            return switch (OptionValueType) {
-                void => true,
-                []void => currentvalue.* + 1,
-                []const u8 => valuebuffer,
-
-                bool => parseBoolean(valuebuffer) orelse return ParseError.BadValue,
-
-                else => switch (@typeInfo(OptionValueType)) {
-                    .Int => try std.fmt.parseInt(OptionValueType, valuebuffer, 0),
-                    .Float => try std.fmt.parseFloat(OptionValueType, valuebuffer, 0),
-                    .Enum => std.meta.stringToEnum(OptionValueType, valuebuffer) orelse return ParseError.BadValue,
-                    else => @compileError("No valid parser for type " ++ @typeName(OptionValueType)),
-                },
+        pub fn init(allocator: Allocator) Self {
+            return .{
+                .allocator = allocator,
+                .options = OptionContainer{},
+                .unknown = std.ArrayList([]const u8).init(allocator),
             };
         }
 
-        fn getValueStr(ctx: *ParseContext) ParseError![]const u8 {
-            const currargument = ctx.current_argument.?;
-            const maybe_eql = std.mem.indexOf(u8, currargument, "=");
-            var valuebuffer: []const u8 = undefined;
-
-            if (maybe_eql) |eql| {
-                valuebuffer = currargument[eql + 1 ..];
-            } else {
-                valuebuffer = ctx.argument_iterator.next() orelse "";
-            }
-
-            if (valuebuffer.len == 0) {
-                return ParseError.ExpectedValue;
-            }
-            return valuebuffer;
+        pub fn appendUnknown(self: *Self, arg: []const u8) !void {
+            try self.unknown.append(self.allocator.dupe(u8, arg));
         }
 
-        fn ValueParser(comptime option: ParserDescription.Option) *const ValueParserFn {
-            // gotta love generating functions at comptime
-            return &(struct {
-                fn parse(ctx: *ParseContext) ?ParseErrorWrapper {
-                    const currargument = ctx.current_argument.?;
-                    if (currargument.len == 0) unreachable;
-
-                    var field = &@field(ctx.parse_result.args, option.name);
-                    var valuebuffer: []const u8 = undefined;
-
-                    switch (option.value_type) {
-                        void, []void => {},
-                        else => {
-                            valuebuffer = getValueStr(ctx) catch |err| {
-                                return ParseErrorWrapper.init(err, @errorReturnTrace());
-                            };
-                        },
-                    }
-
-                    field.* = parseValue(
-                        option.value_type,
-                        @TypeOf(@field(ctx.parse_result.args, option.name)),
-                        field,
-                        valuebuffer,
-                    ) catch |err| {
-                        return ParseErrorWrapper.init(err, @errorReturnTrace());
-                    };
-
-                    return null;
-                }
-            }).parse;
-        }
-
-        pub fn constructParserDispather() type {
-            @setEvalBranchQuota(2000);
-            const computed = inner: {
-                const KV = struct {
-                    key: []const u8,
-                    value: *const ValueParserFn,
-                };
-
-                var short_count = 0;
-                for (comptime_parser.options) |opt| if (opt.short_name) |_| {
-                    short_count += 1;
-                };
-
-                var short_idx = 0;
-                var sorted_kvs: [comptime_parser.options.len + short_count]KV = undefined;
-
-                for (comptime_parser.options, 0..) |opt, idx| {
-                    sorted_kvs[idx] = .{ .key = opt.name, .value = ValueParser(opt) };
-                    if (opt.short_name) |short| {
-                        sorted_kvs[comptime_parser.options.len + short_idx] = .{ .key = &[_]u8{short}, .value = ValueParser(opt) };
-                        short_idx += 1;
-                    }
-                }
-
-                const SortContext = struct {
-                    kvs: []KV,
-
-                    pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
-                        return ctx.kvs[a].key.len < ctx.kvs[b].key.len;
-                    }
-
-                    pub fn swap(ctx: @This(), a: usize, b: usize) void {
-                        return std.mem.swap(KV, &ctx.kvs[a], &ctx.kvs[b]);
-                    }
-                };
-
-                std.mem.sortUnstableContext(0, sorted_kvs.len, SortContext{ .kvs = &sorted_kvs });
-                const kvs_len = sorted_kvs.len;
-                const min_len = sorted_kvs[0].key.len;
-                const max_len = sorted_kvs[kvs_len - 1].key.len;
-
-                var len_indexes: [max_len + 1]usize = undefined;
-                var len: usize = 0;
-                var i: usize = 0;
-                while (len <= max_len) : (len += 1) {
-                    // find the first keyword len == len
-                    while (len > sorted_kvs[i].key.len) {
-                        i += 1;
-                    }
-                    len_indexes[len] = i;
-                }
-                break :inner .{
-                    .min_len = min_len,
-                    .max_len = max_len,
-                    .sorted_kvs = sorted_kvs,
-                    .len_indexes = len_indexes,
-                };
-            };
-
-            return struct {
-                const kvs = computed.sorted_kvs;
-
-                fn get(key: []const u8) ?*const ValueParserFn {
-                    if (key.len < computed.min_len or key.len > computed.max_len) {
-                        return null;
-                    }
-                    var kvs_idx = computed.len_indexes[key.len];
-                    while (true) {
-                        const kv = computed.sorted_kvs[kvs_idx];
-
-                        // This seems pointless, but std.ComptimeStringMap does it this way
-                        if (kv.key.len != key.len) {
-                            return null;
-                        }
-
-                        if (std.mem.eql(u8, key, kv.key)) {
-                            return kv.value;
-                        }
-                        kvs_idx += 1;
-                        if (kvs_idx >= computed.sorted_kvs.len) {
-                            break;
-                        }
-                    }
-                    return null;
-                }
-            };
-        }
-
-        /// Dispatches work to the correct option parser
-        /// by directly manipulating the parse result
-        fn parseOption(ctx: *ParseContext) !void {
-            const optname = ctx.current_option_name.?;
-            if (optname.len == 0) {
-                return ParseError.NotAnOption;
+        pub fn deinit(self: *Self) void {
+            for (self.unknown.items) |unknown| {
+                self.allocator.free(unknown);
             }
-
-            const valueParser = ParserDispatcher.get(optname) orelse return ParseError.UnknownOption;
-            if (valueParser(ctx)) |err_wrapper| {
-                if (err_wrapper.stacktrace) |stacktrace| {
-                    std.debug.dumpStackTrace(stacktrace.*);
-                }
-                return err_wrapper.err;
-            }
-        }
-
-        fn parsePositional(ctx: *ParseContext) !void {
-            _ = ctx;
-        }
-
-        pub fn parseArgSlice(slice: []const []const u8) !Result {
-            var arg_iterator = SliceIter([]const u8){ .slice = slice, .index = 0 };
-            var parse_result = Result{};
-            var ctx = ParseContext{
-                .parse_result = &parse_result,
-                .argument_iterator = &arg_iterator,
-                .current_argument = "",
-                .diagnostics = null,
-            };
-
-            while (arg_iterator.next()) |arg| {
-                ctx.current_argument = arg;
-                switch (arg[0]) {
-                    '-' => {
-                        if (ctx.loadOption(arg) == false) unreachable;
-                        if (arg.len >= 3 and arg[1] == '-') {
-                            // long name
-                            // --......
-                            try parseOption(&ctx);
-                        } else {
-                            // short name
-                            // could be a group
-                            // -....
-                            const option_group = ctx.current_option_name.?;
-
-                            for (option_group) |option| {
-                                ctx.current_option_name = &[1]u8{option};
-                                try parseOption(&ctx);
-                            }
-                        }
-                    },
-                    else => {
-                        // positional
-                    },
-                }
-            }
-            return parse_result;
+            self.unknown.deinit();
         }
     };
 }
 
-const test_parser = blk: {
-    var desc = ParserDescription{};
-    desc.addOption(.{ .name = "foo", .short_name = 'f' });
-    desc.addOption(.{ .name = "fool", .short_name = 'd', .value_type = bool });
-    desc.addOption(.{ .name = "goal", .short_name = 'g', .value_type = bool });
-    desc.addOption(.{ .name = "verbose", .short_name = 'v', .value_type = []void });
-    desc.addOption(.{ .name = "integer", .short_name = 'i', .value_type = i32 });
-    desc.addOption(.{ .name = "string", .value_type = []const u8 });
-    desc.addOption(.{ .name = "enum", .value_type = enum { Abra, Cadabra } });
-    // desc.addOption(.{ .name = "union", .value_type = union { a: i32 } });
-    break :blk ArgumentParser(desc);
-};
+pub fn parseProcessArgs(comptime Spec: type, allocator: Allocator) !ParseResult(Spec) {
+    var iterator = try std.process.argsWithAllocator(allocator);
+    defer iterator.deinit();
+    return try parseInternal(Spec, allocator, &iterator);
+}
 
-test "long options" {
-    {
-        // zig fmt: off
-        const arguments = try test_parser.parseArgSlice(&[_][]const u8{
-            "--fool", "false",
-            "--goal", "true",
-            "--foo",
-            "--verbose", "--verbose",
-            "--integer", "720",
-            "--string=Never gonna give you up",
-            "--enum=Abra"
-        });
-        // zig fmt: on
+/// Parse command line arguments from a slice
+/// Expects arguments without program name
+pub fn parseSliceArgs(comptime Spec: type, allocator: Allocator, args: []const []const u8) !ParseResult(Spec) {
+    var iter = SliceIterator([]const u8){ .slice = args, .index = 0 };
+    return try parseInternal(Spec, allocator, &iter);
+}
 
-        try std.testing.expectEqual(false, arguments.args.fool.?);
-        try std.testing.expectEqual(true, arguments.args.goal.?);
-        try std.testing.expectEqual(true, arguments.args.foo);
-        try std.testing.expect(arguments.args.verbose == 2);
-        try std.testing.expect(arguments.args.integer.? == 720);
-        try std.testing.expectEqualStrings("Never gonna give you up", arguments.args.string.?);
-        try std.testing.expect(arguments.args.@"enum".? == .Abra);
+pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: anytype) !ParseResult(Spec) {
+    validateOptionSpecification(Spec);
+    validateArgIterator(arg_iterator.*);
+
+    var parse_result = ParseResult(Spec).init(allocator);
+    errdefer parse_result.deinit();
+
+    argument_loop: while (arg_iterator.next()) |arg| {
+        if (arg.len == 0) {
+            unreachable; // arg.len == 0, this should not happen - no known OS does this
+        }
+
+        if (std.mem.startsWith(u8, arg, "--")) {
+            if (arg.len == 2) {
+                unreachable; // TODO: implement double dash
+            }
+            const maybe_eql = std.mem.indexOf(u8, arg, "=");
+            const optname = arg[2 .. maybe_eql orelse arg.len];
+
+            inline for (std.meta.fields(Spec)) |option| {
+                if (std.mem.eql(u8, option.name, optname)) {
+                    try parseOption(Spec, option, arg, arg_iterator, &parse_result);
+                    continue :argument_loop;
+                }
+            }
+            return error.UnknownArgument;
+        } else if (std.mem.startsWith(u8, arg, "-")) {
+            if (arg.len == 1) {
+                unreachable; // TODO: implement single dash
+            }
+            if (!@hasDecl(Spec, "shorthands")) {
+                return error.NoShorthandsDeclared;
+            }
+            group_loop: for (arg[1..]) |arg_shorthand| {
+                inline for (std.meta.fields(@TypeOf(Spec.shorthands))) |shorthand| {
+                    if (arg_shorthand == shorthand.name[0]) {
+                        const linked_option = std.meta.fieldInfo(Spec, @field(Spec.shorthands, shorthand.name));
+                        try parseOption(Spec, linked_option, arg, arg_iterator, &parse_result);
+                        continue :group_loop;
+                    }
+                }
+                return error.UnknownArgument;
+            }
+        }
+    }
+    return parse_result;
+}
+
+fn getNextOptionValue(argument: []const u8, arg_iterator: anytype) ![]const u8 {
+    const maybe_eql = std.mem.indexOf(u8, argument, "=");
+
+    const valuebuffer = if (maybe_eql) |eql|
+        argument[eql + 1 ..]
+    else
+        (arg_iterator.next() orelse return error.ExpectedValue);
+
+    if (valuebuffer.len == 0) {
+        return error.ExpectedValue;
+    }
+
+    return valuebuffer;
+}
+
+fn parseOption(comptime Spec: type, comptime option_info: Type.StructField, argument: []const u8, arg_iterator: anytype, parse_result: *ParseResult(Spec)) !void {
+    if (@typeInfo(@TypeOf(arg_iterator)) != .Pointer) {
+        @compileError("arg_iterator has to be a pointer");
+    }
+    var result_option_field = &@field(parse_result.options, option_info.name);
+
+    switch (option_info.type) {
+        void => result_option_field.* = true,
+        []void => result_option_field.* += 1,
+        bool => {
+            const valuebuffer = try getNextOptionValue(argument, arg_iterator);
+            const truthy = std.mem.eql(u8, valuebuffer, "true");
+
+            if (truthy) {
+                result_option_field.* = true;
+                return;
+            }
+
+            const falsy = std.mem.eql(u8, valuebuffer, "false");
+            if (falsy) {
+                result_option_field.* = false;
+                return;
+            }
+            return error.BadValue;
+        },
+        []const u8 => result_option_field.* = try getNextOptionValue(argument, arg_iterator),
+        else => |T| switch (@typeInfo(T)) {
+            .Int => {
+                const valuebuffer = try getNextOptionValue(argument, arg_iterator);
+                result_option_field.* = std.fmt.parseInt(T, valuebuffer, 0) catch return error.BadValue;
+            },
+            .Float => {
+                const valuebuffer = try getNextOptionValue(argument, arg_iterator);
+                result_option_field.* = std.fmt.parseFloat(T, valuebuffer) catch return error.BadValue;
+            },
+            else => @compileError("no parser defined for " ++ @typeName(T)),
+        },
+        // else => unreachable,
     }
 }
 
-test "errors" {
-    try std.testing.expectError(
-        error.BadValue,
-        test_parser.parseArgSlice(&[_][]const u8{
-            "--fool",
-            "treu",
-        }),
-    );
+fn validateArgIterator(candidate: anytype) void {
+    const T = @TypeOf(candidate);
+
+    if (@typeInfo(T) != .Struct)
+        @compileError("validation of arg_iterator failed: must be a struct");
+
+    if (!@hasDecl(T, "next") or @typeInfo(@TypeOf(T.next)) != .Fn)
+        @compileError("validation of arg_iterator failed: must have a function named 'next'");
+
+    const Next = @TypeOf(T.next);
+    if (@typeInfo(Next).Fn.return_type.? != ?[]const u8)
+        @compileError("validation of arg_iterator failed: function named 'next' must return ?[]const u8");
+
+    if (@typeInfo(Next).Fn.params.len != 1)
+        @compileError("validation of arg_iterator failed: function named 'next' must accept single parameter");
+}
+
+fn validateOptionSpecification(comptime Spec: type) void {
+    if (@hasDecl(Spec, "shorthands")) {
+        if (@typeInfo(@TypeOf(Spec.shorthands)) != .Struct) @compileError("shorthand container must be a struct");
+
+        inline for (std.meta.fields(@TypeOf(Spec.shorthands)), 0..) |shorthand, idx| {
+            _ = idx;
+            if (@typeInfo(shorthand.type) != .EnumLiteral) {
+                @compileError("the assigned value of shorthand must be an enum literal (" ++ shorthand.name ++ ")");
+            }
+            if (shorthand.name.len > 1) {
+                @compileError("shorthand must be one letter long (" ++ shorthand.name ++ ")");
+            }
+            const linked_option_name = @tagName(@field(Spec.shorthands, shorthand.name));
+            if (!@hasField(Spec, linked_option_name)) {
+                @compileError("shorthand " ++ shorthand.name ++ " links to non existant option " ++ linked_option_name);
+            }
+        }
+    }
+}
+
+test "valueless options" {
+    const TestOptions = struct {
+        foo: void,
+        bar: void,
+        verbose: []void,
+
+        const shorthands = .{
+            .f = .foo,
+            .b = .bar,
+            .v = .verbose,
+        };
+
+        const docs = .{};
+    };
+    const argument_lines = [_][]const []const u8{
+        &[_][]const u8{
+            "--foo",
+            "--bar",
+            "--verbose",
+            "--verbose",
+        },
+        &[_][]const u8{ "-f", "-b", "-v", "-v" },
+        &[_][]const u8{"-fbvv"},
+    };
+    for (argument_lines) |argument_line| {
+        const result = try parseSliceArgs(TestOptions, std.testing.allocator, argument_line);
+        try std.testing.expect(result.options.foo == true);
+        try std.testing.expect(result.options.bar == true);
+        try std.testing.expect(result.options.verbose == 2);
+    }
+}
+
+test "options with values" {
+    const Options = struct {
+        rboolean: bool,
+        rinteger: i32,
+        rfloat: f32,
+        rstr: []const u8,
+        boolean: bool = true,
+        integer: i32 = 420,
+        float: f32 = 6.9,
+        str: []const u8 = "Ya like jazzz?",
+
+        flag: void, // for testing groups
+
+        const shorthands = .{
+            .b = .rboolean,
+            .i = .rinteger,
+            .f = .rfloat,
+            .s = .rstr,
+            .B = .boolean,
+            .I = .integer,
+            .F = .float,
+            .S = .str,
+            .L = .flag,
+        };
+    };
+
+    const required_values = [_][]const []const u8{
+        &[_][]const u8{ "--rboolean", "true", "--rinteger", "200", "--rfloat", "0.1", "--rstr", "Yea i do!", "--flag" },
+        &[_][]const u8{ "--rboolean=true", "--rinteger=200", "--rfloat=0.1", "--rstr=Yea i do!", "--flag" },
+        &[_][]const u8{ "-L", "-b", "true", "-i", "200", "-f", "0.1", "-s", "Yea i do!", "-L" },
+        &[_][]const u8{ "-Lb", "true", "-Li", "200", "-Lf", "0.1", "-Ls", "Yea i do!" },
+    };
+
+    const changing_optionals = [_][]const []const u8{
+        &[_][]const u8{ "--boolean", "false", "--integer", "100", "--float", "0.5", "--str", "Who would listen to that?", "--flag" },
+        &[_][]const u8{ "--boolean=false", "--integer=100", "--float=0.5", "--str=Who would listen to that?", "--flag" },
+        &[_][]const u8{ "-L", "-B", "false", "-I", "100", "-F", "0.5", "-S", "Who would listen to that?", "-L" },
+        &[_][]const u8{ "-LB", "false", "-LI", "100", "-LF", "0.5", "-LS", "Who would listen to that?" },
+    };
+    for (required_values) |argument_line| {
+        const result = try parseSliceArgs(Options, std.testing.allocator, argument_line);
+        try std.testing.expectEqual(true, result.options.flag);
+        try std.testing.expectEqual(true, result.options.rboolean.?);
+        try std.testing.expectEqual(@as(i32, 200), result.options.rinteger.?);
+        try std.testing.expectEqual(@as(f32, 0.1), result.options.rfloat.?);
+        try std.testing.expectEqualSlices(u8, "Yea i do!", result.options.rstr.?);
+
+        try std.testing.expectEqual(true, result.options.boolean);
+        try std.testing.expectEqual(@as(i32, 420), result.options.integer);
+        try std.testing.expectEqual(@as(f32, 6.9), result.options.float);
+        try std.testing.expectEqualSlices(u8, "Ya like jazzz?", result.options.str);
+    }
+
+    for (changing_optionals) |argument_line| {
+        const result = try parseSliceArgs(Options, std.testing.allocator, argument_line);
+
+        try std.testing.expectEqual(true, result.options.flag);
+        try std.testing.expectEqual(false, result.options.boolean);
+        try std.testing.expectEqual(@as(i32, 100), result.options.integer);
+        try std.testing.expectEqual(@as(f32, 0.5), result.options.float);
+        try std.testing.expectEqualSlices(u8, "Who would listen to that?", result.options.str);
+    }
+}
+
+test "error.BadValue" {
+    const Options = struct {
+        boolean: bool,
+        integer: i32,
+        float: f32,
+        str: []const u8,
+
+        const shorthands = .{
+            .b = .boolean,
+            .i = .integer,
+            .f = .float,
+            .s = .str,
+        };
+    };
+
+    const argument_lines = [_][]const []const u8{
+        &[_][]const u8{ "--boolean", "treu" },
+        &[_][]const u8{ "-b", "treu" },
+        &[_][]const u8{"--boolean=treu"},
+        &[_][]const u8{"-b=treu"},
+
+        &[_][]const u8{ "--integer", "0.6" },
+        &[_][]const u8{ "-i", "0.6" },
+        &[_][]const u8{"--integer=0.6"},
+        &[_][]const u8{"-i=0.6"},
+
+        &[_][]const u8{ "--float", "value" },
+        &[_][]const u8{ "-f", "value" },
+        &[_][]const u8{"--float=value"},
+        &[_][]const u8{"-f=value"},
+
+        // []const u8 can't have a bad value
+    };
+    for (argument_lines) |argument_line| {
+        try std.testing.expectError(error.BadValue, parseSliceArgs(Options, std.testing.allocator, argument_line));
+    }
+}
+
+test "error.ExpectedValue" {
+    const Options = struct {
+        ping: void,
+        pong: u32,
+
+        const shorthands = .{
+            .p = .ping,
+            .P = .pong,
+        };
+    };
+
+    const argument_lines = [_][]const []const u8{
+        &[_][]const u8{ "--ping", "--pong" },
+        &[_][]const u8{ "-p", "-P" },
+        &[_][]const u8{"-pP="},
+        &[_][]const u8{"-P"},
+
+        // []const u8 can't have a bad value
+    };
+    for (argument_lines) |argument_line| {
+        try std.testing.expectError(error.ExpectedValue, parseSliceArgs(Options, std.testing.allocator, argument_line));
+    }
 }
