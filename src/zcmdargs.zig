@@ -146,6 +146,7 @@ pub fn ParseResult(comptime Spec: type) type {
 
 pub fn parseProcessArgs(comptime Spec: type, allocator: Allocator) !ParseResult(Spec) {
     var iterator = try std.process.argsWithAllocator(allocator);
+    _ = iterator.next();
     defer iterator.deinit();
     return try parseInternal(Spec, allocator, &iterator);
 }
@@ -310,11 +311,13 @@ fn validateArgIterator(candidate: anytype) void {
     if (!@hasDecl(T, "next") or @typeInfo(@TypeOf(T.next)) != .Fn)
         @compileError("validation of arg_iterator failed: must have a function named 'next'");
 
-    const Next = @TypeOf(T.next);
-    if (@typeInfo(Next).Fn.return_type.? != ?[]const u8)
-        @compileError("validation of arg_iterator failed: function named 'next' must return ?[]const u8");
+    const FnNext = @TypeOf(T.next);
+    switch (@typeInfo(FnNext).Fn.return_type.?) {
+        ?[]const u8, ?[:0]const u8 => {},
+        else => @compileError("validation of arg_iterator failed: function named 'next' must return ?[]const u8"),
+    }
 
-    if (@typeInfo(Next).Fn.params.len != 1)
+    if (@typeInfo(FnNext).Fn.params.len != 1)
         @compileError("validation of arg_iterator failed: function named 'next' must accept single parameter");
 }
 
