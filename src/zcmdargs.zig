@@ -170,6 +170,11 @@ fn getNextOptionValue(argument: []const u8, arg_iterator: anytype) ![]const u8 {
         argument[eql + 1 ..]
     else
         (arg_iterator.next() orelse return error.ExpectedValue);
+
+    if (valuebuffer.len == 0) {
+        return error.ExpectedValue;
+    }
+
     return valuebuffer;
 }
 
@@ -344,5 +349,67 @@ test "options with values" {
         try std.testing.expectEqual(@as(i32, 100), result.options.integer);
         try std.testing.expectEqual(@as(f32, 0.5), result.options.float);
         try std.testing.expectEqualSlices(u8, "Who would listen to that?", result.options.str);
+    }
+}
+
+test "error.BadValue" {
+    const Options = struct {
+        boolean: bool,
+        integer: i32,
+        float: f32,
+        str: []const u8,
+
+        const shorthands = .{
+            .b = .boolean,
+            .i = .integer,
+            .f = .float,
+            .s = .str,
+        };
+    };
+
+    const argument_lines = [_][]const []const u8{
+        &[_][]const u8{ "--boolean", "treu" },
+        &[_][]const u8{ "-b", "treu" },
+        &[_][]const u8{"--boolean=treu"},
+        &[_][]const u8{"-b=treu"},
+
+        &[_][]const u8{ "--integer", "0.6" },
+        &[_][]const u8{ "-i", "0.6" },
+        &[_][]const u8{"--integer=0.6"},
+        &[_][]const u8{"-i=0.6"},
+
+        &[_][]const u8{ "--float", "value" },
+        &[_][]const u8{ "-f", "value" },
+        &[_][]const u8{"--float=value"},
+        &[_][]const u8{"-f=value"},
+
+        // []const u8 can't have a bad value
+    };
+    for (argument_lines) |argument_line| {
+        try std.testing.expectError(error.BadValue, parseSliceArgs(Options, std.testing.allocator, argument_line));
+    }
+}
+
+test "error.ExpectedValue" {
+    const Options = struct {
+        ping: void,
+        pong: u32,
+
+        const shorthands = .{
+            .p = .ping,
+            .P = .pong,
+        };
+    };
+
+    const argument_lines = [_][]const []const u8{
+        &[_][]const u8{ "--ping", "--pong" },
+        &[_][]const u8{ "-p", "-P" },
+        &[_][]const u8{"-pP="},
+        &[_][]const u8{"-P"},
+
+        // []const u8 can't have a bad value
+    };
+    for (argument_lines) |argument_line| {
+        try std.testing.expectError(error.ExpectedValue, parseSliceArgs(Options, std.testing.allocator, argument_line));
     }
 }
