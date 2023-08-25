@@ -163,6 +163,21 @@ pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: an
 
     var parse_result = ParseResult(Spec).init(allocator);
     errdefer parse_result.deinit();
+
+    const required_positional_count = blk: {
+        var result: u32 = 0;
+
+        if (!@hasDecl(Spec, "positionals")) {
+            break :blk 0;
+        }
+        inline for (@typeInfo(Spec.positionals).Struct.fields) |positional| {
+            if (positional.default_value == null) {
+                result += 1;
+            }
+        }
+
+        break :blk result;
+    };
     var current_positional_idx: u32 = 0;
 
     argument_loop: while (arg_iterator.next()) |arg| {
@@ -212,6 +227,9 @@ pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: an
             }
             current_positional_idx += 1;
         }
+    }
+    if (current_positional_idx < required_positional_count) {
+        return error.MissingArguments;
     }
     return parse_result;
 }
