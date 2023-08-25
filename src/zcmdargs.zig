@@ -21,14 +21,8 @@ pub fn SliceIterator(comptime T: type) type {
 }
 
 pub fn ParseResult(comptime Spec: type) type {
-    if (@typeInfo(Spec) != .Struct) {
-        @compileError("Option specification has to be a struct!");
-    }
-
+    validateOptionSpecification(Spec);
     const spec_info = @typeInfo(Spec).Struct;
-    if (spec_info.is_tuple) {
-        @compileError("Option specification cannot be a tuple!");
-    }
 
     const OptionContainer = blk: {
         var fields: [spec_info.fields.len]Type.StructField = undefined;
@@ -73,20 +67,68 @@ pub fn ParseResult(comptime Spec: type) type {
             },
         });
     };
+    const PositionalContainer = blk: {
+        if (!@hasDecl(Spec, "positionals"))
+            break :blk struct {};
+
+        const spec_positionals_info = @typeInfo(Spec.positionals).Struct;
+
+        var fields: [spec_positionals_info.fields.len]Type.StructField = undefined;
+
+        for (spec_positionals_info.fields, 0..) |field, idx| {
+            if (field.type == void or field.type == []void) {
+                @compileError("Positional " ++ field.name ++ " cannot have a type of " ++ @typeName(field.type));
+            }
+
+            if (@typeInfo(field.type) == .Optional) {
+                @compileError("don't use optional types - just assign a default value ( positional " ++ field.name ++ ")");
+            }
+
+            fields[idx] = .{
+                .name = field.name,
+                .type = field.type,
+                .default_value = field.default_value,
+                .is_comptime = false,
+                .alignment = 0,
+            };
+        }
+
+        break :blk @Type(.{
+            .Struct = .{
+                .layout = .Auto,
+                .fields = &fields,
+                .decls = &[_]Type.Declaration{},
+                .is_tuple = false,
+            },
+        });
+    };
 
     return struct {
         options: OptionContainer,
+        positionals: PositionalContainer,
         allocator: Allocator,
         unknown: std.ArrayList([]const u8),
 
         const Self = @This();
 
         pub fn init(allocator: Allocator) Self {
-            return .{
+            var result = Self{
                 .allocator = allocator,
                 .options = OptionContainer{},
+                .positionals = undefined,
                 .unknown = std.ArrayList([]const u8).init(allocator),
             };
+            if (@hasDecl(Spec, "positionals")) {
+                inline for (std.meta.fields(Spec.positionals)) |positional| {
+                    if (positional.default_value != null) {
+                        const aligned: *align(positional.alignment) const anyopaque = @alignCast(positional.default_value.?);
+                        const default: positional.type = @as(*const positional.type, @ptrCast(aligned)).*;
+
+                        @field(result.positionals, positional.name) = default;
+                    }
+                }
+            }
+            return result;
         }
 
         pub fn appendUnknown(self: *Self, arg: []const u8) !void {
@@ -116,11 +158,11 @@ pub fn parseSliceArgs(comptime Spec: type, allocator: Allocator, args: []const [
 }
 
 pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: anytype) !ParseResult(Spec) {
-    validateOptionSpecification(Spec);
     validateArgIterator(arg_iterator.*);
 
     var parse_result = ParseResult(Spec).init(allocator);
     errdefer parse_result.deinit();
+    var current_positional_idx: u32 = 0;
 
     argument_loop: while (arg_iterator.next()) |arg| {
         if (arg.len == 0) {
@@ -158,6 +200,16 @@ pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: an
                 }
                 return error.UnknownArgument;
             }
+        } else {
+            if (!@hasDecl(Spec, "positionals")) {
+                return error.UnexpectedPositional;
+            }
+            inline for (std.meta.fields(Spec.positionals), 0..) |positional, idx| {
+                if (current_positional_idx == idx) {
+                    try parsePositional(Spec, positional, arg, &parse_result);
+                }
+            }
+            current_positional_idx += 1;
         }
     }
     return parse_result;
@@ -176,6 +228,36 @@ fn getNextOptionValue(argument: []const u8, arg_iterator: anytype) ![]const u8 {
     }
 
     return valuebuffer;
+}
+
+fn parsePositional(comptime Spec: type, comptime positional_info: Type.StructField, value: []const u8, parse_result: *ParseResult(Spec)) !void {
+    var result_field = &@field(parse_result.positionals, positional_info.name);
+
+    switch (positional_info.type) {
+        void => result_field.* = true,
+        []void => result_field.* += 1,
+        bool => {
+            const truthy = std.mem.eql(u8, value, "true");
+
+            if (truthy) {
+                result_field.* = true;
+                return;
+            }
+
+            const falsy = std.mem.eql(u8, value, "false");
+            if (falsy) {
+                result_field.* = false;
+                return;
+            }
+            return error.BadValue;
+        },
+        []const u8 => result_field.* = value,
+        else => |T| switch (@typeInfo(T)) {
+            .Int => result_field.* = std.fmt.parseInt(T, value, 0) catch return error.BadValue,
+            .Float => result_field.* = std.fmt.parseFloat(T, value) catch return error.BadValue,
+            else => @compileError("no parser defined for " ++ @typeName(T)),
+        },
+    }
 }
 
 fn parseOption(comptime Spec: type, comptime option_info: Type.StructField, argument: []const u8, arg_iterator: anytype, parse_result: *ParseResult(Spec)) !void {
@@ -237,11 +319,16 @@ fn validateArgIterator(candidate: anytype) void {
 }
 
 fn validateOptionSpecification(comptime Spec: type) void {
+    if (@typeInfo(Spec) != .Struct) {
+        @compileError("option specification has to be a struct");
+    }
+    if (@typeInfo(Spec).Struct.is_tuple == true) {
+        @compileError("option specification cannot be a tuple");
+    }
     if (@hasDecl(Spec, "shorthands")) {
         if (@typeInfo(@TypeOf(Spec.shorthands)) != .Struct) @compileError("shorthand container must be a struct");
 
-        inline for (std.meta.fields(@TypeOf(Spec.shorthands)), 0..) |shorthand, idx| {
-            _ = idx;
+        inline for (std.meta.fields(@TypeOf(Spec.shorthands))) |shorthand| {
             if (@typeInfo(shorthand.type) != .EnumLiteral) {
                 @compileError("the assigned value of shorthand must be an enum literal (" ++ shorthand.name ++ ")");
             }
@@ -251,6 +338,30 @@ fn validateOptionSpecification(comptime Spec: type) void {
             const linked_option_name = @tagName(@field(Spec.shorthands, shorthand.name));
             if (!@hasField(Spec, linked_option_name)) {
                 @compileError("shorthand " ++ shorthand.name ++ " links to non existant option " ++ linked_option_name);
+            }
+        }
+    }
+    if (@hasDecl(Spec, "positionals")) {
+        if (@typeInfo(Spec.positionals) != .Struct) @compileError("positional specification has to be a struct");
+
+        var first_optional: ?Type.StructField = null;
+
+        inline for (std.meta.fields(Spec.positionals)) |positional| {
+            {
+                const msg = "positional cannot have a type of " ++ @typeName(positional.type);
+                switch (positional.type) {
+                    void, []void => @compileError(msg),
+                    else => switch (@typeInfo(positional.type)) {
+                        .Optional => @compileError(msg ++ " - just assign a default value for an optional positional"),
+                        else => {},
+                    },
+                }
+            }
+            if (positional.default_value != null) {
+                if (first_optional) |_| {
+                    @compileError("positional " ++ positional.name ++ " must have a default value or come before '" ++ first_optional.? ++ "' positional");
+                }
+                first_optional = positional;
             }
         }
     }
@@ -349,6 +460,28 @@ test "options with values" {
         try std.testing.expectEqual(@as(i32, 100), result.options.integer);
         try std.testing.expectEqual(@as(f32, 0.5), result.options.float);
         try std.testing.expectEqualSlices(u8, "Who would listen to that?", result.options.str);
+    }
+}
+
+test "positionals (1)" {
+    const Options = struct {
+        const positionals = struct {
+            verb: []const u8,
+            noun: []const u8 = "alligator",
+        };
+    };
+    const argument_lines = [_][]const []const u8{
+        &[_][]const u8{"green"},
+        &[_][]const u8{ "green", "crocodile" },
+    };
+    for (argument_lines, 0..) |argument_line, idx| {
+        const result = try parseSliceArgs(Options, std.testing.allocator, argument_line);
+        try std.testing.expectEqualSlices(u8, "green", result.positionals.verb);
+        try std.testing.expectEqualSlices(
+            u8,
+            if (idx == 0) "alligator" else "crocodile",
+            result.positionals.noun,
+        );
     }
 }
 
