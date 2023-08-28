@@ -509,24 +509,6 @@ test "positionals (1)" {
     }
 }
 
-pub fn main() !void {
-    const gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var allocator = gpa.allocator();
-    defer gpa.deinit();
-
-    const Options = struct {
-        boolean: bool,
-        integer: i32,
-        float: f32,
-        str: []const u8,
-        greeting: []const u8 = "Hello",
-        flag: void,
-        counter: []void,
-    };
-    var parse_result = try zcmdargs.parseProcessArgs(Options, allocator);
-    _ = parse_result;
-}
-
 test "error.BadValue" {
     const Options = struct {
         boolean: bool,
