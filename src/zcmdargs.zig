@@ -108,15 +108,17 @@ pub fn ParseResult(comptime Spec: type) type {
         positionals: PositionalContainer,
         allocator: Allocator,
         unknown: std.ArrayList([]const u8),
+        arg_iterator: ?ArgIterator = null,
 
         const Self = @This();
 
-        pub fn init(allocator: Allocator) Self {
+        pub fn init(allocator: Allocator, arg_iterator: ?ArgIterator) Self {
             var result = Self{
                 .allocator = allocator,
                 .options = OptionContainer{},
                 .positionals = undefined,
                 .unknown = std.ArrayList([]const u8).init(allocator),
+                .arg_iterator = arg_iterator,
             };
             if (@hasDecl(Spec, "positionals")) {
                 inline for (std.meta.fields(Spec.positionals)) |positional| {
@@ -131,11 +133,10 @@ pub fn ParseResult(comptime Spec: type) type {
             return result;
         }
 
-        pub fn appendUnknown(self: *Self, arg: []const u8) !void {
-            try self.unknown.append(self.allocator.dupe(u8, arg));
-        }
-
         pub fn deinit(self: *Self) void {
+            if (self.arg_iterator != null) {
+                self.arg_iterator.?.deinit();
+            }
             for (self.unknown.items) |unknown| {
                 self.allocator.free(unknown);
             }
@@ -147,7 +148,6 @@ pub fn ParseResult(comptime Spec: type) type {
 pub fn parseProcessArgs(comptime Spec: type, allocator: Allocator) !ParseResult(Spec) {
     var iterator = try std.process.argsWithAllocator(allocator);
     _ = iterator.next();
-    defer iterator.deinit();
     return try parseInternal(Spec, allocator, &iterator);
 }
 
@@ -161,7 +161,10 @@ pub fn parseSliceArgs(comptime Spec: type, allocator: Allocator, args: []const [
 pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: anytype) !ParseResult(Spec) {
     validateArgIterator(arg_iterator.*);
 
-    var parse_result = ParseResult(Spec).init(allocator);
+    var parse_result = ParseResult(Spec).init(
+        allocator,
+        if (@TypeOf(arg_iterator) == *ArgIterator) arg_iterator else null,
+    );
     errdefer parse_result.deinit();
 
     const required_positional_count = blk: {
@@ -504,6 +507,24 @@ test "positionals (1)" {
             result.positionals.noun,
         );
     }
+}
+
+pub fn main() !void {
+    const gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var allocator = gpa.allocator();
+    defer gpa.deinit();
+
+    const Options = struct {
+        boolean: bool,
+        integer: i32,
+        float: f32,
+        str: []const u8,
+        greeting: []const u8 = "Hello",
+        flag: void,
+        counter: []void,
+    };
+    var parse_result = try zcmdargs.parseProcessArgs(Options, allocator);
+    _ = parse_result;
 }
 
 test "error.BadValue" {
