@@ -522,9 +522,9 @@ test "options with values" {
 
         // []const u8 can't have a bad value
 
-        &[_][]const u8{ "--rcommand", "value" },
+        &[_][]const u8{ "--command", "value" },
         &[_][]const u8{ "-c", "value" },
-        &[_][]const u8{"--rcommand=value"},
+        &[_][]const u8{"--command=value"},
         &[_][]const u8{"-c=value"},
     };
     for (bad_value) |argument_line| {
@@ -532,7 +532,7 @@ test "options with values" {
     }
 
     const expected_value = [_][]const []const u8{
-        &[_][]const u8{ "--flag", "--integer" },
+        &[_][]const u8{ "--flag", "--rinteger" },
         &[_][]const u8{ "-L", "-i" },
         &[_][]const u8{"-i"},
 
