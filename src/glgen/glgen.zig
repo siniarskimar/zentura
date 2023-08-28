@@ -1,8 +1,9 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const xml = @import("./xml.zig");
 
-fn downloadGLSpecification(allocator: std.mem.Allocator) ![]u8 {
+fn downloadGLSpecification(allocator: Allocator) ![]u8 {
     var httpclient = std.http.Client{ .allocator = allocator };
     const url = "https://github.com/KhronosGroup/OpenGL-Registry/raw/main/xml/gl.xml";
     const uri = try std.Uri.parse(url);
@@ -51,31 +52,33 @@ fn getTempDirPath() ![]const u8 {
     return error.NoValidTmpDir;
 }
 
+fn getGLSpecification(allocator: Allocator) ![]u8 {
+    const tmp_dir = try getTempDirPath();
+    const spec_filepath = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "zen-glgen.xml" });
+    defer allocator.free(spec_filepath);
+
+    var file = std.fs.openFileAbsolute(spec_filepath, .{}) catch |err| switch (err) {
+        error.FileNotFound => {
+            var result = try downloadGLSpecification(allocator);
+            var cache = try std.fs.createFileAbsolute(spec_filepath, .{});
+            defer cache.close();
+
+            try cache.writeAll(result);
+            return result;
+        },
+        else => return err,
+    };
+
+    defer file.close();
+    return try file.readToEndAlloc(allocator, 10 * 1024 * 1024);
+}
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
 
-    const gl_spec = blk: {
-        const tmp_dir = try getTempDirPath();
-        const spec_filepath = try std.fs.path.join(allocator, &[_][]const u8{ tmp_dir, "zen-glgen.xml" });
-        defer allocator.free(spec_filepath);
-
-        var file = std.fs.openFileAbsolute(spec_filepath, .{}) catch |err| switch (err) {
-            error.FileNotFound => {
-                var result = try downloadGLSpecification(allocator);
-                var cache = try std.fs.createFileAbsolute(spec_filepath, .{});
-                defer cache.close();
-
-                try cache.writeAll(result);
-                break :blk result;
-            },
-            else => return err,
-        };
-
-        defer file.close();
-        break :blk try file.readToEndAlloc(allocator, 10 * 1024 * 1024);
-    };
+    const gl_spec = try getGLSpecification(allocator);
     defer allocator.free(gl_spec);
 
     var parserctx = xml.ParserContext.init(gl_spec, 0);
