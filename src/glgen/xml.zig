@@ -184,6 +184,7 @@ pub const ParserContext = struct {
 
     /// Returns slice of bytes near current position
     /// Used for error logging purposes
+    // NOTE: This is broken!! TODO: FIX THIS FUNCTION
     pub fn formatNearBytes(self: *const Self) []const u8 {
         var start = self.idx;
         var end = self.idx;
