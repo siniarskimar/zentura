@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const xml = @import("./xml.zig");
 
-fn getGLSpecification(allocator: std.mem.Allocator) ![]u8 {
+fn downloadGLSpecification(allocator: std.mem.Allocator) ![]u8 {
     var httpclient = std.http.Client{ .allocator = allocator };
     const url = "https://github.com/KhronosGroup/OpenGL-Registry/raw/main/xml/gl.xml";
     const uri = try std.Uri.parse(url);
@@ -63,7 +63,7 @@ pub fn main() !void {
 
         var file = std.fs.openFileAbsolute(spec_filepath, .{}) catch |err| switch (err) {
             error.FileNotFound => {
-                var result = try getGLSpecification(allocator);
+                var result = try downloadGLSpecification(allocator);
                 var cache = try std.fs.createFileAbsolute(spec_filepath, .{});
                 defer cache.close();
 
