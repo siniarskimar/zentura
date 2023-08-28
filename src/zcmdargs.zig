@@ -108,15 +108,17 @@ pub fn ParseResult(comptime Spec: type) type {
         positionals: PositionalContainer,
         allocator: Allocator,
         unknown: std.ArrayList([]const u8),
+        arg_iterator: ?ArgIterator = null,
 
         const Self = @This();
 
-        pub fn init(allocator: Allocator) Self {
+        pub fn init(allocator: Allocator, arg_iterator: ?ArgIterator) Self {
             var result = Self{
                 .allocator = allocator,
                 .options = OptionContainer{},
                 .positionals = undefined,
                 .unknown = std.ArrayList([]const u8).init(allocator),
+                .arg_iterator = arg_iterator,
             };
             if (@hasDecl(Spec, "positionals")) {
                 inline for (std.meta.fields(Spec.positionals)) |positional| {
@@ -131,11 +133,10 @@ pub fn ParseResult(comptime Spec: type) type {
             return result;
         }
 
-        pub fn appendUnknown(self: *Self, arg: []const u8) !void {
-            try self.unknown.append(self.allocator.dupe(u8, arg));
-        }
-
         pub fn deinit(self: *Self) void {
+            if (self.arg_iterator != null) {
+                self.arg_iterator.?.deinit();
+            }
             for (self.unknown.items) |unknown| {
                 self.allocator.free(unknown);
             }
@@ -146,7 +147,7 @@ pub fn ParseResult(comptime Spec: type) type {
 
 pub fn parseProcessArgs(comptime Spec: type, allocator: Allocator) !ParseResult(Spec) {
     var iterator = try std.process.argsWithAllocator(allocator);
-    defer iterator.deinit();
+    _ = iterator.next();
     return try parseInternal(Spec, allocator, &iterator);
 }
 
@@ -160,8 +161,26 @@ pub fn parseSliceArgs(comptime Spec: type, allocator: Allocator, args: []const [
 pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: anytype) !ParseResult(Spec) {
     validateArgIterator(arg_iterator.*);
 
-    var parse_result = ParseResult(Spec).init(allocator);
+    var parse_result = ParseResult(Spec).init(
+        allocator,
+        if (@TypeOf(arg_iterator) == *ArgIterator) arg_iterator else null,
+    );
     errdefer parse_result.deinit();
+
+    const required_positional_count = blk: {
+        var result: u32 = 0;
+
+        if (!@hasDecl(Spec, "positionals")) {
+            break :blk 0;
+        }
+        inline for (@typeInfo(Spec.positionals).Struct.fields) |positional| {
+            if (positional.default_value == null) {
+                result += 1;
+            }
+        }
+
+        break :blk result;
+    };
     var current_positional_idx: u32 = 0;
 
     argument_loop: while (arg_iterator.next()) |arg| {
@@ -211,6 +230,9 @@ pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: an
             }
             current_positional_idx += 1;
         }
+    }
+    if (current_positional_idx < required_positional_count) {
+        return error.MissingArguments;
     }
     return parse_result;
 }
@@ -310,11 +332,13 @@ fn validateArgIterator(candidate: anytype) void {
     if (!@hasDecl(T, "next") or @typeInfo(@TypeOf(T.next)) != .Fn)
         @compileError("validation of arg_iterator failed: must have a function named 'next'");
 
-    const Next = @TypeOf(T.next);
-    if (@typeInfo(Next).Fn.return_type.? != ?[]const u8)
-        @compileError("validation of arg_iterator failed: function named 'next' must return ?[]const u8");
+    const FnNext = @TypeOf(T.next);
+    switch (@typeInfo(FnNext).Fn.return_type.?) {
+        ?[]const u8, ?[:0]const u8 => {},
+        else => @compileError("validation of arg_iterator failed: function named 'next' must return ?[]const u8"),
+    }
 
-    if (@typeInfo(Next).Fn.params.len != 1)
+    if (@typeInfo(FnNext).Fn.params.len != 1)
         @compileError("validation of arg_iterator failed: function named 'next' must accept single parameter");
 }
 
