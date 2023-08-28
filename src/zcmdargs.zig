@@ -1,3 +1,13 @@
+/// zcmdargs.zig
+/// Commandline argument parser
+//
+// Thanks to https://github.com/MasterQ32/zig-args
+// - the "option config struct" is a genius idea
+
+// TODO: support positional verbs/subcommands
+// TODO(#32): Improve user error diagnostics
+// TODO: Join parsePositional and parseOption into one function
+
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
@@ -33,7 +43,8 @@ pub fn ParseResult(comptime Spec: type) type {
 
             // void -> bool
             // []void -> i32
-            // T -> ?T
+            // T (no default) -> ?T
+            // T (with default) -> T
             const FinalType = if (field.default_value) |_| field.type else switch (field.type) {
                 void => bool,
                 []void => i32,
@@ -209,6 +220,7 @@ pub fn parseInternal(comptime Spec: type, allocator: Allocator, arg_iterator: an
             if (!@hasDecl(Spec, "shorthands")) {
                 return error.NoShorthandsDeclared;
             }
+            // TODO: Reject syntax with equals sign (-abc=...)
             group_loop: for (arg[1..]) |arg_shorthand| {
                 inline for (std.meta.fields(@TypeOf(Spec.shorthands))) |shorthand| {
                     if (arg_shorthand == shorthand.name[0]) {
