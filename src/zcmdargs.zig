@@ -277,6 +277,7 @@ fn parsePositional(comptime Spec: type, comptime positional_info: Type.StructFie
         else => |T| switch (@typeInfo(T)) {
             .Int => result_field.* = std.fmt.parseInt(T, value, 0) catch return error.BadValue,
             .Float => result_field.* = std.fmt.parseFloat(T, value) catch return error.BadValue,
+            .Enum => result_field.* = std.meta.stringToEnum(T, value) orelse return error.BadValue,
             else => @compileError("no parser defined for " ++ @typeName(T)),
         },
     }
@@ -316,6 +317,10 @@ fn parseOption(comptime Spec: type, comptime option_info: Type.StructField, argu
             .Float => {
                 const valuebuffer = try getNextOptionValue(argument, arg_iterator);
                 result_option_field.* = std.fmt.parseFloat(T, valuebuffer) catch return error.BadValue;
+            },
+            .Enum => {
+                const valuebuffer = try getNextOptionValue(argument, arg_iterator);
+                result_option_field.* = std.meta.stringToEnum(option_info.type, valuebuffer) orelse return error.BadValue;
             },
             else => @compileError("no parser defined for " ++ @typeName(T)),
         },
