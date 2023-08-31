@@ -4,10 +4,11 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ascii = std.ascii;
 
-pub const Entity = struct {
+pub const Element = struct {
     allocator: Allocator,
     parent: ?*Entity,
     children: std.ArrayList(*Entity),
+    parent: ?*Self,
     tag: []const u8,
     textcontent: std.SegmentedList([]const u8, 0),
     attributes: std.StringHashMap([]const u8),
@@ -15,6 +16,7 @@ pub const Entity = struct {
     const Self = @This();
 
     pub fn initAlloc(allocator: Allocator, tag: []const u8, parent: ?*Entity) !*Self {
+    pub fn init(allocator: Allocator, tag: []const u8, parent: ?*Self) !*Self {
         var self = try allocator.create(Self);
 
         self.tag = try allocator.dupe(u8, tag);
@@ -55,6 +57,7 @@ pub const Entity = struct {
     }
 
     pub fn appendChild(self: *Self, child: *Entity) !void {
+    pub fn appendChild(self: *Self, child: *Self) !void {
         if (child.allocator.ptr != self.allocator.ptr) {
             return error.MismatchedAllocators;
         }
@@ -67,12 +70,12 @@ pub const Entity = struct {
 };
 
 pub const Document = struct {
-    root: ?*Entity,
+    root: ?*Element,
     allocator: Allocator,
 
     const Self = @This();
 
-    pub fn init(allocator: Allocator, root: ?*Entity) Self {
+    pub fn init(allocator: Allocator, root: ?*Element) Self {
         return .{
             .root = root,
             .allocator = allocator,
@@ -242,7 +245,7 @@ pub fn parse(parserctx: *ParserContext, allocator: Allocator) !Document {
     var result = Document.init(allocator, null);
     errdefer result.deinit();
 
-    var entitystack = std.ArrayList(*Entity).init(allocator);
+    var entitystack = std.ArrayList(*Element).init(allocator);
     defer entitystack.deinit();
 
     var contentstart: ?usize = null;
@@ -268,6 +271,7 @@ pub fn parse(parserctx: *ParserContext, allocator: Allocator) !Document {
                         unreachable;
                     };
                     try current.textcontent.append(allocator, parserctx.buffer[contentstart.? .. contentstart.? + contentlen]);
+                    var current: *Element = entitystack.getLastOrNull() orelse unreachable;
                 }
                 switch (parserctx.next().?) {
                     // Closing tag
@@ -320,7 +324,7 @@ pub fn parse(parserctx: *ParserContext, allocator: Allocator) !Document {
                     else => {
                         _ = parserctx.rewind(1);
                         const name = try parseName(parserctx) orelse return ParseError.UnexpectedEnd;
-                        var entity = try Entity.initAlloc(allocator, name, null);
+                        var entity = try Element.init(allocator, name, null);
 
                         errdefer allocator.destroy(entity);
                         errdefer entity.deinit();
