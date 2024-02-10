@@ -1,4 +1,4 @@
-# zen
+# Zentura
 
 Code editor made from scratch.
 

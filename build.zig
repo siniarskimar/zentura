@@ -23,7 +23,7 @@ pub fn build(b: *std.build.Builder) void {
     });
 
     const zen = b.addExecutable(.{
-        .name = "zen",
+        .name = "zentura",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
