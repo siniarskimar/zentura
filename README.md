@@ -12,3 +12,5 @@ This editor is expected to:
  - Have sane defaults that do not require extensive configuration
  - Treesitter and LSP support
  - Support plugins
+
+ Currently tracking Zig 0.11.0
