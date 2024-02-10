@@ -1,6 +1,5 @@
 const std = @import("std");
 const c = @cImport({
-    @cInclude("stdbool.h");
     @cInclude("GLFW/glfw3.h");
 });
 
@@ -32,7 +31,7 @@ fn gl_debugCallback(
 pub fn main() !void {
     _ = c.glfwSetErrorCallback(glfwErrorCallback);
 
-    if (c.glfwInit() == c.false) {
+    if (c.glfwInit() == 0) {
         return error.GLFWInitFailed;
     }
     defer c.glfwTerminate();
@@ -59,7 +58,7 @@ pub fn main() !void {
 
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
-    while (c.glfwWindowShouldClose(window) == c.false) {
+    while (c.glfwWindowShouldClose(window) == 0) {
         c.glfwPollEvents();
 
         gl.clear(gl.COLOR_BUFFER_BIT);
