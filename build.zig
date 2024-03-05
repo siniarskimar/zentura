@@ -3,14 +3,13 @@ const builtin = @import("builtin");
 
 pub fn build(b: *std.build.Builder) void {
 
-    // Minimal Zig version check
+    // Zig version check
     comptime {
         const zig_version = builtin.zig_version;
-        const min_ver = std.SemanticVersion.parse("0.11.0-dev.3892+0a6cd257b") catch unreachable;
-        if (zig_version.order(min_ver) == .lt) {
-            @compileError(std.fmt.comptimePrint(
-                \\ This project requires at least version {} of Zig but you have v{}
-                \\ https://github.com/ziglang/zig (commit 0a6cd257b should work)
+        const min_ver = std.SemanticVersion.parse("0.11.0") catch unreachable;
+        if (zig_version.order(min_ver) != .eq) {
+            std.debug.print(std.fmt.comptimePrint(
+                \\ WARN: This project is tested against Zig {} but you have {}.
             , .{ min_ver, zig_version }));
         }
     }
@@ -18,22 +17,37 @@ pub fn build(b: *std.build.Builder) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const zcmdargs = b.createModule(.{
-        .source_file = .{ .path = "src/zcmdargs.zig" },
+    const clap_dep = b.dependency("zig_clap", .{});
+    const zglgen_dep = b.dependency("zglgen", .{ .optimize = .ReleaseSafe });
+    const zglgen = zglgen_dep.artifact("zglgen");
+
+    const zglgen_cmd = b.addRunArtifact(zglgen);
+    zglgen_cmd.addArgs(&[_][]const u8{
+        // zig fmt off
+        "--api", "gl:3.2",
+        "-o",
+        // zig fmt on
+    });
+    const gl_33_mod_path = zglgen_cmd.addOutputFileArg("gl_33.zig");
+
+    const gl_33_mod = b.createModule(.{
+        .source_file = gl_33_mod_path,
     });
 
-    const zen = b.addExecutable(.{
+    const exe = b.addExecutable(.{
         .name = "zentura",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
-    zen.linkSystemLibrary("glfw");
-    zen.linkLibC();
+    exe.linkSystemLibrary("glfw");
+    exe.linkLibC();
+    exe.addModule("clap", clap_dep.module("clap"));
+    exe.addModule("gl", gl_33_mod);
 
-    b.installArtifact(zen);
+    b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(zen);
+    const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
@@ -42,49 +56,15 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const glgen = b.addExecutable(.{
-        .name = "glgen",
-        .root_source_file = .{ .path = "src/glgen/glgen.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-    glgen.addModule("zcmdargs", zcmdargs);
-
-    const glgen_cmd = b.addRunArtifact(glgen);
-    if (b.args) |args| {
-        glgen_cmd.addArgs(args);
-    }
-
-    const glgen_step = b.step("glgen", "Generate OpenGL bindings");
-    glgen_step.dependOn(&glgen_cmd.step);
-
     const test_step = b.step("test", "Run unit tests");
 
     {
         const unit_tests = b.addTest(.{
-            .root_source_file = .{ .path = zen.root_src.?.path },
+            .root_source_file = .{ .path = exe.root_src.?.path },
             .target = target,
             .optimize = optimize,
         });
         const test_run = b.addRunArtifact(unit_tests);
-        test_step.dependOn(&test_run.step);
-    }
-    {
-        const zcmdargs_tests = b.addTest(.{
-            .root_source_file = .{ .path = zcmdargs.source_file.path },
-            .target = target,
-            .optimize = optimize,
-        });
-        const test_run = b.addRunArtifact(zcmdargs_tests);
-        test_step.dependOn(&test_run.step);
-    }
-    {
-        const glgen_tests = b.addTest(.{
-            .root_source_file = .{ .path = glgen.root_src.?.path },
-            .target = target,
-            .optimize = optimize,
-        });
-        const test_run = b.addRunArtifact(glgen_tests);
         test_step.dependOn(&test_run.step);
     }
 }

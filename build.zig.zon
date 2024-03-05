@@ -1,0 +1,21 @@
+.{
+	.name = "zentura",
+	.version = "0.1.0",
+	.paths = .{
+		"src",
+		"README.md",
+		"LICENSE",
+		"build.zig",
+		"build.zig.zon",
+	},
+	.dependencies = .{
+		.zig_clap = .{
+			.url = "https://github.com/Hejsil/zig-clap/archive/cf3a4e7.tar.gz",
+			.hash = "1220b641ac5ed4187f293906201ee07f98423c942bf82e28c7c75a22d700b494c177",
+		},
+		.zglgen = .{
+			.url = "https://github.com/siniarskimar/zglgen/archive/1.0.1.tar.gz",	
+			.hash = "12201211857bd985f0e5a7e6e963b6fe4599a58d774424f13b660529b5329329ddb3"
+		}
+	},
+}
