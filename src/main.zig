@@ -87,16 +87,16 @@ pub fn main() !void {
 
     gl.makeProcTableCurrent(try gl.loadGL(c.glfwGetProcAddress));
 
+    if (gl.loadGL_KHR_DEBUG(gl.getProcTablePtr().?, c.glfwGetProcAddress)) {
+        gl.enable(gl.GL_DEBUG_OUTPUT);
+        gl.debugMessageCallback(gl_debugCallback, null);
+    } else |_| {}
+
     const gl_version_str: [*:0]const u8 = gl.getString(gl.GL_VERSION) orelse "<n/a>";
 
     std.log.info("Loaded OpenGL {s}\n", .{
         std.mem.span(gl_version_str),
     });
-
-    // if (gl.ARB_debug_output()) {
-    //     gl.enable(gl.DEBUG_OUTPUT);
-    //     gl.debugMessageCallback(gl_debugCallback, null);
-    // }
 
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
 

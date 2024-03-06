@@ -24,7 +24,8 @@ pub fn build(b: *std.build.Builder) void {
     const zglgen_cmd = b.addRunArtifact(zglgen);
     zglgen_cmd.addArgs(&[_][]const u8{
         // zig fmt off
-        "--api", "gl:3.2",
+        "--api",        "gl:3.2",
+        "GL_KHR_debug",
         "-o",
         // zig fmt on
     });
