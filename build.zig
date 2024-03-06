@@ -2,18 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub fn build(b: *std.build.Builder) void {
-
-    // Zig version check
-    comptime {
-        const zig_version = builtin.zig_version;
-        const min_ver = std.SemanticVersion.parse("0.11.0") catch unreachable;
-        if (zig_version.order(min_ver) != .eq) {
-            std.debug.print(std.fmt.comptimePrint(
-                \\ WARN: This project is tested against Zig {} but you have {}.
-            , .{ min_ver, zig_version }));
-        }
-    }
-
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
