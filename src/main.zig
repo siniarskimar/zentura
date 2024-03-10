@@ -1,9 +1,9 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("GLFW/glfw3.h");
-});
+const windowing = @import("./window.zig");
+const cglfw = windowing.c;
 
-const gl = @import("gl");
+const glb = @import("gl");
+const gl = @import("./gl.zig");
 
 fn glfwErrorCallback(error_code: c_int, error_msg: [*c]const u8) callconv(.C) void {
     _ = error_code;
@@ -28,90 +28,94 @@ fn gl_debugCallback(
     std.log.debug("GLDEBUG [{}] {s}", .{ target, message });
 }
 
-const Window = struct {
-    allocator: std.mem.Allocator,
-    glfw_window: *c.GLFWwindow,
+fn loadGL() !void {
+    glb.makeProcTableCurrent(try glb.loadGL(cglfw.glfwGetProcAddress));
 
-    pub fn init(allocator: std.mem.Allocator) !@This() {
-        c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 2);
-        c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 1);
-        c.glfwWindowHint(c.GLFW_OPENGL_DEBUG_CONTEXT, c.GLFW_TRUE);
-
-        const window = c.glfwCreateWindow(800, 600, "zentura", null, null);
-        if (window == null) {
-            return error.WindowCreationFailed;
-        }
-
-        return .{
-            .allocator = allocator,
-            .glfw_window = window.?,
-        };
+    if (glb.loadGL_KHR_DEBUG(glb.getProcTablePtr().?, cglfw.glfwGetProcAddress)) {
+        glb.enable(glb.GL_DEBUG_OUTPUT);
+        glb.debugMessageCallback(gl_debugCallback, null);
+    } else |_| {
+        std.log.debug("GL_KHR_DEBUG unavailable", .{});
     }
-
-    fn glfwKeyCallback(window: *c.GLFWWindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
-        _ = scancode;
-        _ = action;
-        _ = mods;
-        _ = window;
-        if (key == c.GLFW_KEY_SPACE) {
-            std.debug.print("SPAAAACCEEEE!!!\n", .{});
-        }
-        // var self: *Window = @ptrCast(c.glfwGetWindowUserPointer(window));
-    }
-
-    pub fn registerCallbacks(self: *@This()) !void {
-        c.glfwSetWindowUserPointer(self.glfw_window, self);
-        c.glfwSetKeyCallback(self.glfw_window, glfwKeyCallback);
-    }
-
-    pub fn deinit(self: *@This()) void {
-        c.glfwDestroyWindow(self.glfw_window);
-    }
-};
+}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpaalloc = gpa.allocator();
 
-    _ = c.glfwSetErrorCallback(glfwErrorCallback);
+    _ = cglfw.glfwSetErrorCallback(glfwErrorCallback);
 
-    if (c.glfwInit() == 0) {
+    if (cglfw.glfwInit() == 0) {
         return error.GLFWInitFailed;
     }
-    defer c.glfwTerminate();
+    defer cglfw.glfwTerminate();
 
-    var window = try Window.init(gpaalloc);
+    var window = try windowing.Window.init(gpaalloc);
     defer window.deinit();
 
-    c.glfwMakeContextCurrent(window.glfw_window);
+    window.registerCallbacks();
+    window.makeCurrent();
 
-    gl.makeProcTableCurrent(try gl.loadGL(c.glfwGetProcAddress));
+    try loadGL();
 
-    if (gl.loadGL_KHR_DEBUG(gl.getProcTablePtr().?, c.glfwGetProcAddress)) {
-        gl.enable(gl.GL_DEBUG_OUTPUT);
-        gl.debugMessageCallback(gl_debugCallback, null);
-    } else |_| {}
+    const program = try gl.ProgramObject.compile(
+        \\#version 330
+        \\
+        \\in vec3 in_pos;
+        \\void main(){
+        \\   gl_Position = vec4(in_pos, 1.0);
+        \\}
+    ,
+        \\#version 330
+        \\
+        \\out vec4 out_color;
+        \\void main() {
+        \\   out_color = vec4(1.0,0.0,0.0,1.0);
+        \\}
+    , std.io.getStdErr());
+    defer program.delete();
 
-    const gl_version_str: [*:0]const u8 = gl.getString(gl.GL_VERSION) orelse "<n/a>";
+    glb.bindAttribLocation(program.object, 0, "in_pos");
+    try program.link();
 
-    std.log.info("Loaded OpenGL {s}\n", .{
-        std.mem.span(gl_version_str),
-    });
+    var vao = gl.VertexArray.generateOne();
+    defer vao.delete();
 
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+    var vbo = gl.VertexBufferObject.generateOne();
+    defer vbo.delete();
 
-    while (c.glfwWindowShouldClose(window.glfw_window) == 0) {
-        c.glfwPollEvents();
+    const vertices = [_]gl.GLfloat{
+        0.0,  0.5,  0.0,
+        0.5,  -0.5, 0.0,
+        -0.5, -0.5, 0.0,
+    };
+    const indeces = [_]gl.GLuint{ 0, 1, 2 };
 
-        gl.clear(gl.GL_COLOR_BUFFER_BIT);
+    vao.bind();
 
-        gl.begin(gl.GL_TRIANGLES);
-        gl.color3f(1.0, 0.0, 0.0);
-        gl.vertex2f(0.0, 0.5);
-        gl.vertex2f(0.5, -0.5);
-        gl.vertex2f(-0.5, -0.5);
-        gl.end();
+    vbo.bind();
+    glb.bufferData(glb.GL_ARRAY_BUFFER, @sizeOf([vertices.len]glb.GLfloat), &vertices, glb.GL_STATIC_DRAW);
 
-        c.glfwSwapBuffers(window.glfw_window);
+    glb.enableVertexAttribArray(0);
+    glb.vertexAttribPointer(0, 3, glb.GL_FLOAT, glb.GL_FALSE, @sizeOf(glb.GLfloat) * 3, @ptrFromInt(0));
+
+    glb.useProgram(program.object);
+    glb.clearColor(0.0, 0.0, 0.0, 1.0);
+
+    while (cglfw.glfwWindowShouldClose(window.glfw_window) == 0) {
+        while (true) {
+            const err = glb.getError();
+            if (err == glb.GL_NO_ERROR) {
+                break;
+            }
+            std.log.err("GLERROR {}", .{err});
+        }
+        cglfw.glfwPollEvents();
+
+        glb.clear(glb.GL_COLOR_BUFFER_BIT);
+        // glb.drawArrays(glb.GL_TRIANGLES, 0, 3);
+        glb.drawElements(glb.GL_TRIANGLES, 3, glb.GL_UNSIGNED_INT, &indeces);
+
+        cglfw.glfwSwapBuffers(window.glfw_window);
     }
 }

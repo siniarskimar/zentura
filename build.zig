@@ -5,14 +5,16 @@ pub fn build(b: *std.build.Builder) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const clap_dep = b.dependency("zig_clap", .{});
-    const zglgen_dep = b.dependency("zglgen", .{ .optimize = .ReleaseSafe });
+    const zglgen_dep = b.dependency("zglgen", .{ .target = target, .optimize = .ReleaseSafe });
     const zglgen = zglgen_dep.artifact("zglgen");
+
+    const freetype_dep = b.dependency("freetype", .{ .target = target, .optimize = .ReleaseSafe });
+    const freetype_lib = freetype_dep.artifact("freetype");
 
     const zglgen_cmd = b.addRunArtifact(zglgen);
     zglgen_cmd.addArgs(&[_][]const u8{
         // zig fmt off
-        "--api",        "gl:3.2",
+        "--api",        "gl:3.3",
         "GL_KHR_debug",
         "-o",
         // zig fmt on
@@ -29,9 +31,9 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
+    exe.linkLibrary(freetype_lib);
     exe.linkSystemLibrary("glfw");
     exe.linkLibC();
-    exe.addModule("clap", clap_dep.module("clap"));
     exe.addModule("gl", gl_33_mod);
 
     b.installArtifact(exe);
