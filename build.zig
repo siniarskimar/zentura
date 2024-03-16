@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub fn build(b: *std.build.Builder) void {
+pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
@@ -9,7 +9,6 @@ pub fn build(b: *std.build.Builder) void {
     const zglgen = zglgen_dep.artifact("zglgen");
 
     const freetype_dep = b.dependency("freetype", .{ .target = target, .optimize = .ReleaseSafe });
-    const freetype_lib = freetype_dep.artifact("freetype");
 
     const zglgen_cmd = b.addRunArtifact(zglgen);
     zglgen_cmd.addArgs(&[_][]const u8{
@@ -21,9 +20,9 @@ pub fn build(b: *std.build.Builder) void {
     });
     const gl_33_mod_path = zglgen_cmd.addOutputFileArg("gl_33.zig");
 
-    const gl_33_mod = b.createModule(.{
-        .source_file = gl_33_mod_path,
-    });
+    const gl_33_mod = b.createModule(
+        .{ .root_source_file = gl_33_mod_path },
+    );
 
     const exe = b.addExecutable(.{
         .name = "zentura",
@@ -31,10 +30,11 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.linkLibrary(freetype_lib);
     exe.linkSystemLibrary("glfw");
     exe.linkLibC();
-    exe.addModule("gl", gl_33_mod);
+    exe.root_module.addImport("glb", gl_33_mod);
+    exe.root_module.addImport("freetype", freetype_dep.module("mach-freetype"));
+    exe.root_module.addImport("harfbuzz", freetype_dep.module("mach-harfbuzz"));
 
     b.installArtifact(exe);
 
@@ -51,7 +51,7 @@ pub fn build(b: *std.build.Builder) void {
 
     {
         const unit_tests = b.addTest(.{
-            .root_source_file = .{ .path = exe.root_src.?.path },
+            .root_source_file = .{ .path = exe.root_module.root_source_file.?.path },
             .target = target,
             .optimize = optimize,
         });

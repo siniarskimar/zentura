@@ -10,12 +10,12 @@
 	},
 	.dependencies = .{
 		.zglgen = .{
-			.url = "https://github.com/siniarskimar/zglgen/archive/1.0.1.tar.gz",	
-			.hash = "12201211857bd985f0e5a7e6e963b6fe4599a58d774424f13b660529b5329329ddb3"
+			.url = "https://github.com/siniarskimar/zglgen/archive/1f4e894c867e0f5af4607071a95863a3417ba781.tar.gz",	
+			.hash = "122017ca0c476496b53395bc34249dc903b78076460a44a1b5c21a82099dabae58ab"
 		},
 		.freetype = .{
-			.url = "https://github.com/hexops/freetype/archive/0d07a5d4669d69ab555ff5c7f4b497e2a5e8f5f7.tar.gz",
-			.hash = "1220c0389507231e24aafa3a02033be0b6a1a2bf7dd058727d3e15bbbadb05f02300"
+			.url = "https://github.com/hexops/mach-freetype/archive/100c7f65f654dbdcab7adc290d28ff6aab7b8d0c.tar.gz",
+			.hash = "12201c1eb9856e133f66ae904ced3a965a53a2098104036cac91b90686cdd9ccb859"
 		},
 	},
 }
