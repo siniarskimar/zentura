@@ -1,8 +1,9 @@
 const std = @import("std");
 const windowing = @import("./window.zig");
+
 const cglfw = windowing.c;
 
-const glb = @import("gl");
+const glb = @import("glb");
 const gl = @import("./gl.zig");
 
 fn glfwErrorCallback(error_code: c_int, error_msg: [*c]const u8) callconv(.C) void {
@@ -59,35 +60,27 @@ pub fn main() !void {
     try loadGL();
 
     const program = try gl.ProgramObject.compile(
-        \\#version 330
-        \\
-        \\in vec3 in_pos;
-        \\void main(){
-        \\   gl_Position = vec4(in_pos, 1.0);
-        \\}
-    ,
-        \\#version 330
-        \\
-        \\out vec4 out_color;
-        \\void main() {
-        \\   out_color = vec4(1.0,0.0,0.0,1.0);
-        \\}
-    , std.io.getStdErr());
+        @embedFile("./basic.vert.glsl"),
+        @embedFile("./basic.frag.glsl"),
+        std.io.getStdErr(),
+    );
     defer program.delete();
 
     glb.bindAttribLocation(program.object, 0, "in_pos");
+    glb.bindAttribLocation(program.object, 1, "in_color");
     try program.link();
 
     var vao = gl.VertexArray.generateOne();
     defer vao.delete();
+    glb.activeTexture(glb.GL_TEXTURE1);
 
     var vbo = gl.VertexBufferObject.generateOne();
     defer vbo.delete();
 
     const vertices = [_]gl.GLfloat{
-        0.0,  0.5,  0.0,
-        0.5,  -0.5, 0.0,
-        -0.5, -0.5, 0.0,
+        0.0,  0.5,  0.0, 1.0, 0.0, 0.0,
+        0.5,  -0.5, 0.0, 1.0, 0.0, 0.0,
+        -0.5, -0.5, 0.0, 1.0, 0.0, 0.0,
     };
     const indeces = [_]gl.GLuint{ 0, 1, 2 };
 
@@ -97,9 +90,12 @@ pub fn main() !void {
     glb.bufferData(glb.GL_ARRAY_BUFFER, @sizeOf([vertices.len]glb.GLfloat), &vertices, glb.GL_STATIC_DRAW);
 
     glb.enableVertexAttribArray(0);
-    glb.vertexAttribPointer(0, 3, glb.GL_FLOAT, glb.GL_FALSE, @sizeOf(glb.GLfloat) * 3, @ptrFromInt(0));
+    glb.vertexAttribPointer(0, 3, glb.GL_FLOAT, glb.GL_FALSE, @sizeOf(glb.GLfloat) * 6, @ptrFromInt(0));
 
-    glb.useProgram(program.object);
+    glb.enableVertexAttribArray(1);
+    glb.vertexAttribPointer(1, 3, glb.GL_FLOAT, glb.GL_FALSE, @sizeOf(glb.GLfloat) * 6, @ptrFromInt(@sizeOf(glb.GLfloat) * 3));
+
+    program.use();
     glb.clearColor(0.0, 0.0, 0.0, 1.0);
 
     while (cglfw.glfwWindowShouldClose(window.glfw_window) == 0) {

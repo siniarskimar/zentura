@@ -1,4 +1,4 @@
-const gl = @import("gl");
+const gl = @import("glb");
 const std = @import("std");
 
 pub const GLenum = gl.GLenum;
@@ -6,20 +6,14 @@ pub const GLboolean = gl.GLboolean;
 pub const GLbitfield = gl.GLbitfield;
 pub const GLbyte = gl.GLbyte;
 pub const GLubyte = gl.GLubyte;
-pub const GLshort = gl.GLshort;
-pub const GLushort = gl.GLushort;
 pub const GLint = gl.GLint;
 pub const GLuint = gl.GLuint;
-pub const GLclampx = gl.GLclampx;
 pub const GLsizei = gl.GLsizei;
 pub const GLfloat = gl.GLfloat;
 pub const GLclampf = gl.GLclampf;
 pub const GLdouble = gl.GLdouble;
 pub const GLclampd = gl.GLclampd;
 pub const GLchar = gl.GLchar;
-pub const GLhalf = gl.GLhalf;
-pub const GLfixed = gl.GLfixed;
-pub const GLintptr = gl.GLintptr;
 pub const GLsizeiptr = gl.GLsizeiptr;
 pub const GLint64 = gl.GLint64;
 pub const GLuint64 = gl.GLuint64;
@@ -96,10 +90,10 @@ pub const ShaderObject = struct {
 
         if (object == 0) std.debug.panic("glCreateShader failed", .{});
 
-        gl.shaderSource(object, 1, &[_][*c]const gl.GLchar{source.ptr}, &[_]gl.GLint{@intCast(source.len)});
+        gl.shaderSource(object, 1, &[_][*c]const GLchar{source.ptr}, &[_]GLint{@intCast(source.len)});
         gl.compileShader(object);
 
-        var compile_status: gl.GLint = gl.GL_TRUE;
+        var compile_status: GLint = gl.GL_TRUE;
         gl.getShaderiv(object, gl.GL_COMPILE_STATUS, &compile_status);
         if (compile_status == gl.GL_FALSE) {
             if (!diagnostic_disabled) {
@@ -128,7 +122,7 @@ pub const ShaderObject = struct {
 };
 
 pub const ProgramObject = struct {
-    object: gl.GLuint,
+    object: GLuint,
 
     pub fn compile(
         vertex_source: []const u8,
@@ -161,8 +155,8 @@ pub const ProgramObject = struct {
             return error.LinkingFailed;
         }
 
-        var attached_count: gl.GLsizei = 0;
-        var attached_shaders = [_]gl.GLuint{0} ** std.meta.fieldNames(ShaderObject.ShaderType).len;
+        var attached_count: GLsizei = 0;
+        var attached_shaders = [_]GLuint{0} ** std.meta.fieldNames(ShaderObject.ShaderType).len;
 
         gl.getAttachedShaders(self.object, attached_shaders.len, &attached_count, &attached_shaders);
         for (0..@as(usize, @intCast(attached_count))) |idx| {
@@ -172,5 +166,26 @@ pub const ProgramObject = struct {
 
     pub fn delete(self: @This()) void {
         gl.deleteProgram(self.object);
+    }
+
+    pub fn use(self: @This()) void {
+        gl.useProgram(self.object);
+    }
+};
+
+const TextureObject = struct {
+    object: GLuint,
+
+    pub fn generateOne() @This() {
+        var object: GLuint = 0;
+        gl.genTextures(1, &object);
+
+        if (object == 0) std.debug.panic("glGenTextures failed", .{});
+
+        return .{ .object = object };
+    }
+
+    pub fn delete(self: @This()) void {
+        gl.deleteTextures(1, &self.object);
     }
 };
