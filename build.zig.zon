@@ -10,8 +10,8 @@
 	},
 	.dependencies = .{
 		.zglgen = .{
-			.url = "https://github.com/siniarskimar/zglgen/archive/1f4e894c867e0f5af4607071a95863a3417ba781.tar.gz",	
-			.hash = "122017ca0c476496b53395bc34249dc903b78076460a44a1b5c21a82099dabae58ab"
+			.url = "https://github.com/siniarskimar/zglgen/archive/3fee7e7e0bf61a953bdd5a99f92098b3f1e97e6b.tar.gz",	
+			.hash = "1220e9cf2d7e8c704bbd16c31ef0c00d180e72ab691a8b86ec6e7f70d8c0483609d3"
 		},
 		.freetype = .{
 			.url = "https://github.com/hexops/mach-freetype/archive/100c7f65f654dbdcab7adc290d28ff6aab7b8d0c.tar.gz",
