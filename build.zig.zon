@@ -1,21 +1,11 @@
 .{
-	.name = "zentura",
-	.version = "0.1.0",
-	.paths = .{
-		"src",
-		"README.md",
-		"LICENSE",
-		"build.zig",
-		"build.zig.zon",
-	},
-	.dependencies = .{
-		.zglgen = .{
-			.url = "https://github.com/siniarskimar/zglgen/archive/3fee7e7e0bf61a953bdd5a99f92098b3f1e97e6b.tar.gz",	
-			.hash = "1220e9cf2d7e8c704bbd16c31ef0c00d180e72ab691a8b86ec6e7f70d8c0483609d3"
-		},
-		.freetype = .{
-			.url = "https://github.com/hexops/mach-freetype/archive/100c7f65f654dbdcab7adc290d28ff6aab7b8d0c.tar.gz",
-			.hash = "12201c1eb9856e133f66ae904ced3a965a53a2098104036cac91b90686cdd9ccb859"
-		},
-	},
+    .name = "zentura",
+    .version = "0.1.0",
+    .paths = .{
+        "src",
+        "LICENSE",
+        "build.zig",
+        "build.zig.zon",
+    },
+    .dependencies = .{},
 }
