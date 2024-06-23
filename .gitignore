@@ -43,6 +43,7 @@ __pycache__/
 # Zig programming language
 
 zig-cache/
+.zig-cache/
 zig-out/
 build/
 build-*/
