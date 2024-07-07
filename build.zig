@@ -13,15 +13,23 @@ pub fn build(b: *std.Build) void {
 
     scanner.generate("xdg_wm_base", 3);
 
-    const exe = b.addExecutable(.{
+    const exe_zentura = b.addExecutable(.{
         .name = "zentura",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    exe.root_module.addImport("wayland", mod_wayland);
-    exe.linkLibC();
-    exe.linkSystemLibrary("wayland-client");
-    scanner.addCSource(exe);
-    b.installArtifact(exe);
+    exe_zentura.root_module.addImport("wayland", mod_wayland);
+    exe_zentura.linkLibC();
+    exe_zentura.linkSystemLibrary("wayland-client");
+    scanner.addCSource(exe_zentura);
+    b.installArtifact(exe_zentura);
+
+    const run_zentura = b.addRunArtifact(exe_zentura);
+    if (b.args) |args| {
+        run_zentura.addArgs(args);
+    }
+
+    const step_run = b.step("run", "Run zentura");
+    step_run.dependOn(&run_zentura.step);
 }
