@@ -7,5 +7,10 @@
         "build.zig",
         "build.zig.zon",
     },
-    .dependencies = .{},
+    .dependencies = .{
+        .zig_wayland = .{
+            .url = "https://github.com/ifreund/zig-wayland/archive/master.zip",
+            .hash = "1220ab835f090bde18b74191e88c4ab3bd49364d310bd9912eccebd3c47bad7957a3",
+        },
+    },
 }
