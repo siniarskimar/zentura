@@ -153,7 +153,7 @@ pub fn main() !void {
 
     wlwindow.initListeners();
     wlwindow.xdg_toplevel.setTitle("zentura");
-    wlwindow.xdg_toplevel.setAppId("io.github.siniarskimar.zentura");
+    wlwindow.xdg_toplevel.setAppId("siniarskimar.zentura");
 
     wlwindow.wl_surface.commit();
     if (wlwindow.context.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
