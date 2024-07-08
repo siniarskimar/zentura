@@ -1,8 +1,14 @@
 const std = @import("std");
 const wayland = @import("./wayland.zig");
 const vulkan = @import("./vulkan.zig");
+const builtin = @import("builtin");
+
 const WlContext = wayland.WlContext;
 const WlWindow = wayland.WlWindow;
+
+const std_options = std.Options{
+    .log_level = if (builtin.mode == .Debug) .debug else .info,
+};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
