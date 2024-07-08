@@ -41,10 +41,13 @@ const vkGetInstanceProcAddressFn = *const fn (instance: vk.Instance, procname: [
 var vkGetInstanceProcAddress: ?vkGetInstanceProcAddressFn = null;
 
 pub fn loadSharedLibrary() !std.DynLib {
-    // TODO: Search for shared library
-    if (builtin.os.tag != .linux) @compileError("Only Linux is supported");
-
-    var lib = try std.DynLib.open("/usr/lib/libvulkan.so");
+    const filename = switch (builtin.os.tag) {
+        .linux => "libvulkan.so",
+        .netbsd, .freebsd => "libvulkan.so",
+        .windows => "vulkan-1.dll",
+        else => @compileError("Unsupported OS"),
+    };
+    var lib = try std.DynLib.open(filename);
 
     vkGetInstanceProcAddress = lib.lookup(vkGetInstanceProcAddressFn, "vkGetInstanceProcAddr") orelse
         return error.LookupFailed;
