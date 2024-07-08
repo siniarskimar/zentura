@@ -12,5 +12,13 @@
             .url = "https://github.com/ifreund/zig-wayland/archive/master.zip",
             .hash = "1220ab835f090bde18b74191e88c4ab3bd49364d310bd9912eccebd3c47bad7957a3",
         },
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/190d2cb24e90e5bf2bec0a75604a9b3586485b6d.tar.gz",
+            .hash = "1220e70b9e0d124b04778cebdecabda4cdc5caab4bbaa9a1bbb9bba5ee51245b73a1",
+        },
+        .vulkan_zig = .{
+            .url = "https://github.com/Snektron/vulkan-zig/archive/66b7b773bb61e2102025f2d5ff0ae8c5f53e19cc.tar.gz",
+            .hash = "12208958f173b8b81bfac797955f0416ab38b21d1f69d4ebf6c7ca460a828a41cd45",
+        },
     },
 }

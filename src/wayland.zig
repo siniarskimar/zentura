@@ -75,7 +75,6 @@ pub const WlWindow = struct {
     wl_surface: *wl.Surface,
     xdg_surface: *xdg.Surface,
     xdg_toplevel: *xdg.Toplevel,
-    frame_callback: ?*wl.Callback = null,
 
     // Properties
     width: u32 = 0,
@@ -132,6 +131,10 @@ pub const WlWindow = struct {
                     data.got_resized = true;
                     data.width = @intCast(ev.width);
                     data.height = @intCast(ev.height);
+                } else if (ev.width == 0 and ev.height == 0) {
+                    data.got_resized = true;
+                    data.width = 800;
+                    data.height = 600;
                 }
             },
             .close => {
