@@ -1,5 +1,6 @@
 const std = @import("std");
 const wayland = @import("wayland").client;
+const vulkan = @import("./vulkan.zig");
 const wl = wayland.wl;
 const xdg = wayland.xdg;
 
@@ -141,5 +142,81 @@ pub const WlWindow = struct {
                 data.is_closed = true;
             },
         }
+    }
+};
+
+pub const VulkanContext = struct {
+    context: vulkan.Context,
+    devcontext: vulkan.DeviceContext,
+    // swapchain: vulkan.Swapchain,
+
+    const vk = vulkan.vk;
+
+    const instance_extensions = [_][*:0]const u8{
+        vulkan.vk.extensions.khr_wayland_surface.name,
+    };
+    const device_extensions = [_][*:0]const u8{};
+
+    pub fn init(allocator: std.mem.Allocator, window: *WlWindow) !@This() {
+        var vkcontext = try vulkan.Context.init(&instance_extensions, allocator);
+        errdefer vkcontext.deinit(allocator);
+
+        const vkCreateWaylandSurfacePtr = vkcontext.getInstanceProcAddress(
+            vkcontext.instance.handle,
+            "vkCreateWaylandSurfaceKHR",
+        ) orelse {
+            std.log.err("Command loading failed for 'vkCreateWaylandSurfaceKHR'", .{});
+            return error.CommandLoadFailure;
+        };
+
+        const vkCreateWaylandSurface: vk.PfnCreateWaylandSurfaceKHR = @ptrCast(vkCreateWaylandSurfacePtr);
+
+        const surface = try createWaylandSurface(vkCreateWaylandSurface, vkcontext.instance.handle, &.{
+            .display = @ptrCast(window.context.wl_display),
+            .surface = @ptrCast(window.wl_surface),
+        });
+        errdefer vkcontext.instance.destroySurfaceKHR(surface, null);
+
+        const devcontext = try vulkan.DeviceContext.init(
+            &device_extensions,
+            allocator,
+            vkcontext.instance,
+            surface,
+        );
+        errdefer devcontext.deinit(allocator);
+
+        return .{
+            .context = vkcontext,
+            .devcontext = devcontext,
+        };
+    }
+
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        self.devcontext.deinit(allocator);
+        self.context.deinit(allocator);
+    }
+
+    pub fn getDeviceName(self: *const @This()) []const u8 {
+        return std.mem.sliceTo(&self.devcontext.pdevprops.device_name, 0);
+    }
+
+    fn createWaylandSurface(
+        vkCreateWaylandSurface: vk.PfnCreateWaylandSurfaceKHR,
+        instance_handle: vk.Instance,
+        create_info: *const vk.WaylandSurfaceCreateInfoKHR,
+    ) !vk.SurfaceKHR {
+        var surface: vk.SurfaceKHR = .null_handle;
+        switch (vkCreateWaylandSurface(
+            instance_handle,
+            create_info,
+            null,
+            &surface,
+        )) {
+            vk.Result.success => {},
+            vk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
+            vk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
+            else => return error.Unknown,
+        }
+        return surface;
     }
 };

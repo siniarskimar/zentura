@@ -34,13 +34,13 @@ pub fn main() !void {
     if (wlwindow.context.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
     wlwindow.wl_surface.commit();
 
-    var vkcontext = try vulkan.Context.initWayland(gpa.allocator(), wlcontext.wl_display, wlwindow.wl_surface);
+    var vkcontext = try wayland.VulkanContext.init(gpa.allocator(), &wlwindow);
     defer vkcontext.deinit(gpa.allocator());
 
     wlwindow.wl_surface.commit();
     if (wlwindow.context.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
 
-    std.debug.print("{s}\n", .{std.mem.sliceTo(&vkcontext.pdevprops.device_name, 0)});
+    std.log.info("Using GPU: {s}", .{vkcontext.getDeviceName()});
 
     while (!wlwindow.is_closed) {
         std.time.sleep(std.time.ns_per_ms);

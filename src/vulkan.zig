@@ -1,10 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const wayland = if (builtin.os.tag == .linux) @import("wayland").client else {};
-const wl = wayland.wl;
-const vk = @import("vulkan");
+pub const vk = @import("vulkan");
 
+/// Features for which to generate and load function pointers
+/// Comments with `SEPERATE:` indicate that given feature is loaded
+/// utside of vulkan-zig
 const apis: []const vk.ApiInfo = &.{
     .{
         .base_commands = .{
@@ -16,25 +17,24 @@ const apis: []const vk.ApiInfo = &.{
     },
     vk.features.version_1_0,
     vk.extensions.khr_surface,
-    vk.extensions.khr_wayland_surface,
+    // SEPERATE: vk.extensions.khr_wayland_surface,
     vk.extensions.khr_swapchain,
 };
 
 const required_instance_extensions = [_][*:0]const u8{
     vk.extensions.khr_surface.name,
-    vk.extensions.khr_wayland_surface.name,
 };
 
 const required_device_extensions = [_][*:0]const u8{
     vk.extensions.khr_swapchain.name,
 };
 
-const BaseDispatch = vk.BaseWrapper(apis);
-const InstanceDispatch = vk.InstanceWrapper(apis);
-const DeviceDispatch = vk.DeviceWrapper(apis);
+pub const BaseDispatch = vk.BaseWrapper(apis);
+pub const InstanceDispatch = vk.InstanceWrapper(apis);
+pub const DeviceDispatch = vk.DeviceWrapper(apis);
 
-const Instance = vk.InstanceProxy(apis);
-const Device = vk.DeviceProxy(apis);
+pub const Instance = vk.InstanceProxy(apis);
+pub const Device = vk.DeviceProxy(apis);
 
 const vkGetInstanceProcAddressFn = *const fn (instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction;
 
@@ -58,16 +58,6 @@ pub const Context = struct {
     instance: Instance,
     base_dispatch: BaseDispatch,
 
-    surface: vk.SurfaceKHR,
-
-    pdev: vk.PhysicalDevice,
-    pdevprops: vk.PhysicalDeviceProperties,
-    pdevmemprops: vk.PhysicalDeviceMemoryProperties,
-
-    dev: Device,
-    graphics_queue: Queue,
-    present_queue: Queue,
-
     getInstanceProcAddress: vkGetInstanceProcAddressFn,
 
     const app_info: vk.ApplicationInfo = .{
@@ -79,15 +69,17 @@ pub const Context = struct {
 
     pub const CommandBuffer = vk.CommandBufferProxy(apis);
 
-    fn init(allocator: std.mem.Allocator) !@This() {
+    pub fn init(comptime extensions: []const [*:0]const u8, allocator: std.mem.Allocator) !@This() {
         var self: Context = undefined;
         self.getInstanceProcAddress = vkGetInstanceProcAddress orelse return error.VkGetInstanceProcAddressNull;
+
+        const req_exts = required_instance_extensions ++ extensions;
 
         self.base_dispatch = try BaseDispatch.load(self.getInstanceProcAddress);
         const instance = try self.base_dispatch.createInstance(&vk.InstanceCreateInfo{
             .p_application_info = &app_info,
-            .enabled_extension_count = @intCast(required_instance_extensions.len),
-            .pp_enabled_extension_names = @ptrCast(&required_instance_extensions),
+            .enabled_extension_count = @intCast(req_exts.len),
+            .pp_enabled_extension_names = req_exts,
             .flags = .{},
         }, null);
 
@@ -99,23 +91,41 @@ pub const Context = struct {
         return self;
     }
 
-    pub fn initWayland(allocator: std.mem.Allocator, wl_display: *wl.Display, wl_surface: *wl.Surface) !@This() {
-        var self = try init(allocator);
-        errdefer allocator.destroy(self.instance.wrapper);
-        errdefer self.instance.destroyInstance(null);
+    pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+        self.instance.destroyInstance(null);
+        allocator.destroy(self.instance.wrapper);
+    }
+};
 
-        self.surface = try self.instance.createWaylandSurfaceKHR(&vk.WaylandSurfaceCreateInfoKHR{
-            .display = @ptrCast(wl_display),
-            .surface = @ptrCast(wl_surface),
-            .flags = .{},
-        }, null);
+pub const DeviceContext = struct {
+    instance: Instance,
+    surface: vk.SurfaceKHR,
+
+    pdev: vk.PhysicalDevice,
+    pdevprops: vk.PhysicalDeviceProperties,
+    pdevmemprops: vk.PhysicalDeviceMemoryProperties,
+
+    dev: Device,
+    graphics_queue: Queue,
+    present_queue: Queue,
+
+    pub fn init(
+        comptime extensions: []const [*:0]const u8,
+        allocator: std.mem.Allocator,
+        instance: Instance,
+        surface: vk.SurfaceKHR,
+    ) !@This() {
+        var self: @This() = undefined;
+        self.instance = instance;
+
+        self.surface = surface;
         errdefer self.instance.destroySurfaceKHR(self.surface, null);
 
         const device_candidate = try findDeviceCandidate(allocator, self.instance, self.surface);
         self.pdev = device_candidate.pdev;
         self.pdevprops = device_candidate.props;
 
-        const device = try initializeDeviceCandidate(self.instance, device_candidate);
+        const device = try initializeDeviceCandidate(extensions, self.instance, device_candidate);
 
         const device_dispatch = try allocator.create(DeviceDispatch);
         errdefer allocator.destroy(device_dispatch);
@@ -132,36 +142,11 @@ pub const Context = struct {
         return self;
     }
 
-    pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
-        self.dev.destroyDevice(null);
-        allocator.destroy(self.dev.wrapper);
-
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         self.instance.destroySurfaceKHR(self.surface, null);
 
-        self.instance.destroyInstance(null);
-        allocator.destroy(self.instance.wrapper);
-    }
-
-    fn initializeDeviceCandidate(instance: Instance, candidate: DeviceCandidate) !vk.Device {
-        const priority = [_]f32{1};
-
-        return try instance.createDevice(candidate.pdev, &vk.DeviceCreateInfo{
-            .queue_create_info_count = if (candidate.queues.graphics_family == candidate.queues.present_family)
-                1
-            else
-                2,
-            .p_queue_create_infos = &[_]vk.DeviceQueueCreateInfo{ .{
-                .queue_family_index = candidate.queues.graphics_family,
-                .queue_count = 1,
-                .p_queue_priorities = &priority,
-            }, .{
-                .queue_family_index = candidate.queues.present_family,
-                .queue_count = 1,
-                .p_queue_priorities = &priority,
-            } },
-            .enabled_extension_count = @intCast(required_device_extensions.len),
-            .pp_enabled_extension_names = &required_device_extensions,
-        }, null);
+        self.dev.destroyDevice(null);
+        allocator.destroy(self.dev.wrapper);
     }
 
     const Queue = struct {
@@ -200,7 +185,7 @@ pub const Context = struct {
             if (!(try deviceSupportsSurface(instance, device, surface))) {
                 continue;
             }
-            const queues = allocateQueues(allocator, instance, device, surface) catch |err| switch (err) {
+            const queues = findRequiredQueues(allocator, instance, device, surface) catch |err| switch (err) {
                 error.NoSuitableQueues => continue,
                 else => return err,
             };
@@ -212,7 +197,12 @@ pub const Context = struct {
         } else error.NoSuitableDevice;
     }
 
-    fn allocateQueues(allocator: std.mem.Allocator, instance: Instance, dev: vk.PhysicalDevice, surface: vk.SurfaceKHR) !DeviceQueueFamilies {
+    fn findRequiredQueues(
+        allocator: std.mem.Allocator,
+        instance: Instance,
+        dev: vk.PhysicalDevice,
+        surface: vk.SurfaceKHR,
+    ) !DeviceQueueFamilies {
         const families = try instance.getPhysicalDeviceQueueFamilyPropertiesAlloc(dev, allocator);
         defer allocator.free(families);
 
@@ -237,7 +227,11 @@ pub const Context = struct {
         } else error.NoSuitableQueues;
     }
 
-    fn deviceSupportsRequiredExtensions(allocator: std.mem.Allocator, instance: Instance, device: vk.PhysicalDevice) !bool {
+    fn deviceSupportsRequiredExtensions(
+        allocator: std.mem.Allocator,
+        instance: Instance,
+        device: vk.PhysicalDevice,
+    ) !bool {
         const ext_properties = try instance.enumerateDeviceExtensionPropertiesAlloc(device, null, allocator);
         defer allocator.free(ext_properties);
 
@@ -263,5 +257,33 @@ pub const Context = struct {
         _ = try instance.getPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, null);
 
         return format_count > 0 and present_mode_count > 0;
+    }
+
+    fn initializeDeviceCandidate(
+        comptime extensions: []const [*:0]const u8,
+        instance: Instance,
+        candidate: DeviceCandidate,
+    ) !vk.Device {
+        const priority = [_]f32{1};
+
+        const exts = required_device_extensions ++ extensions;
+
+        return try instance.createDevice(candidate.pdev, &vk.DeviceCreateInfo{
+            .queue_create_info_count = if (candidate.queues.graphics_family == candidate.queues.present_family)
+                1
+            else
+                2,
+            .p_queue_create_infos = &[_]vk.DeviceQueueCreateInfo{ .{
+                .queue_family_index = candidate.queues.graphics_family,
+                .queue_count = 1,
+                .p_queue_priorities = &priority,
+            }, .{
+                .queue_family_index = candidate.queues.present_family,
+                .queue_count = 1,
+                .p_queue_priorities = &priority,
+            } },
+            .enabled_extension_count = @intCast(exts.len),
+            .pp_enabled_extension_names = exts,
+        }, null);
     }
 };
