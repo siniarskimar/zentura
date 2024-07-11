@@ -345,6 +345,7 @@ fn createVulkanPipeline(
         .src_alpha_blend_factor = .one,
         .dst_alpha_blend_factor = .zero,
         .alpha_blend_op = .add,
+        .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = false },
     };
 
     const colorblending_info = vk.PipelineColorBlendStateCreateInfo{
