@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 
 const wayland = @import("./wayland.zig");
 const vulkan = @import("./vulkan.zig");
+const x11 = @import("./x11.zig");
 const vk = vulkan.vk;
 const shaders = @import("shaders");
 
@@ -20,23 +21,33 @@ pub fn main() !void {
     var vksolib = try vulkan.loadSharedLibrary();
     defer vksolib.close();
 
-    var wlcontext = try WlContext.init();
-    defer wlcontext.deinit();
+    var x11context = try x11.Context.init();
+    defer x11context.deinit();
 
-    wlcontext.wl_registry.setListener(*WlContext, WlContext.globalsListener, &wlcontext);
-    if (wlcontext.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
+    var x11window = try x11.Window.init(x11context, 800, 600);
+    defer x11window.deinit();
 
-    var wlwindow = try WlWindow.init(&wlcontext);
-    defer wlwindow.deinit();
+    _ = x11.c.XMapWindow(x11context.display, x11window.window_handle);
 
-    wlwindow.initListeners();
-    wlwindow.width = 800;
-    wlwindow.height = 600;
-    wlwindow.xdg_toplevel.setTitle("zentura");
-    wlwindow.xdg_toplevel.setAppId("siniarskimar.zentura");
-    wlwindow.xdg_toplevel.setMinSize(100, 100);
+    _ = x11.c.XSync(x11context.display, x11.c.False);
 
-    var vkcontext = try wayland.VulkanContext.init(gpa.allocator(), &wlwindow);
+    // var wlcontext = try WlContext.init();
+    // defer wlcontext.deinit();
+
+    // wlcontext.wl_registry.setListener(*WlContext, WlContext.globalsListener, &wlcontext);
+    // if (wlcontext.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
+
+    // var wlwindow = try WlWindow.init(&wlcontext);
+    // defer wlwindow.deinit();
+
+    // wlwindow.initListeners();
+    // wlwindow.width = 800;
+    // wlwindow.height = 600;
+    // wlwindow.xdg_toplevel.setTitle("zentura");
+    // wlwindow.xdg_toplevel.setAppId("siniarskimar.zentura");
+    // wlwindow.xdg_toplevel.setMinSize(100, 100);
+
+    var vkcontext = try x11.VulkanContext.init(gpa.allocator(), x11window);
     defer vkcontext.deinit(gpa.allocator());
 
     const vkplayout = try vkcontext.devcontext.dev.createPipelineLayout(&vk.PipelineLayoutCreateInfo{}, null);
@@ -67,17 +78,19 @@ pub fn main() !void {
     );
     defer destroyCommandBuffers(gpa.allocator(), vkcontext.devcontext.dev, cmdpool, cmdbufs);
 
-    wlwindow.wl_surface.commit();
-    if (wlwindow.context.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
+    _ = x11.c.XSync(x11context.display, x11.c.False);
+
+    // wlwindow.wl_surface.commit();
+    // if (wlwindow.context.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
 
     std.log.info("Using GPU: {s}", .{vkcontext.getDeviceName()});
 
-    while (!wlwindow.is_closed) {
-        wlwindow.wl_surface.damage(0, 0, @intCast(wlwindow.width), @intCast(wlwindow.height));
-        wlwindow.wl_surface.commit();
-        if (wlwindow.context.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
+    while (true) {
+        // wlwindow.wl_surface.damage(0, 0, @intCast(wlwindow.width), @intCast(wlwindow.height));
+        // wlwindow.wl_surface.commit();
+        // if (wlwindow.context.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
 
-        if (wlwindow.width == 0 or wlwindow.height == 0) {
+        if (x11window.width == 0 or x11window.height == 0) {
             continue;
         }
 
@@ -88,9 +101,9 @@ pub fn main() !void {
             else => return err,
         };
 
-        if (state == .suboptimal or vkcontext.swapchain.extent.width != wlwindow.width or vkcontext.swapchain.extent.height != wlwindow.height) {
+        if (state == .suboptimal or vkcontext.swapchain.extent.width != x11window.width or vkcontext.swapchain.extent.height != x11window.height) {
             // std.debug.print("recreate\n", .{});
-            try vkcontext.swapchain.recreate(gpa.allocator(), .{ .width = wlwindow.width, .height = wlwindow.height });
+            try vkcontext.swapchain.recreate(gpa.allocator(), .{ .width = x11window.width, .height = x11window.height });
 
             destroyFramebuffers(gpa.allocator(), vkcontext.devcontext.dev, framebuffers);
             framebuffers = try createFramebuffers(gpa.allocator(), vkcontext.devcontext.dev, vkrenderpass, vkcontext.swapchain);
@@ -293,16 +306,28 @@ fn createVulkanPipeline(
     };
 
     const rasterizer_info = vk.PipelineRasterizationStateCreateInfo{
+        //: PipelineRasterizationStateCreateFlags
+        .flags = .{},
+        //: Bool32
         .depth_clamp_enable = vk.FALSE,
+        //: Bool32
         .rasterizer_discard_enable = vk.FALSE,
+        //: PolygonMode
         .polygon_mode = .fill,
-        .line_width = 1.0,
+        //: CullModeFlags
         .cull_mode = .{ .back_bit = true },
+        //: FrontFace
         .front_face = .clockwise,
+        //: Bool32
         .depth_bias_enable = vk.FALSE,
+        //: f32
         .depth_bias_constant_factor = 0,
+        //: f32
         .depth_bias_clamp = 0,
+        //: f32
         .depth_bias_slope_factor = 0,
+        //: f32
+        .line_width = 1,
     };
     const multisampling_info = vk.PipelineMultisampleStateCreateInfo{
         .rasterization_samples = .{ .@"1_bit" = true },
