@@ -1,5 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
+const vulkan_zig = @import("vulkan_zig");
 const zig_wayland = @import("zig_wayland");
 
 pub fn build(b: *std.Build) void {
@@ -24,6 +26,14 @@ pub fn build(b: *std.Build) void {
     const mod_vulkan = b.createModule(.{ .root_source_file = run_vk_gen.addOutputFileArg("vk.zig") });
     const mod_wayland = b.createModule(.{ .root_source_file = scanner.result });
 
+    const shaders = vulkan_zig.ShaderCompileStep.create(
+        b,
+        &.{ "glslc", "--target-env=vulkan1.0" },
+        "-o",
+    );
+    shaders.add("triangle_vert", "src/shader/triangle.vert", .{});
+    shaders.add("triangle_frag", "src/shader/triangle.frag", .{});
+
     const exe_zentura = b.addExecutable(.{
         .name = "zentura",
         .root_source_file = b.path("src/main.zig"),
@@ -32,6 +42,7 @@ pub fn build(b: *std.Build) void {
     });
     exe_zentura.root_module.addImport("wayland", mod_wayland);
     exe_zentura.root_module.addImport("vulkan", mod_vulkan);
+    exe_zentura.root_module.addImport("shaders", shaders.getModule());
     exe_zentura.linkLibC();
     exe_zentura.linkSystemLibrary("wayland-client");
     scanner.addCSource(exe_zentura);
