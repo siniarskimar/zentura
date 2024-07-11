@@ -80,6 +80,8 @@ pub const Context = struct {
             .p_application_info = &app_info,
             .enabled_extension_count = @intCast(req_exts.len),
             .pp_enabled_extension_names = req_exts,
+            .enabled_layer_count = 1,
+            .pp_enabled_layer_names = @ptrCast(&[_][*:0]const u8{"VK_LAYER_KHRONOS_validation"}),
             .flags = .{},
         }, null);
 
