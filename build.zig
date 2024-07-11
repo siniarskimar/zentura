@@ -45,6 +45,9 @@ pub fn build(b: *std.Build) void {
     exe_zentura.root_module.addImport("shaders", shaders.getModule());
     exe_zentura.linkLibC();
     exe_zentura.linkSystemLibrary("wayland-client");
+    exe_zentura.linkSystemLibrary("X11");
+    exe_zentura.linkSystemLibrary("X11-xcb");
+    exe_zentura.linkSystemLibrary("xcb");
     scanner.addCSource(exe_zentura);
     b.installArtifact(exe_zentura);
 

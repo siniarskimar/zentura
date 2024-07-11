@@ -5,7 +5,7 @@ pub const vk = @import("vulkan");
 
 /// Features for which to generate and load function pointers
 /// Comments with `SEPERATE:` indicate that given feature is loaded
-/// utside of vulkan-zig
+/// outside of vulkan-zig
 const apis: []const vk.ApiInfo = &.{
     .{
         .base_commands = .{
@@ -16,16 +16,17 @@ const apis: []const vk.ApiInfo = &.{
         },
     },
     vk.features.version_1_0,
+    vk.features.version_1_1,
     vk.extensions.khr_surface,
     // SEPERATE: vk.extensions.khr_wayland_surface,
     vk.extensions.khr_swapchain,
 };
 
-const required_instance_extensions = [_][*:0]const u8{
+pub const required_instance_extensions = [_][*:0]const u8{
     vk.extensions.khr_surface.name,
 };
 
-const required_device_extensions = [_][*:0]const u8{
+pub const required_device_extensions = [_][*:0]const u8{
     vk.extensions.khr_swapchain.name,
 };
 
@@ -64,24 +65,23 @@ pub const Context = struct {
         .p_application_name = "zentura",
         .application_version = 0,
         .engine_version = 0,
-        .api_version = vk.API_VERSION_1_0,
+        .api_version = vk.API_VERSION_1_1,
     };
 
     pub const CommandBuffer = vk.CommandBufferProxy(apis);
 
-    pub fn init(comptime extensions: []const [*:0]const u8, allocator: std.mem.Allocator) !@This() {
+    pub fn init(instance_extensions: []const [*:0]const u8, allocator: std.mem.Allocator) !@This() {
         var self: Context = undefined;
         self.getInstanceProcAddress = vkGetInstanceProcAddress orelse return error.VkGetInstanceProcAddressNull;
 
-        const req_exts = required_instance_extensions ++ extensions;
-
         self.base_dispatch = try BaseDispatch.load(self.getInstanceProcAddress);
+
         const instance = try self.base_dispatch.createInstance(&vk.InstanceCreateInfo{
             .p_application_info = &app_info,
-            .enabled_extension_count = @intCast(req_exts.len),
-            .pp_enabled_extension_names = req_exts,
-            .enabled_layer_count = 1,
-            .pp_enabled_layer_names = @ptrCast(&[_][*:0]const u8{"VK_LAYER_KHRONOS_validation"}),
+            .enabled_extension_count = @intCast(instance_extensions.len),
+            .pp_enabled_extension_names = instance_extensions.ptr,
+            .enabled_layer_count = 0,
+            .pp_enabled_layer_names = null,
             .flags = .{},
         }, null);
 
@@ -112,7 +112,7 @@ pub const DeviceContext = struct {
     present_queue: Queue,
 
     pub fn init(
-        comptime extensions: []const [*:0]const u8,
+        device_extensions: []const [*:0]const u8,
         allocator: std.mem.Allocator,
         instance: Instance,
         surface: vk.SurfaceKHR,
@@ -127,7 +127,7 @@ pub const DeviceContext = struct {
         self.pdev = device_candidate.pdev;
         self.pdevprops = device_candidate.props;
 
-        const device = try initializeDeviceCandidate(extensions, self.instance, device_candidate);
+        const device = try initializeDeviceCandidate(device_extensions, self.instance, device_candidate);
 
         const device_dispatch = try allocator.create(DeviceDispatch);
         errdefer allocator.destroy(device_dispatch);
@@ -262,13 +262,11 @@ pub const DeviceContext = struct {
     }
 
     fn initializeDeviceCandidate(
-        comptime extensions: []const [*:0]const u8,
+        device_extensions: []const [*:0]const u8,
         instance: Instance,
         candidate: DeviceCandidate,
     ) !vk.Device {
         const priority = [_]f32{1};
-
-        const exts = required_device_extensions ++ extensions;
 
         return try instance.createDevice(candidate.pdev, &vk.DeviceCreateInfo{
             .queue_create_info_count = if (candidate.queues.graphics_family == candidate.queues.present_family)
@@ -284,8 +282,8 @@ pub const DeviceContext = struct {
                 .queue_count = 1,
                 .p_queue_priorities = &priority,
             } },
-            .enabled_extension_count = @intCast(exts.len),
-            .pp_enabled_extension_names = exts,
+            .enabled_extension_count = @intCast(device_extensions.len),
+            .pp_enabled_extension_names = device_extensions.ptr,
         }, null);
     }
 };
