@@ -287,3 +287,313 @@ pub const DeviceContext = struct {
         }, null);
     }
 };
+
+pub const Swapchain = struct {
+    instance: Instance,
+    context: *const DeviceContext,
+
+    handle: vk.SwapchainKHR,
+    extent: vk.Extent2D,
+    surface_format: vk.SurfaceFormatKHR,
+    present_mode: vk.PresentModeKHR,
+
+    swap_images: []SwapImage,
+    image_index: u32,
+    next_image_acquired: vk.Semaphore,
+
+    pub fn create(
+        allocator: std.mem.Allocator,
+        instance: Instance,
+        context: *const DeviceContext,
+        extent: vk.Extent2D,
+    ) !@This() {
+        return try recycle(allocator, instance, context, extent, .null_handle);
+    }
+
+    pub fn recreate(self: *@This(), allocator: std.mem.Allocator, extent: vk.Extent2D) !void {
+        const instance = self.instance;
+        const context = self.context;
+
+        self.destroyWithoutHandle(allocator);
+        self.* = try recycle(allocator, instance, context, extent, self.handle);
+    }
+
+    fn recycle(
+        allocator: std.mem.Allocator,
+        instance: Instance,
+        context: *const DeviceContext,
+        extent: vk.Extent2D,
+        old_swapchain: vk.SwapchainKHR,
+    ) !@This() {
+        const caps = try instance.getPhysicalDeviceSurfaceCapabilitiesKHR(context.pdev, context.surface);
+        const actual_extent = findActualExtent(caps, extent);
+
+        if (actual_extent.width == 0 or actual_extent.height == 0) return error.InvalidSurfaceDimentions;
+
+        const surface_format = try findSurfaceFormat(allocator, instance, context);
+        const presentation_mode = try findPresentationMode(allocator, instance, context);
+
+        var image_count = caps.min_image_count + 1;
+        if (caps.max_image_count > 0 and image_count > caps.max_image_count) {
+            image_count = caps.max_image_count;
+        }
+
+        var create_info = vk.SwapchainCreateInfoKHR{
+            .surface = context.surface,
+            .min_image_count = image_count,
+            .image_format = surface_format.format,
+            .image_color_space = surface_format.color_space,
+            .image_extent = actual_extent,
+            .image_array_layers = 1,
+            .image_usage = .{ .color_attachment_bit = true },
+            .image_sharing_mode = .exclusive,
+
+            .present_mode = presentation_mode,
+            .clipped = vk.TRUE,
+            .pre_transform = caps.current_transform,
+            .composite_alpha = .{ .opaque_bit_khr = true },
+
+            .old_swapchain = old_swapchain,
+        };
+        if (context.graphics_queue.family != context.present_queue.family) {
+            create_info.image_sharing_mode = .concurrent;
+            create_info.queue_family_index_count = 2;
+            create_info.p_queue_family_indices = &[_]u32{ context.graphics_queue.family, context.present_queue.family };
+        }
+
+        const swapchain = try context.dev.createSwapchainKHR(&create_info, null);
+        errdefer context.dev.destroySwapchainKHR(swapchain, null);
+
+        if (old_swapchain != .null_handle) {
+            context.dev.destroySwapchainKHR(old_swapchain, null);
+        }
+
+        const swap_images = try initSwapchainImages(allocator, context, swapchain, surface_format.format);
+        errdefer {
+            for (swap_images) |*image| {
+                image.deinit();
+            }
+            allocator.free(swap_images);
+        }
+
+        var next_image_acquired = try context.dev.createSemaphore(&.{}, null);
+        errdefer context.dev.destroySemaphore(next_image_acquired, null);
+
+        const result = try context.dev.acquireNextImageKHR(swapchain, std.math.maxInt(u64), next_image_acquired, .null_handle);
+        if (result.result != .success) return error.ImageAcquireFailed;
+
+        std.mem.swap(vk.Semaphore, &swap_images[result.image_index].image_acquired, &next_image_acquired);
+
+        return .{
+            .instance = instance,
+            .context = context,
+            .handle = swapchain,
+            .extent = actual_extent,
+            .surface_format = surface_format,
+            .present_mode = presentation_mode,
+            .swap_images = swap_images,
+            .next_image_acquired = next_image_acquired,
+            .image_index = result.image_index,
+        };
+    }
+
+    pub fn present(self: *@This(), cmdbuf: vk.CommandBuffer) !enum { optimal, suboptimal } {
+
+        // Wait till current frame finished rendering
+        const current = self.currentSwapImage();
+        try current.waitForPresent();
+        try self.context.dev.resetFences(1, @ptrCast(&current.present_fence));
+
+        // Sumbit the command buffer
+        const wait_stage = [_]vk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
+        try self.context.dev.queueSubmit(
+            self.context.graphics_queue.handle,
+            1,
+            &[_]vk.SubmitInfo{.{
+                .wait_semaphore_count = 1,
+                // Wait till the next image is acquired
+                .p_wait_semaphores = @ptrCast(&current.image_acquired),
+                .p_wait_dst_stage_mask = &wait_stage,
+                .command_buffer_count = 1,
+                .p_command_buffers = @ptrCast(&cmdbuf),
+                .signal_semaphore_count = 1,
+                // Signal that rendering finished on GPU
+                .p_signal_semaphores = @ptrCast(&current.render_finished),
+            }},
+            // Trip present_fence once work has completed
+            current.present_fence,
+        );
+
+        // Present current frame
+        _ = try self.context.dev.queuePresentKHR(self.context.present_queue.handle, &.{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = @ptrCast(&current.render_finished),
+            .swapchain_count = 1,
+            .p_swapchains = @ptrCast(&self.handle),
+            .p_image_indices = @ptrCast(&self.image_index),
+        });
+
+        // Acquire next image
+        // This will start the rendering of the next image
+        const result = try self.context.dev.acquireNextImageKHR(
+            self.handle,
+            std.math.maxInt(u64),
+            self.next_image_acquired,
+            .null_handle,
+        );
+
+        std.mem.swap(vk.Semaphore, &self.swap_images[result.image_index].image_acquired, &self.next_image_acquired);
+        self.image_index = result.image_index;
+        return switch (result.result) {
+            .success => .optimal,
+            .suboptimal_khr => .suboptimal,
+            else => unreachable,
+        };
+    }
+
+    pub fn currentSwapImage(self: *const @This()) *const SwapImage {
+        return &self.swap_images[self.image_index];
+    }
+
+    pub fn destroyWithoutHandle(self: *@This(), allocator: std.mem.Allocator) void {
+        for (self.swap_images) |*swapimage| {
+            swapimage.deinit();
+        }
+        allocator.free(self.swap_images);
+        self.context.dev.destroySemaphore(self.next_image_acquired, null);
+    }
+
+    pub fn destroy(self: *@This(), allocator: std.mem.Allocator) void {
+        self.destroyWithoutHandle(allocator);
+        self.context.dev.destroySwapchainKHR(self.handle, null);
+    }
+
+    fn initSwapchainImages(
+        allocator: std.mem.Allocator,
+        context: *const DeviceContext,
+        swapchain: vk.SwapchainKHR,
+        format: vk.Format,
+    ) ![]SwapImage {
+        const images = try context.dev.getSwapchainImagesAllocKHR(swapchain, allocator);
+        defer allocator.free(images);
+
+        const swap_images = try allocator.alloc(SwapImage, images.len);
+        errdefer allocator.free(swap_images);
+
+        var last_idx: usize = 0;
+        errdefer for (0..last_idx) |i| swap_images[i].deinit();
+
+        while (last_idx < images.len) {
+            swap_images[last_idx] = try SwapImage.init(context, images[last_idx], format);
+            last_idx += 1;
+        }
+        return swap_images;
+    }
+
+    fn findActualExtent(caps: vk.SurfaceCapabilitiesKHR, extent: vk.Extent2D) vk.Extent2D {
+        if (caps.current_extent.width != std.math.maxInt(u32)) {
+            return caps.current_extent;
+        } else {
+            return .{
+                .width = std.math.clamp(extent.width, caps.min_image_extent.width, caps.max_image_extent.width),
+                .height = std.math.clamp(extent.height, caps.min_image_extent.height, caps.max_image_extent.height),
+            };
+        }
+    }
+
+    fn findPresentationMode(
+        allocator: std.mem.Allocator,
+        instance: Instance,
+        context: *const DeviceContext,
+    ) !vk.PresentModeKHR {
+        const modes = try instance.getPhysicalDeviceSurfacePresentModesAllocKHR(context.pdev, context.surface, allocator);
+        defer allocator.free(modes);
+
+        for (modes) |mode| {
+            if (mode == .mailbox_khr) return mode;
+        }
+
+        return .fifo_khr;
+    }
+
+    fn findSurfaceFormat(
+        allocator: std.mem.Allocator,
+        instance: Instance,
+        context: *const DeviceContext,
+    ) !vk.SurfaceFormatKHR {
+        const surface_formats = try instance.getPhysicalDeviceSurfaceFormatsAllocKHR(context.pdev, context.surface, allocator);
+        defer allocator.free(surface_formats);
+
+        const preffered = vk.SurfaceFormatKHR{
+            .format = .r8g8b8_srgb,
+            .color_space = .srgb_nonlinear_khr,
+        };
+
+        for (surface_formats) |format| {
+            if (std.meta.eql(format, preffered)) return format;
+        }
+
+        return surface_formats[0];
+    }
+    const SwapImage = struct {
+        context: *const DeviceContext,
+        handle: vk.Image,
+        view: vk.ImageView,
+
+        image_acquired: vk.Semaphore,
+        render_finished: vk.Semaphore,
+        present_fence: vk.Fence,
+
+        pub fn init(context: *const DeviceContext, handle: vk.Image, format: vk.Format) !@This() {
+            const view = try context.dev.createImageView(&vk.ImageViewCreateInfo{
+                .image = handle,
+                .view_type = .@"2d",
+                .format = format,
+                .components = .{
+                    .r = .identity,
+                    .g = .identity,
+                    .b = .identity,
+                    .a = .identity,
+                },
+                .subresource_range = .{
+                    .aspect_mask = .{ .color_bit = true },
+                    .base_mip_level = 0,
+                    .level_count = 1,
+                    .base_array_layer = 0,
+                    .layer_count = 1,
+                },
+            }, null);
+            errdefer context.dev.destroyImageView(view, null);
+
+            const image_acquired = try context.dev.createSemaphore(&.{}, null);
+            errdefer context.dev.destroySemaphore(image_acquired, null);
+
+            const render_finished = try context.dev.createSemaphore(&.{}, null);
+            errdefer context.dev.destroySemaphore(render_finished, null);
+
+            const present_fence = try context.dev.createFence(&.{ .flags = .{ .signaled_bit = true } }, null);
+            errdefer context.dev.destroyFence(present_fence, null);
+
+            return .{
+                .context = context,
+                .handle = handle,
+                .view = view,
+                .image_acquired = image_acquired,
+                .render_finished = render_finished,
+                .present_fence = present_fence,
+            };
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.waitForPresent() catch return;
+            self.context.dev.destroyImageView(self.view, null);
+            self.context.dev.destroySemaphore(self.image_acquired, null);
+            self.context.dev.destroySemaphore(self.render_finished, null);
+            self.context.dev.destroyFence(self.present_fence, null);
+        }
+
+        pub fn waitForPresent(self: *const @This()) !void {
+            _ = try self.context.dev.waitForFences(1, @ptrCast(&self.present_fence), vk.TRUE, std.math.maxInt(u64));
+        }
+    };
+};
