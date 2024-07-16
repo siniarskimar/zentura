@@ -76,9 +76,8 @@ pub const Platform = struct {
         }
         _ = c.XFlush(self.display);
     }
-
     fn handleEvent(self: @This(), event: *c.XEvent) void {
-        const filtered = c.XFilterEvent(event, c.None);
+        const filtered = c.XFilterEvent(event, c.None) == c.True;
 
         switch (event.type) {
             c.SelectionRequest => {},
@@ -93,40 +92,8 @@ pub const Platform = struct {
                 ) != 0) {
                     return;
                 }
-                switch (event.type) {
-                    c.ReparentNotify => {},
-                    c.ConfigureNotify => {
-                        const eventw = event.xconfigure.width;
-                        const eventh = event.xconfigure.height;
-                        if (eventw != window.width or eventh != window.height) {
-                            window.width = @intCast(eventw);
-                            window.height = @intCast(eventh);
-                        }
-                    },
-                    c.ClientMessage => {
-                        if (filtered == c.True) return;
-                        if (event.xclient.message_type == self.WM_PROTOCOLS) {
-                            const protocol = event.xclient.data.l[0];
-                            if (protocol == self.WM_DELETE_WINDOW) {
-                                window.flag_closed = true;
-                            } else if (protocol == self.NET_WM_PING) {
-                                var reply = event.*;
-                                reply.xclient.window = self.root;
-                                _ = c.XSendEvent(
-                                    self.display,
-                                    self.root,
-                                    c.False,
-                                    c.SubstructureNotifyMask | c.SubstructureRedirectMask,
-                                    &reply,
-                                );
-                            }
-                        }
-                    },
-                    c.Expose => {
-                        std.debug.print("{p} Expose!", .{window});
-                    },
-                    else => {},
-                }
+
+                window.handleEvent(event, filtered);
             },
         }
     }
@@ -135,20 +102,36 @@ pub const Platform = struct {
 pub const Window = struct {
     context: Platform,
     window_handle: c.XID,
+    parent_handle: c.XID,
 
     width: u32,
     height: u32,
 
-    flag_closed: bool = false,
+    state_closed: bool = false,
+
 
     pub fn init(context: Platform, width: u32, height: u32) !@This() {
-        // const visual = c.XDefaultVisual(context.display, context.default_screen);
+        const window = c.XCreateSimpleWindow(
+            context.display,
+            context.xcb_screen.root,
+            0,
+            0,
+            width,
+            height,
+            0,
+            c.CopyFromParent,
+            c.InputOutput,
+        );
 
-        const window = c.XCreateSimpleWindow(context.display, context.xcb_screen.root, 0, 0, width, height, 0, c.CopyFromParent, c.InputOutput);
+        // RANT: Can't be const because whoever designed XSetWMProtocols
+        // did not puch much thought into it
+        var protocols = [_]c.Atom{ context.WM_DELETE_WINDOW, context.NET_WM_PING };
+        _ = c.XSetWMProtocols(context.display, window, &protocols, @intCast(protocols.len));
 
         return .{
             .context = context,
             .window_handle = window,
+            .parent_handle = context.root,
             .width = width,
             .height = height,
         };
@@ -158,9 +141,46 @@ pub const Window = struct {
         _ = c.XDestroyWindow(self.context.display, self.window_handle);
     }
 
+    fn handleEvent(self: *@This(), event: *c.XEvent, filtered: bool) void {
+        switch (event.type) {
+            c.ReparentNotify => {
+                self.parent_handle = event.xreparent.parent;
+            },
+            c.ConfigureNotify => {
+                const eventw = event.xconfigure.width;
+                const eventh = event.xconfigure.height;
+                if (eventw != self.width or eventh != self.height) {
+                    self.width = @intCast(eventw);
+                    self.height = @intCast(eventh);
+                }
+            },
+            c.ClientMessage => {
+                if (filtered) return;
+                self.handleClientMessage(event);
+            },
+            c.Expose => {
+                std.debug.print("{p} Expose!", .{self});
+            },
+            else => {},
         }
     }
 
+    fn handleClientMessage(self: *@This(), event: *c.XEvent) void {
+        if (event.xclient.message_type == self.context.WM_PROTOCOLS) {
+            const protocol = event.xclient.data.l[0];
+            if (protocol == self.context.WM_DELETE_WINDOW) {
+                self.state_closed = true;
+            } else if (protocol == self.context.NET_WM_PING) {
+                var reply = event.*;
+                reply.xclient.window = self.context.root;
+                _ = c.XSendEvent(
+                    self.context.display,
+                    self.context.root,
+                    c.False,
+                    c.SubstructureNotifyMask | c.SubstructureRedirectMask,
+                    &reply,
+                );
+            }
         }
     }
 
