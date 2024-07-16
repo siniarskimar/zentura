@@ -95,7 +95,7 @@ pub const WlWindow = struct {
 
     // Synchronization state
     got_resized: bool = false,
-    surface_should_resize: bool = false,
+    framebuffer_should_resize: bool = false,
 
     pub fn init(context: *const Platform, width: u32, height: u32) !@This() {
         const wm_base = context.xdg_wm_base orelse return error.XdgWmBaseNull;
@@ -135,7 +135,7 @@ pub const WlWindow = struct {
         switch (event) {
             .configure => {
                 surface.ackConfigure(event.configure.serial);
-                data.surface_should_resize = data.got_resized;
+                data.framebuffer_should_resize = data.got_resized;
             },
         }
     }
