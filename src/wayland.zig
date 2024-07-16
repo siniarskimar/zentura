@@ -90,7 +90,10 @@ pub const WlWindow = struct {
     // Properties
     width: u32,
     height: u32,
-    is_closed: bool = false,
+    state_closed: bool = false,
+    state_maximized: bool = false,
+    state_fullscreen: bool = false,
+    state_activated: bool = false,
 
     // Synchronization state
     got_resized: bool = false,
@@ -143,15 +146,27 @@ pub const WlWindow = struct {
         _ = toplevel;
         switch (event) {
             .configure => |ev| {
+                data.state_maximized = false;
+                data.state_fullscreen = false;
+                data.state_activated = false;
+
                 data.got_resized = false;
                 if (ev.width != 0 and ev.height != 0) {
                     data.got_resized = true;
                     data.width = @intCast(ev.width);
                     data.height = @intCast(ev.height);
                 }
+                const State = xdg.Toplevel.State;
+                const states = ev.states.slice(State);
+                for (states) |state| switch (state) {
+                    State.maximized => data.state_maximized = true,
+                    State.fullscreen => data.state_fullscreen = true,
+                    State.activated => data.state_activated = true,
+                    else => {},
+                };
             },
             .close => {
-                data.is_closed = true;
+                data.state_closed = true;
             },
         }
     }
