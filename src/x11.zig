@@ -1,4 +1,5 @@
 const std = @import("std");
+const nswindow = @import("./window.zig");
 pub const c = @cImport({
     @cInclude("X11/Xlib.h");
     @cInclude("X11/Xresource.h");
@@ -109,6 +110,8 @@ pub const Window = struct {
 
     state_closed: bool = false,
 
+    cb_framebuffer_resize: ?*const nswindow.FnFramebufferResizeCb = null,
+    cb_framebuffer_resize_ctx: ?*anyopaque = null,
 
     pub fn init(context: Platform, width: u32, height: u32) !@This() {
         const window = c.XCreateSimpleWindow(
@@ -152,6 +155,9 @@ pub const Window = struct {
                 if (eventw != self.width or eventh != self.height) {
                     self.width = @intCast(eventw);
                     self.height = @intCast(eventh);
+                    if (self.cb_framebuffer_resize) |cb| {
+                        cb(self.cb_framebuffer_resize_ctx, self.width, self.height);
+                    }
                 }
             },
             c.ClientMessage => {
@@ -184,5 +190,12 @@ pub const Window = struct {
         }
     }
 
+    pub fn setFramebufferResizeCallback(
+        self: *@This(),
+        ctx: ?*anyopaque,
+        callback: ?*const nswindow.FnFramebufferResizeCb,
+    ) void {
+        self.cb_framebuffer_resize = callback;
+        self.cb_framebuffer_resize_ctx = ctx;
     }
 };

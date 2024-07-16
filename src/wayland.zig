@@ -1,5 +1,6 @@
 const std = @import("std");
 const wayland = @import("wayland").client;
+const nswindow = @import("./window.zig");
 pub const wl = wayland.wl;
 pub const xdg = wayland.xdg;
 
@@ -97,7 +98,8 @@ pub const WlWindow = struct {
 
     // Synchronization state
     got_resized: bool = false,
-    framebuffer_should_resize: bool = false,
+    cb_framebuffer_resize: ?*const nswindow.FnFramebufferResizeCb = null,
+    cb_framebuffer_resize_ctx: ?*anyopaque = null,
 
     pub fn init(context: *const Platform, width: u32, height: u32) !@This() {
         const wm_base = context.xdg_wm_base orelse return error.XdgWmBaseNull;
@@ -133,11 +135,22 @@ pub const WlWindow = struct {
         self.wl_surface.destroy();
     }
 
+    pub fn setFramebufferResizeCallback(
+        self: *@This(),
+        ctx: ?*anyopaque,
+        callback: ?*const nswindow.FnFramebufferResizeCb,
+    ) void {
+        self.cb_framebuffer_resize = callback;
+        self.cb_framebuffer_resize_ctx = ctx;
+    }
+
     fn xdgSurfaceHandler(surface: *xdg.Surface, event: xdg.Surface.Event, data: *@This()) void {
         switch (event) {
             .configure => {
+                if (data.cb_framebuffer_resize) |cb| {
+                    cb(data.cb_framebuffer_resize_ctx, data.width, data.height);
+                }
                 surface.ackConfigure(event.configure.serial);
-                data.framebuffer_should_resize = data.got_resized;
             },
         }
     }

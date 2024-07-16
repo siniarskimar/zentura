@@ -69,6 +69,13 @@ pub const Platform = if (host_is_posix) union(enum) {
     }
 } else @compileError("Unsupported OS");
 
+pub const FnFramebufferResizeCb = fn (ctx: ?*anyopaque, width: u32, height: u32) void;
+
+pub const WindowDimensions = struct {
+    width: u32,
+    height: u32,
+};
+
 pub const Window = if (host_is_posix) union(enum) {
     wayland: *wayland.WlWindow,
     x11: *x11.Window,
@@ -117,6 +124,21 @@ pub const Window = if (host_is_posix) union(enum) {
         }
     }
 
+    pub fn setFramebufferResizeCallback(
+        self: @This(),
+        ctx: ?*anyopaque,
+        callback: ?*const FnFramebufferResizeCb,
+    ) void {
+        switch (self) {
+            .wayland => |window| {
+                window.setFramebufferResizeCallback(ctx, callback);
+            },
+            .x11 => |window| {
+                window.setFramebufferResizeCallback(ctx, callback);
+            },
+        }
+    }
+
     pub fn setTitle(self: @This(), title: [:0]const u8) void {
         switch (self) {
             .wayland => |window| {
@@ -140,14 +162,17 @@ pub const Window = if (host_is_posix) union(enum) {
         }
     }
 
-    pub fn getWidth(self: @This()) void {
-        switch (self) {
-            .wayland => |window| {
-                return window.width;
-            },
-            .x11 => |window| {
-                return window.width;
-            },
-        }
+    pub fn closed(self: @This()) bool {
+        return switch (self) {
+            .wayland => |window| window.state_closed,
+            .x11 => |window| window.state_closed,
+        };
+    }
+
+    pub fn dimensions(self: @This()) WindowDimensions {
+        return switch (self) {
+            .wayland => |window| .{ .width = window.width, .height = window.height },
+            .x11 => |window| .{ .width = window.width, .height = window.height },
+        };
     }
 } else @compileError("Unsupported OS");
