@@ -1,14 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const wayland = @import("./wayland.zig");
 const vulkan = @import("./vulkan.zig");
-const x11 = @import("./x11.zig");
+const nswindow = @import("./window.zig");
 const vk = vulkan.vk;
 const shaders = @import("shaders");
-
-const WlContext = wayland.WlContext;
-const WlWindow = wayland.WlWindow;
 
 const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
@@ -18,35 +14,21 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    var vksolib = try vulkan.loadSharedLibrary();
-    defer vksolib.close();
+    const window_platform = try nswindow.Platform.init(gpa.allocator());
+    defer window_platform.deinit(gpa.allocator());
 
-    var x11context = try x11.Context.init();
-    defer x11context.deinit();
+    window_platform.pollEvents();
 
-    var x11window = try x11.Window.init(x11context, 800, 600);
-    defer x11window.deinit();
+    var window = try nswindow.Window.init(gpa.allocator(), &window_platform, 800, 600);
+    defer window.deinit(gpa.allocator());
 
-    _ = x11.c.XMapWindow(x11context.display, x11window.window_handle);
+    window.setTitle("zentura");
+    window.commit();
+    window_platform.pollEvents();
 
-    _ = x11.c.XSync(x11context.display, x11.c.False);
+    _ = try vulkan.loadLibrary();
+    defer vulkan.unloadLibrary();
 
-    // var wlcontext = try WlContext.init();
-    // defer wlcontext.deinit();
-
-    // wlcontext.wl_registry.setListener(*WlContext, WlContext.globalsListener, &wlcontext);
-    // if (wlcontext.wl_display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
-
-    // var wlwindow = try WlWindow.init(&wlcontext);
-    // defer wlwindow.deinit();
-
-    // wlwindow.initListeners();
-    // wlwindow.width = 800;
-    // wlwindow.height = 600;
-    // wlwindow.xdg_toplevel.setTitle("zentura");
-    // wlwindow.xdg_toplevel.setAppId("siniarskimar.zentura");
-    // wlwindow.xdg_toplevel.setMinSize(100, 100);
-
-    var vkcontext = try x11.VulkanContext.init(gpa.allocator(), x11window);
+    var vkcontext = try vulkan.InstanceContext.init(gpa.allocator(), &window);
     defer vkcontext.deinit(gpa.allocator());
 }
