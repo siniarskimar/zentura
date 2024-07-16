@@ -58,4 +58,7 @@ pub fn build(b: *std.Build) void {
 
     const step_run = b.step("run", "Run zentura");
     step_run.dependOn(&run_zentura.step);
+
+    const step_check = b.step("check", "Check if the project compiles");
+    step_check.dependOn(&exe_zentura.step);
 }
