@@ -1,4 +1,4 @@
-name: 'Zig code formatting check'
+name: 'Zig format check'
 
 on:
   push:
