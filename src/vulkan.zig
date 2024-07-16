@@ -1,6 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const nswindow = @import("window.zig");
 
+pub const log = std.log.scoped(.vulkan);
 pub const vk = @import("vulkan");
 
 /// Features for which to generate and load function pointers
@@ -34,6 +36,100 @@ pub const BaseDispatch = vk.BaseWrapper(apis);
 pub const InstanceDispatch = vk.InstanceWrapper(apis);
 pub const DeviceDispatch = vk.DeviceWrapper(apis);
 
+const SurfaceDispatch = struct {
+    instance: vk.Instance,
+    vkCreateWaylandSurfaceKHR: ?vk.PfnCreateWaylandSurfaceKHR = null,
+    vkCreateXlibSurfaceKHR: ?vk.PfnCreateXlibSurfaceKHR = null,
+    vkCreateXcbSurfaceKHR: ?vk.PfnCreateXcbSurfaceKHR = null,
+
+    fn load(instance: vk.Instance, getInstanceProcAddress: vkGetInstanceProcAddressFn) @This() {
+        return .{
+            .instance = instance,
+            .vkCreateWaylandSurfaceKHR = @ptrCast(getInstanceProcAddress(instance, "vkCreateWaylandSurfaceKHR")),
+            .vkCreateXlibSurfaceKHR = @ptrCast(getInstanceProcAddress(instance, "vkCreateXlibSurfaceKHR")),
+            .vkCreateXcbSurfaceKHR = @ptrCast(getInstanceProcAddress(instance, "vkCreateXcbSurfaceKHR")),
+        };
+    }
+
+    fn createWaylandSurface(self: @This(), wl_display: *opaque {}, wl_surface: *opaque {}) !vk.SurfaceKHR {
+        const vkCreateWaylandSurface = self.vkCreateWaylandSurfaceKHR orelse return error.CommandLoadFailure;
+        var surface: vk.SurfaceKHR = .null_handle;
+        const result = vkCreateWaylandSurface(self.instance, &vk.WaylandSurfaceCreateInfoKHR{
+            .display = wl_display,
+            .surface = wl_surface,
+        }, null, &surface);
+
+        switch (result) {
+            vk.Result.success => {},
+            vk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
+            vk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
+            else => return error.Unknown,
+        }
+
+        return surface;
+    }
+
+    fn createXlibSurface(self: @This(), display: *opaque {}, window: c_ulong) !vk.SurfaceKHR {
+        const vkCreateXlibSurface = self.vkCreateXlibSurfaceKHR orelse return error.CommandLoadFailure;
+
+        var surface: vk.SurfaceKHR = .null_handle;
+        const result = vkCreateXlibSurface(self.instance, &vk.XlibSurfaceCreateInfoKHR{
+            .dpy = display,
+            .window = window,
+        }, null, &surface);
+
+        switch (result) {
+            vk.Result.success => {},
+            vk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
+            vk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
+            else => return error.Unknown,
+        }
+
+        return surface;
+    }
+
+    fn createXcbSurface(self: @This(), connection: *opaque {}, window: u32) !vk.SurfaceKHR {
+        const vkCreateXcbSurface = self.vkCreateXcbSurfaceKHR orelse return error.CommandLoadFailure;
+
+        var surface: vk.SurfaceKHR = .null_handle;
+        const result = vkCreateXcbSurface(self.instance, &vk.XcbSurfaceCreateInfoKHR{
+            .connection = connection,
+            .window = window,
+        }, null, &surface);
+
+        switch (result) {
+            vk.Result.success => {},
+            vk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
+            vk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
+            else => return error.Unknown,
+        }
+
+        return surface;
+    }
+
+    fn createSurface(self: @This(), generic_window: *const nswindow.Window) !vk.SurfaceKHR {
+        if (nswindow.host_is_posix) switch (generic_window.*) {
+            .wayland => |window| {
+                if (self.vkCreateWaylandSurfaceKHR == null) {
+                    log.err("Vulkan instance does not have vkCreateWaylandSurfaceKHR, but lists VK_KHR_wayland_surface as supported", .{});
+                    return error.CommandLoadFailure;
+                }
+                return self.createWaylandSurface(@ptrCast(window.context.wl_display), @ptrCast(window.wl_surface));
+            },
+            .x11 => |window| {
+                if (self.vkCreateXcbSurfaceKHR != null) {
+                    return self.createXcbSurface(@ptrCast(window.context.xcb_connection), window.window_handle);
+                }
+                if (self.vkCreateXlibSurfaceKHR == null) {
+                    log.err("Vulkan instance does not have vkCreateXlibSurfaceKHR, but lists VK_KHR_xlib_surface as supported", .{});
+                    return error.CommandLoadFailure;
+                }
+                return self.createXlibSurface(@ptrCast(window.context.display), window.window_handle);
+            },
+        } else @compileError("Unsupported OS");
+    }
+};
+
 pub const Instance = vk.InstanceProxy(apis);
 pub const Device = vk.DeviceProxy(apis);
 
@@ -57,11 +153,14 @@ pub fn loadLibrary() !*std.DynLib {
     return lib;
 }
 
-pub const Context = struct {
+pub fn unloadLibrary() void {
+    if (vulkan_so_library) |*lib| lib.close();
+}
+
+pub const InstanceContext = struct {
     instance: Instance,
     base_dispatch: BaseDispatch,
-
-    getInstanceProcAddress: vkGetInstanceProcAddressFn,
+    surface_dispatch: SurfaceDispatch,
 
     const app_info: vk.ApplicationInfo = .{
         .p_application_name = "zentura",
@@ -72,13 +171,24 @@ pub const Context = struct {
 
     pub const CommandBuffer = vk.CommandBufferProxy(apis);
 
-    pub fn init(instance_extensions: []const [*:0]const u8, allocator: std.mem.Allocator) !@This() {
-        var self: Context = undefined;
-        self.getInstanceProcAddress = vkGetInstanceProcAddress orelse return error.VkGetInstanceProcAddressNull;
+    pub fn init(allocator: std.mem.Allocator, window: *const nswindow.Window) !@This() {
+        if (vulkan_so_library == null) return error.VulkanSoNotLoaded;
+        const getInstanceProcAddress = vulkan_so_library.?.lookup(vkGetInstanceProcAddressFn, "vkGetInstanceProcAddr") orelse unreachable;
 
-        self.base_dispatch = try BaseDispatch.load(self.getInstanceProcAddress);
+        const base_dispatch = try BaseDispatch.load(getInstanceProcAddress);
 
-        const instance = try self.base_dispatch.createInstance(&vk.InstanceCreateInfo{
+        const compositor_exts = if (nswindow.host_is_posix) switch (window.*) {
+            .wayland => &[_][*:0]const u8{"VK_KHR_wayland_surface"},
+            .x11 => &[_][*:0]const u8{ "VK_KHR_xlib_surface", "VK_KHR_xcb_surface" },
+        } else @compileError("Unsupported OS");
+
+        const instance_extensions = try allocator.alloc([*:0]const u8, required_instance_extensions.len + compositor_exts.len);
+        defer allocator.free(instance_extensions);
+
+        std.mem.copyForwards([*:0]const u8, instance_extensions, &required_instance_extensions);
+        std.mem.copyForwards([*:0]const u8, instance_extensions[required_instance_extensions.len..], compositor_exts);
+
+        const instance = try base_dispatch.createInstance(&vk.InstanceCreateInfo{
             .p_application_info = &app_info,
             .enabled_extension_count = @intCast(instance_extensions.len),
             .pp_enabled_extension_names = instance_extensions.ptr,
@@ -89,10 +199,13 @@ pub const Context = struct {
 
         const instance_dispatch = try allocator.create(InstanceDispatch);
         errdefer allocator.destroy(instance_dispatch);
-        instance_dispatch.* = try InstanceDispatch.load(instance, self.getInstanceProcAddress);
-        self.instance = Instance.init(instance, instance_dispatch);
+        instance_dispatch.* = try InstanceDispatch.load(instance, getInstanceProcAddress);
 
-        return self;
+        return .{
+            .instance = Instance.init(instance, instance_dispatch),
+            .base_dispatch = base_dispatch,
+            .surface_dispatch = SurfaceDispatch.load(instance, getInstanceProcAddress),
+        };
     }
 
     pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
