@@ -165,7 +165,7 @@ pub const Window = struct {
                 self.handleClientMessage(event);
             },
             c.Expose => {
-                std.debug.print("{p} Expose!", .{self});
+                std.debug.print("{any} Expose!", .{self});
             },
             else => {},
         }
