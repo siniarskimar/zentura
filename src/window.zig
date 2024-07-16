@@ -98,12 +98,7 @@ pub const Window = if (host_is_posix) union(enum) {
 
                 window.* = try X11Window.init(plat, width, height);
                 _ = x11.c.XMapWindow(plat.display, window.window_handle);
-
-                switch (x11.c.XSaveContext(plat.display, window.window_handle, plat.xcontext, @ptrCast(window))) {
-                    0 => {},
-                    x11.c.XCNOMEM => return error.OutOfMemory,
-                    else => return error.UnknownX11,
-                }
+                _ = x11.c.XSaveContext(plat.display, window.window_handle, plat.xcontext, @ptrCast(window));
 
                 return .{ .x11 = window };
             },
@@ -117,7 +112,11 @@ pub const Window = if (host_is_posix) union(enum) {
                 allocator.destroy(window);
             },
             .x11 => |window| {
-                x11.c.XDeleteContext(window.context.display, window.window_handle, window.context.xcontext);
+                _ = x11.c.XDeleteContext(
+                    window.context.display,
+                    window.window_handle,
+                    window.context.xcontext,
+                );
                 window.deinit();
                 allocator.destroy(window);
             },
