@@ -430,6 +430,7 @@ pub const Swapchain = struct {
         const instance = self.instance;
         const context = self.context;
 
+        try self.context.dev.deviceWaitIdle();
         self.destroyWithoutHandle(allocator);
         self.* = try recycle(allocator, instance, context, extent, self.handle);
     }
@@ -580,6 +581,12 @@ pub const Swapchain = struct {
     }
 
     pub fn destroy(self: *@This(), allocator: std.mem.Allocator) void {
+        // HACK: If we fail to wait, just wait on the CPU and cross fingers the GPU
+        // completed all jobs
+        self.context.dev.deviceWaitIdle() catch |err| {
+            log.warn("deviceWaitIdle failed: {s}", .{@errorName(err)});
+            std.time.sleep(std.time.ns_per_ms * 20);
+        };
         self.destroyWithoutHandle(allocator);
         self.context.dev.destroySwapchainKHR(self.handle, null);
     }
