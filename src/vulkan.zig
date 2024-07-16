@@ -722,14 +722,25 @@ pub const Swapchain = struct {
 };
 
 pub const Renderer = struct {
-    window: *const nswindow.Window,
+    window: *nswindow.Window,
+    allocator: std.mem.Allocator,
+
     ctx: InstanceContext,
     rctx: *RenderContext,
     swapchain: Swapchain,
 
+    render_pass: vk.RenderPass,
+    pipeline_layout: vk.PipelineLayout,
+    pipeline: vk.Pipeline,
+    cmdpool: vk.CommandPool,
+    framebuffers: []vk.Framebuffer,
+    cmdbufs: []vk.CommandBuffer,
+
+    should_resize: bool = false,
+
     const shaders = @import("shaders");
 
-    pub fn init(allocator: std.mem.Allocator, window: *const nswindow.Window) !@This() {
+    pub fn init(allocator: std.mem.Allocator, window: *nswindow.Window) !@This() {
         const ctx = try InstanceContext.init(allocator, window);
         errdefer ctx.deinit(allocator);
 
@@ -739,30 +750,130 @@ pub const Renderer = struct {
         const rctx = try allocator.create(RenderContext);
         errdefer allocator.destroy(rctx);
 
-        rctx.* = try RenderContext.init(&.{}, allocator, ctx.instance, surface);
+        rctx.* = try RenderContext.init(allocator, ctx.instance, surface);
         errdefer rctx.deinit(allocator);
 
-        // const swapchain = try Swapchain.create(allocator, ctx.instance, rctx, );
+        const window_dims = window.dimensions();
+        var swapchain = try Swapchain.create(
+            allocator,
+            ctx.instance,
+            rctx,
+            .{ .width = window_dims.width, .height = window_dims.height },
+        );
+        errdefer swapchain.destroy(allocator);
+
+        const render_pass = try createRenderPass(rctx.dev, swapchain);
+        errdefer rctx.dev.destroyRenderPass(render_pass, null);
+
+        const layout = try rctx.dev.createPipelineLayout(&vk.PipelineLayoutCreateInfo{}, null);
+        errdefer rctx.dev.destroyPipelineLayout(layout, null);
+
+        const pipeline = try createVulkanPipeline(rctx.dev, layout, render_pass);
+        errdefer rctx.dev.destroyPipeline(pipeline, null);
+
+        const cmdpool = try rctx.dev.createCommandPool(
+            &.{ .queue_family_index = rctx.graphics_queue.family },
+            null,
+        );
+        errdefer rctx.dev.destroyCommandPool(cmdpool, null);
+
+        const framebuffers = try createFramebuffers(allocator, rctx.dev, render_pass, swapchain);
+        errdefer destroyFramebuffers(allocator, rctx.dev, framebuffers);
+
+        const cmdbufs = try createCommandBuffers(
+            allocator,
+            rctx.dev,
+            cmdpool,
+            render_pass,
+            framebuffers,
+            pipeline,
+            swapchain.extent,
+        );
+        errdefer destroyCommandBuffers(allocator, rctx.dev, cmdpool, cmdbufs);
 
         return .{
             .window = window,
+            .allocator = allocator,
             .ctx = ctx,
             .rctx = rctx,
+            .swapchain = swapchain,
+
+            .render_pass = render_pass,
+            .pipeline_layout = layout,
+            .pipeline = pipeline,
+            .cmdpool = cmdpool,
+            .cmdbufs = cmdbufs,
+            .framebuffers = framebuffers,
         };
     }
 
-    pub fn deinit(self: *const @This(), allocator: std.mem.Allocator) void {
+    pub fn initCallbacks(self: *@This()) void {
+        self.window.setFramebufferResizeCallback(self, framebufferResizeCallback);
+    }
+
+    pub fn deinit(self: *@This()) void {
+        const allocator = self.allocator;
+        destroyFramebuffers(allocator, self.rctx.dev, self.framebuffers);
+        destroyCommandBuffers(allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
+        self.rctx.dev.destroyCommandPool(self.cmdpool, null);
+
         self.swapchain.destroy(allocator);
         self.rctx.deinit(allocator);
         allocator.destroy(self.rctx);
         self.ctx.deinit(allocator);
     }
 
-    pub fn present(self: *@This()) void {
-        if(self.window);
+    pub fn present(self: *@This()) !void {
+        const cmdbuf = self.cmdbufs[self.swapchain.image_index];
+        const result = self.swapchain.present(cmdbuf) catch |err| switch (err) {
+            error.OutOfDateKHR => .suboptimal,
+            else => return err,
+        };
+
+        if (result == .suboptimal or self.should_resize) {
+            self.should_resize = false;
+            const dims = self.window.dimensions();
+            try self.swapchain.recreate(
+                self.allocator,
+                .{ .width = dims.width, .height = dims.height },
+            );
+
+            destroyFramebuffers(self.allocator, self.rctx.dev, self.framebuffers);
+            self.framebuffers = try createFramebuffers(
+                self.allocator,
+                self.rctx.dev,
+                self.render_pass,
+                self.swapchain,
+            );
+
+            destroyCommandBuffers(self.allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
+            self.cmdbufs = try createCommandBuffers(
+                self.allocator,
+                self.rctx.dev,
+                self.cmdpool,
+                self.render_pass,
+                self.framebuffers,
+                self.pipeline,
+                self.swapchain.extent,
+            );
+        }
     }
 
-    fn destroyCommandBuffers(allocator: std.mem.Allocator, dev: Device, cmdpool: vk.CommandPool, cmdbufs: []vk.CommandBuffer) void {
+    pub fn framebufferResizeCallback(ctx: ?*anyopaque, width: u32, height: u32) void {
+        _ = width;
+        _ = height;
+        std.debug.assert(ctx != null);
+
+        var self: *@This() = @alignCast(@ptrCast(ctx.?));
+        self.should_resize = true;
+    }
+
+    fn destroyCommandBuffers(
+        allocator: std.mem.Allocator,
+        dev: Device,
+        cmdpool: vk.CommandPool,
+        cmdbufs: []vk.CommandBuffer,
+    ) void {
         dev.freeCommandBuffers(cmdpool, @intCast(cmdbufs.len), cmdbufs.ptr);
         allocator.free(cmdbufs);
     }
