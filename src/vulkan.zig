@@ -99,7 +99,7 @@ pub const Context = struct {
     }
 };
 
-pub const DeviceContext = struct {
+pub const RenderContext = struct {
     instance: Instance,
     surface: vk.SurfaceKHR,
 
@@ -290,7 +290,7 @@ pub const DeviceContext = struct {
 
 pub const Swapchain = struct {
     instance: Instance,
-    context: *const DeviceContext,
+    context: *const RenderContext,
 
     handle: vk.SwapchainKHR,
     extent: vk.Extent2D,
@@ -304,7 +304,7 @@ pub const Swapchain = struct {
     pub fn create(
         allocator: std.mem.Allocator,
         instance: Instance,
-        context: *const DeviceContext,
+        context: *const RenderContext,
         extent: vk.Extent2D,
     ) !@This() {
         return try recycle(allocator, instance, context, extent, .null_handle);
@@ -321,7 +321,7 @@ pub const Swapchain = struct {
     fn recycle(
         allocator: std.mem.Allocator,
         instance: Instance,
-        context: *const DeviceContext,
+        context: *const RenderContext,
         extent: vk.Extent2D,
         old_swapchain: vk.SwapchainKHR,
     ) !@This() {
@@ -470,7 +470,7 @@ pub const Swapchain = struct {
 
     fn initSwapchainImages(
         allocator: std.mem.Allocator,
-        context: *const DeviceContext,
+        context: *const RenderContext,
         swapchain: vk.SwapchainKHR,
         format: vk.Format,
     ) ![]SwapImage {
@@ -504,7 +504,7 @@ pub const Swapchain = struct {
     fn findPresentationMode(
         allocator: std.mem.Allocator,
         instance: Instance,
-        context: *const DeviceContext,
+        context: *const RenderContext,
     ) !vk.PresentModeKHR {
         const modes = try instance.getPhysicalDeviceSurfacePresentModesAllocKHR(context.pdev, context.surface, allocator);
         defer allocator.free(modes);
@@ -519,7 +519,7 @@ pub const Swapchain = struct {
     fn findSurfaceFormat(
         allocator: std.mem.Allocator,
         instance: Instance,
-        context: *const DeviceContext,
+        context: *const RenderContext,
     ) !vk.SurfaceFormatKHR {
         const surface_formats = try instance.getPhysicalDeviceSurfaceFormatsAllocKHR(context.pdev, context.surface, allocator);
         defer allocator.free(surface_formats);
@@ -536,7 +536,7 @@ pub const Swapchain = struct {
         return surface_formats[0];
     }
     const SwapImage = struct {
-        context: *const DeviceContext,
+        context: *const RenderContext,
         handle: vk.Image,
         view: vk.ImageView,
 
@@ -544,7 +544,7 @@ pub const Swapchain = struct {
         render_finished: vk.Semaphore,
         present_fence: vk.Fence,
 
-        pub fn init(context: *const DeviceContext, handle: vk.Image, format: vk.Format) !@This() {
+        pub fn init(context: *const RenderContext, handle: vk.Image, format: vk.Format) !@This() {
             const view = try context.dev.createImageView(&vk.ImageViewCreateInfo{
                 .image = handle,
                 .view_type = .@"2d",
