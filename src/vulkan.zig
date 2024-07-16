@@ -713,3 +713,308 @@ pub const Swapchain = struct {
         }
     };
 };
+
+pub const Renderer = struct {
+    window: *const nswindow.Window,
+    ctx: InstanceContext,
+    rctx: *RenderContext,
+    swapchain: Swapchain,
+
+    const shaders = @import("shaders");
+
+    pub fn init(allocator: std.mem.Allocator, window: *const nswindow.Window) !@This() {
+        const ctx = try InstanceContext.init(allocator, window);
+        errdefer ctx.deinit(allocator);
+
+        const surface = try ctx.surface_dispatch.createSurface(window);
+        errdefer ctx.instance.destroySurfaceKHR(surface, null);
+
+        const rctx = try allocator.create(RenderContext);
+        errdefer allocator.destroy(rctx);
+
+        rctx.* = try RenderContext.init(&.{}, allocator, ctx.instance, surface);
+        errdefer rctx.deinit(allocator);
+
+        // const swapchain = try Swapchain.create(allocator, ctx.instance, rctx, );
+
+        return .{
+            .window = window,
+            .ctx = ctx,
+            .rctx = rctx,
+        };
+    }
+
+    pub fn deinit(self: *const @This(), allocator: std.mem.Allocator) void {
+        self.swapchain.destroy(allocator);
+        self.rctx.deinit(allocator);
+        allocator.destroy(self.rctx);
+        self.ctx.deinit(allocator);
+    }
+
+    pub fn present(self: *@This()) void {
+        if(self.window);
+    }
+
+    fn destroyCommandBuffers(allocator: std.mem.Allocator, dev: Device, cmdpool: vk.CommandPool, cmdbufs: []vk.CommandBuffer) void {
+        dev.freeCommandBuffers(cmdpool, @intCast(cmdbufs.len), cmdbufs.ptr);
+        allocator.free(cmdbufs);
+    }
+
+    fn destroyFramebuffers(allocator: std.mem.Allocator, dev: Device, framebuffers: []vk.Framebuffer) void {
+        for (framebuffers) |fb| dev.destroyFramebuffer(fb, null);
+        allocator.free(framebuffers);
+    }
+
+    fn createCommandBuffers(
+        allocator: std.mem.Allocator,
+        dev: Device,
+        cmdpool: vk.CommandPool,
+        render_pass: vk.RenderPass,
+        framebuffers: []vk.Framebuffer,
+        pipeline: vk.Pipeline,
+        extent: vk.Extent2D,
+    ) ![]vk.CommandBuffer {
+        const cmdbufs = try allocator.alloc(vk.CommandBuffer, framebuffers.len);
+        errdefer allocator.free(cmdbufs);
+
+        try dev.allocateCommandBuffers(&.{
+            .command_pool = cmdpool,
+            .level = .primary,
+            .command_buffer_count = @intCast(cmdbufs.len),
+        }, cmdbufs.ptr);
+        errdefer dev.freeCommandBuffers(cmdpool, @intCast(cmdbufs.len), cmdbufs.ptr);
+
+        const clear = vk.ClearValue{ .color = .{ .float_32 = .{ 0, 0, 0, 1 } } };
+        const viewport = vk.Viewport{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(extent.width),
+            .height = @floatFromInt(extent.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+        const scissor = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = extent,
+        };
+
+        for (cmdbufs, framebuffers) |cmdbuf, fb| {
+            try dev.beginCommandBuffer(cmdbuf, &.{});
+
+            dev.cmdSetViewport(cmdbuf, 0, 1, @ptrCast(&viewport));
+            dev.cmdSetScissor(cmdbuf, 0, 1, @ptrCast(&scissor));
+
+            const render_area = vk.Rect2D{
+                .offset = .{ .x = 0, .y = 0 },
+                .extent = extent,
+            };
+
+            dev.cmdBeginRenderPass(cmdbuf, &.{
+                .render_pass = render_pass,
+                .framebuffer = fb,
+                .render_area = render_area,
+                .clear_value_count = 1,
+                .p_clear_values = @ptrCast(&clear),
+            }, .@"inline");
+
+            dev.cmdBindPipeline(cmdbuf, .graphics, pipeline);
+            dev.cmdDraw(cmdbuf, 3, 1, 0, 0);
+            dev.cmdEndRenderPass(cmdbuf);
+            try dev.endCommandBuffer(cmdbuf);
+        }
+
+        return cmdbufs;
+    }
+
+    fn createFramebuffers(
+        allocator: std.mem.Allocator,
+        dev: Device,
+        render_pass: vk.RenderPass,
+        swapchain: Swapchain,
+    ) ![]vk.Framebuffer {
+        var framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
+        errdefer allocator.free(framebuffers);
+
+        var idx: usize = 0;
+        errdefer for (framebuffers[0..idx]) |fb| dev.destroyFramebuffer(fb, null);
+
+        while (idx < framebuffers.len) {
+            framebuffers[idx] = try dev.createFramebuffer(&vk.FramebufferCreateInfo{
+                .render_pass = render_pass,
+                .attachment_count = 1,
+                .p_attachments = @ptrCast(&swapchain.swap_images[idx].view),
+                .width = swapchain.extent.width,
+                .height = swapchain.extent.height,
+                .layers = 1,
+            }, null);
+            idx += 1;
+        }
+
+        return framebuffers;
+    }
+
+    fn createRenderPass(dev: Device, swapchain: Swapchain) !vk.RenderPass {
+        const color_attachment = vk.AttachmentDescription{
+            .format = swapchain.surface_format.format,
+            .samples = .{ .@"1_bit" = true },
+            .load_op = .clear,
+            .store_op = .store,
+            .stencil_load_op = .dont_care,
+            .stencil_store_op = .dont_care,
+            .initial_layout = .undefined,
+            .final_layout = .present_src_khr,
+        };
+
+        const color_attachment_ref = vk.AttachmentReference{
+            .attachment = 0,
+            .layout = .color_attachment_optimal,
+        };
+
+        const subpass = vk.SubpassDescription{
+            .pipeline_bind_point = .graphics,
+            .color_attachment_count = 1,
+            .p_color_attachments = @ptrCast(&color_attachment_ref),
+        };
+
+        return try dev.createRenderPass(&vk.RenderPassCreateInfo{
+            .attachment_count = 1,
+            .p_attachments = @ptrCast(&color_attachment),
+            .subpass_count = 1,
+            .p_subpasses = @ptrCast(&subpass),
+        }, null);
+    }
+
+    fn createVulkanPipeline(
+        dev: Device,
+        layout: vk.PipelineLayout,
+        render_pass: vk.RenderPass,
+    ) !vk.Pipeline {
+        const vert_module = try dev.createShaderModule(&vk.ShaderModuleCreateInfo{
+            .code_size = shaders.triangle_vert.len,
+            .p_code = @ptrCast(&shaders.triangle_vert),
+        }, null);
+        defer dev.destroyShaderModule(vert_module, null);
+
+        const frag_module = try dev.createShaderModule(&vk.ShaderModuleCreateInfo{
+            .code_size = shaders.triangle_frag.len,
+            .p_code = @ptrCast(&shaders.triangle_frag),
+        }, null);
+        defer dev.destroyShaderModule(frag_module, null);
+
+        const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
+            .{
+                .module = vert_module,
+                .p_name = "main",
+                .stage = .{ .vertex_bit = true },
+            },
+            .{
+                .module = frag_module,
+                .p_name = "main",
+                .stage = .{ .fragment_bit = true },
+            },
+        };
+
+        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
+            .vertex_binding_description_count = 0,
+            .vertex_attribute_description_count = 0,
+        };
+
+        const input_assembly_info = vk.PipelineInputAssemblyStateCreateInfo{
+            .topology = .triangle_list,
+            .primitive_restart_enable = vk.FALSE,
+        };
+
+        const dynamic_state = [_]vk.DynamicState{ .viewport, .scissor };
+        const dynamic_state_info = vk.PipelineDynamicStateCreateInfo{
+            .dynamic_state_count = dynamic_state.len,
+            .p_dynamic_states = &dynamic_state,
+        };
+
+        const viewport_state = vk.PipelineViewportStateCreateInfo{
+            .viewport_count = 1,
+            .p_viewports = undefined,
+            .scissor_count = 1,
+            .p_scissors = undefined,
+        };
+
+        const rasterizer_info = vk.PipelineRasterizationStateCreateInfo{
+            //: PipelineRasterizationStateCreateFlags
+            .flags = .{},
+            //: Bool32
+            .depth_clamp_enable = vk.FALSE,
+            //: Bool32
+            .rasterizer_discard_enable = vk.FALSE,
+            //: PolygonMode
+            .polygon_mode = .fill,
+            //: CullModeFlags
+            .cull_mode = .{ .back_bit = true },
+            //: FrontFace
+            .front_face = .clockwise,
+            //: Bool32
+            .depth_bias_enable = vk.FALSE,
+            //: f32
+            .depth_bias_constant_factor = 0,
+            //: f32
+            .depth_bias_clamp = 0,
+            //: f32
+            .depth_bias_slope_factor = 0,
+            //: f32
+            .line_width = 1,
+        };
+        const multisampling_info = vk.PipelineMultisampleStateCreateInfo{
+            .rasterization_samples = .{ .@"1_bit" = true },
+            .min_sample_shading = 1,
+            .alpha_to_coverage_enable = vk.FALSE,
+            .alpha_to_one_enable = vk.FALSE,
+            .sample_shading_enable = vk.FALSE,
+        };
+
+        const colorblending_attach_info = vk.PipelineColorBlendAttachmentState{
+            .blend_enable = vk.FALSE,
+            .src_color_blend_factor = .one,
+            .dst_color_blend_factor = .zero,
+            .color_blend_op = .add,
+            .src_alpha_blend_factor = .one,
+            .dst_alpha_blend_factor = .zero,
+            .alpha_blend_op = .add,
+            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = false },
+        };
+
+        const colorblending_info = vk.PipelineColorBlendStateCreateInfo{
+            .logic_op_enable = vk.FALSE,
+            .logic_op = .copy,
+            .attachment_count = 1,
+            .p_attachments = @ptrCast(&colorblending_attach_info),
+            .blend_constants = .{ 0, 0, 0, 0 },
+        };
+
+        const pipeline_info = vk.GraphicsPipelineCreateInfo{
+            .stage_count = 2,
+            .p_stages = &shader_stages,
+            .p_vertex_input_state = &vertex_input_info,
+            .p_input_assembly_state = &input_assembly_info,
+            .p_tessellation_state = null,
+            .p_viewport_state = &viewport_state,
+            .p_rasterization_state = &rasterizer_info,
+            .p_multisample_state = &multisampling_info,
+            .p_depth_stencil_state = null,
+            .p_color_blend_state = &colorblending_info,
+            .p_dynamic_state = &dynamic_state_info,
+            .layout = layout,
+            .render_pass = render_pass,
+            .subpass = 0,
+            .base_pipeline_handle = .null_handle,
+            .base_pipeline_index = -1,
+        };
+
+        var pipeline: vk.Pipeline = .null_handle;
+        _ = try dev.createGraphicsPipelines(
+            .null_handle,
+            1,
+            @ptrCast(&pipeline_info),
+            null,
+            @ptrCast(&pipeline),
+        );
+        return pipeline;
+    }
+};
