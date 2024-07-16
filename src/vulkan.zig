@@ -51,7 +51,7 @@ const SurfaceDispatch = struct {
         };
     }
 
-    fn createWaylandSurface(self: @This(), wl_display: *opaque {}, wl_surface: *opaque {}) !vk.SurfaceKHR {
+    fn createWaylandSurface(self: @This(), wl_display: *vk.wl_display, wl_surface: *vk.wl_surface) !vk.SurfaceKHR {
         const vkCreateWaylandSurface = self.vkCreateWaylandSurfaceKHR orelse return error.CommandLoadFailure;
         var surface: vk.SurfaceKHR = .null_handle;
         const result = vkCreateWaylandSurface(self.instance, &vk.WaylandSurfaceCreateInfoKHR{
@@ -69,7 +69,7 @@ const SurfaceDispatch = struct {
         return surface;
     }
 
-    fn createXlibSurface(self: @This(), display: *opaque {}, window: c_ulong) !vk.SurfaceKHR {
+    fn createXlibSurface(self: @This(), display: *vk.Display, window: vk.Window) !vk.SurfaceKHR {
         const vkCreateXlibSurface = self.vkCreateXlibSurfaceKHR orelse return error.CommandLoadFailure;
 
         var surface: vk.SurfaceKHR = .null_handle;
@@ -88,7 +88,7 @@ const SurfaceDispatch = struct {
         return surface;
     }
 
-    fn createXcbSurface(self: @This(), connection: *opaque {}, window: u32) !vk.SurfaceKHR {
+    fn createXcbSurface(self: @This(), connection: *vk.xcb_connection_t, window: vk.xcb_window_t) !vk.SurfaceKHR {
         const vkCreateXcbSurface = self.vkCreateXcbSurfaceKHR orelse return error.CommandLoadFailure;
 
         var surface: vk.SurfaceKHR = .null_handle;
@@ -118,7 +118,7 @@ const SurfaceDispatch = struct {
             },
             .x11 => |window| {
                 if (self.vkCreateXcbSurfaceKHR != null) {
-                    return self.createXcbSurface(@ptrCast(window.context.xcb_connection), window.window_handle);
+                    return self.createXcbSurface(@ptrCast(window.context.xcb_connection), @intCast(window.window_handle));
                 }
                 if (self.vkCreateXlibSurfaceKHR == null) {
                     log.err("Vulkan instance does not have vkCreateXlibSurfaceKHR, but lists VK_KHR_xlib_surface as supported", .{});
