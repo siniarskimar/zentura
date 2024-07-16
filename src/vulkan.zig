@@ -232,31 +232,32 @@ pub const RenderContext = struct {
         instance: Instance,
         surface: vk.SurfaceKHR,
     ) !@This() {
-        var self: @This() = undefined;
-        self.instance = instance;
+        errdefer instance.destroySurfaceKHR(surface, null);
 
-        self.surface = surface;
-        errdefer self.instance.destroySurfaceKHR(self.surface, null);
+        const device_candidate = try findDeviceCandidate(allocator, instance, surface);
+        const pdev = device_candidate.pdev;
+        const pdevprops = device_candidate.props;
 
-        const device_candidate = try findDeviceCandidate(allocator, self.instance, self.surface);
-        self.pdev = device_candidate.pdev;
-        self.pdevprops = device_candidate.props;
-
-        const device = try initializeDeviceCandidate(device_extensions, self.instance, device_candidate);
+        const device = try initializeDeviceCandidate(device_extensions, instance, device_candidate);
 
         const device_dispatch = try allocator.create(DeviceDispatch);
         errdefer allocator.destroy(device_dispatch);
 
-        device_dispatch.* = try DeviceDispatch.load(device, self.instance.wrapper.dispatch.vkGetDeviceProcAddr);
-        self.dev = Device.init(device, device_dispatch);
-        errdefer self.dev.destroyDevice(null);
+        device_dispatch.* = try DeviceDispatch.load(device, instance.wrapper.dispatch.vkGetDeviceProcAddr);
+        const dev = Device.init(device, device_dispatch);
+        errdefer dev.destroyDevice(null);
 
-        self.graphics_queue = Queue.init(self.dev, device_candidate.queues.graphics_family, 0);
-        self.present_queue = Queue.init(self.dev, device_candidate.queues.present_family, 0);
+        return .{
+            .instance = instance,
+            .surface = surface,
+            .pdev = pdev,
+            .pdevprops = pdevprops,
+            .pdevmemprops = instance.getPhysicalDeviceMemoryProperties(pdev),
+            .dev = dev,
 
-        self.pdevmemprops = self.instance.getPhysicalDeviceMemoryProperties(self.pdev);
-
-        return self;
+            .graphics_queue = Queue.init(dev, device_candidate.queues.graphics_family, 0),
+            .present_queue = Queue.init(dev, device_candidate.queues.present_family, 0),
+        };
     }
 
     pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
