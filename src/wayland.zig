@@ -1,10 +1,10 @@
 const std = @import("std");
 const wayland = @import("wayland").client;
 const vulkan = @import("./vulkan.zig");
-const wl = wayland.wl;
-const xdg = wayland.xdg;
+pub const wl = wayland.wl;
+pub const xdg = wayland.xdg;
 
-pub const WlContext = struct {
+pub const Platform = struct {
     wl_display: *wl.Display,
     wl_registry: *wl.Registry,
     wl_compositor: ?*wl.Compositor = null,
@@ -25,14 +25,25 @@ pub const WlContext = struct {
         };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *const @This()) void {
         if (self.wl_compositor) |compositor| compositor.destroy();
         if (self.xdg_wm_base) |wm_base| wm_base.destroy();
         self.wl_registry.destroy();
         self.wl_display.disconnect();
     }
 
-    pub fn globalsListener(registry: *wl.Registry, event: wl.Registry.Event, context: *WlContext) void {
+    pub fn setupListeners(self: *@This()) error{RoundtripFailed}!void {
+        self.wl_registry.setListener(*@This(), globalsListener, self);
+        const roundtrip = self.wl_display.roundtrip();
+        if (roundtrip != .SUCCESS) return error.RoundtripFailed;
+    }
+
+    pub fn pollEvents(self: *const @This()) void {
+        const result = self.wl_display.roundtrip();
+        if (result != .SUCCESS) std.debug.panic("wl_display roundtrip failed: {s}", .{@tagName(result)});
+    }
+
+    pub fn globalsListener(registry: *wl.Registry, event: wl.Registry.Event, context: *Platform) void {
         switch (event) {
             .global => |glb| {
                 const interface = std.mem.span(glb.interface);
@@ -66,27 +77,27 @@ pub const WlContext = struct {
         }
     }
 
-    fn xdgShellPong(wm_base: *xdg.WmBase, event: xdg.WmBase.Event, _: ?*anyopaque) void {
+    pub fn xdgShellPong(wm_base: *xdg.WmBase, event: xdg.WmBase.Event, _: ?*anyopaque) void {
         wm_base.pong(event.ping.serial);
     }
 };
 
 pub const WlWindow = struct {
-    context: *WlContext,
+    context: *const Platform,
     wl_surface: *wl.Surface,
     xdg_surface: *xdg.Surface,
     xdg_toplevel: *xdg.Toplevel,
 
     // Properties
-    width: u32 = 0,
-    height: u32 = 0,
+    width: u32,
+    height: u32,
     is_closed: bool = false,
 
     // Synchronization state
     got_resized: bool = false,
     surface_should_resize: bool = false,
 
-    pub fn init(context: *WlContext) !@This() {
+    pub fn init(context: *const Platform, width: u32, height: u32) !@This() {
         const wm_base = context.xdg_wm_base orelse return error.XdgWmBaseNull;
         const wl_compositor = context.wl_compositor orelse return error.WlCompositorNull;
 
@@ -104,6 +115,8 @@ pub const WlWindow = struct {
             .wl_surface = surface,
             .xdg_surface = xdg_surface,
             .xdg_toplevel = toplevel,
+            .width = width,
+            .height = height,
         };
     }
 
@@ -119,8 +132,12 @@ pub const WlWindow = struct {
     }
 
     fn xdgSurfaceHandler(surface: *xdg.Surface, event: xdg.Surface.Event, data: *@This()) void {
-        surface.ackConfigure(event.configure.serial);
-        data.surface_should_resize = data.got_resized;
+        switch (event) {
+            .configure => {
+                surface.ackConfigure(event.configure.serial);
+                data.surface_should_resize = data.got_resized;
+            },
+        }
     }
 
     fn xdgToplevelHandler(toplevel: *xdg.Toplevel, event: xdg.Toplevel.Event, data: *@This()) void {
@@ -132,10 +149,6 @@ pub const WlWindow = struct {
                     data.got_resized = true;
                     data.width = @intCast(ev.width);
                     data.height = @intCast(ev.height);
-                } else if (ev.width == 0 and ev.height == 0) {
-                    data.got_resized = true;
-                    data.width = 800;
-                    data.height = 600;
                 }
             },
             .close => {
@@ -146,8 +159,8 @@ pub const WlWindow = struct {
 };
 
 pub const VulkanContext = struct {
-    context: vulkan.Context,
-    devcontext: *vulkan.DeviceContext,
+    context: vulkan.InstanceContext,
+    devcontext: *vulkan.RenderContext,
     swapchain: vulkan.Swapchain,
 
     const vk = vulkan.vk;
@@ -159,7 +172,7 @@ pub const VulkanContext = struct {
 
     pub fn init(allocator: std.mem.Allocator, window: *WlWindow) !@This() {
         std.log.debug("Creating Vulkan instance context", .{});
-        var vkcontext = try vulkan.Context.init(&instance_extensions, allocator);
+        var vkcontext = try vulkan.InstanceContext.init(&instance_extensions, allocator);
         errdefer vkcontext.deinit(allocator);
 
         const vkCreateWaylandSurfacePtr = vkcontext.getInstanceProcAddress(
@@ -179,11 +192,11 @@ pub const VulkanContext = struct {
         });
         errdefer vkcontext.instance.destroySurfaceKHR(surface, null);
 
-        const devcontext = try allocator.create(vulkan.DeviceContext);
+        const devcontext = try allocator.create(vulkan.RenderContext);
         errdefer allocator.destroy(devcontext);
 
         std.log.debug("Creating Vulkan device context", .{});
-        devcontext.* = try vulkan.DeviceContext.init(
+        devcontext.* = try vulkan.RenderContext.init(
             &device_extensions,
             allocator,
             vkcontext.instance,
