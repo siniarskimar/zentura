@@ -37,21 +37,23 @@ pub const DeviceDispatch = vk.DeviceWrapper(apis);
 pub const Instance = vk.InstanceProxy(apis);
 pub const Device = vk.DeviceProxy(apis);
 
-const vkGetInstanceProcAddressFn = *const fn (instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction;
+pub const vkGetInstanceProcAddressFn = *const fn (instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction;
 
-var vkGetInstanceProcAddress: ?vkGetInstanceProcAddressFn = null;
+var vulkan_so_library: ?std.DynLib = null;
 
-pub fn loadSharedLibrary() !std.DynLib {
+pub fn loadLibrary() !*std.DynLib {
     const filename = switch (builtin.os.tag) {
         .linux => "libvulkan.so",
         .netbsd, .freebsd => "libvulkan.so",
         .windows => "vulkan-1.dll",
         else => @compileError("Unsupported OS"),
     };
-    var lib = try std.DynLib.open(filename);
+    vulkan_so_library = try std.DynLib.open(filename);
+    const lib = &(vulkan_so_library.?);
 
-    vkGetInstanceProcAddress = lib.lookup(vkGetInstanceProcAddressFn, "vkGetInstanceProcAddr") orelse
-        return error.LookupFailed;
+    // Vulkan SO has to have vkGetInstanceProcAddress
+    _ = lib.lookup(vkGetInstanceProcAddressFn, "vkGetInstanceProcAddr") orelse
+        return error.InvalidShaderLibrary;
     return lib;
 }
 
