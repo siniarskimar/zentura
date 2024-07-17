@@ -188,12 +188,17 @@ pub const InstanceContext = struct {
         std.mem.copyForwards([*:0]const u8, instance_extensions, &required_instance_extensions);
         std.mem.copyForwards([*:0]const u8, instance_extensions[required_instance_extensions.len..], compositor_exts);
 
+        const vlayers = if (builtin.mode == .Debug)
+            [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"}
+        else
+            [_][*:0]const u8{};
+
         const instance = try base_dispatch.createInstance(&vk.InstanceCreateInfo{
             .p_application_info = &app_info,
             .enabled_extension_count = @intCast(instance_extensions.len),
             .pp_enabled_extension_names = instance_extensions.ptr,
-            .enabled_layer_count = 0,
-            .pp_enabled_layer_names = null,
+            .enabled_layer_count = vlayers.len,
+            .pp_enabled_layer_names = &vlayers,
             .flags = .{},
         }, null);
 
