@@ -4,6 +4,8 @@ const nswindow = @import("./window.zig");
 pub const wl = wayland.wl;
 pub const xdg = wayland.xdg;
 
+pub const log = std.log.scoped(.wayland);
+
 pub const Platform = struct {
     wl_display: *wl.Display,
     wl_registry: *wl.Registry,
@@ -11,6 +13,11 @@ pub const Platform = struct {
     wl_compositor_serial: u32 = 0,
     xdg_wm_base: ?*xdg.WmBase = null,
     xdg_wm_base_serial: u32 = 0,
+
+    wl_seat: ?*wl.Seat = null,
+    wl_seat_serial: u32 = 0,
+    wl_seat_name: ?[*:0]const u8 = null,
+    wl_seat_capabilities: wl.Seat.Capability = .{},
 
     pub fn init() !@This() {
         const display = try wl.Display.connect(null);
@@ -26,6 +33,7 @@ pub const Platform = struct {
     }
 
     pub fn deinit(self: *const @This()) void {
+        if (self.wl_seat) |seat| seat.release();
         if (self.wl_compositor) |compositor| compositor.destroy();
         if (self.xdg_wm_base) |wm_base| wm_base.destroy();
         self.wl_registry.destroy();
@@ -50,17 +58,28 @@ pub const Platform = struct {
 
                 if (std.mem.eql(u8, interface, "wl_compositor") and glb.version >= wl.Compositor.generated_version) {
                     context.wl_compositor = registry.bind(glb.name, wl.Compositor, wl.Compositor.generated_version) catch |err| {
-                        std.debug.panic("failed to bing wl_compositor: {}\n", .{err});
+                        std.debug.panic("failed to bind wl_compositor: {}\n", .{err});
                     };
                     context.wl_compositor_serial = glb.name;
                 } else if (std.mem.eql(u8, interface, "xdg_wm_base") and glb.version >= xdg.WmBase.generated_version) {
                     const wm_base = registry.bind(glb.name, xdg.WmBase, xdg.WmBase.generated_version) catch |err| {
-                        std.debug.panic("failed to bing xdg_wm_base: {}\n", .{err});
+                        std.debug.panic("failed to bind xdg_wm_base: {}\n", .{err});
                     };
                     context.xdg_wm_base = wm_base;
                     context.xdg_wm_base_serial = glb.name;
 
                     wm_base.setListener(?*anyopaque, xdgShellPong, null);
+                } else if (std.mem.eql(u8, interface, "wl_seat") and glb.version >= wl.Seat.generated_version) {
+                    if (context.wl_seat) |_| {
+                        log.warn("support for multi-seat is not implemented", .{});
+                    } else {
+                        const wl_seat = registry.bind(glb.name, wl.Seat, wl.Seat.generated_version) catch |err| {
+                            std.debug.panic("failed to bind wl_seat: {}\n", .{err});
+                        };
+                        context.wl_seat = wl_seat;
+                        context.wl_seat_serial = glb.name;
+                        wl_seat.setListener(*@This(), wlSeatListener, context);
+                    }
                 }
             },
             .global_remove => |glb| {
@@ -72,13 +91,24 @@ pub const Platform = struct {
                     wm_base.destroy();
                     context.xdg_wm_base = null;
                     context.xdg_wm_base_serial = 0;
+                } else if (glb.name == context.wl_seat_serial) if (context.wl_seat) |wl_seat| {
+                    wl_seat.release();
+                    context.wl_seat = null;
+                    context.wl_seat_serial = 0;
                 };
             },
         }
     }
 
-    pub fn xdgShellPong(wm_base: *xdg.WmBase, event: xdg.WmBase.Event, _: ?*anyopaque) void {
+    fn xdgShellPong(wm_base: *xdg.WmBase, event: xdg.WmBase.Event, _: ?*anyopaque) void {
         wm_base.pong(event.ping.serial);
+    }
+
+    fn wlSeatListener(_: *wl.Seat, event: wl.Seat.Event, context: *@This()) void {
+        switch (event) {
+            .capabilities => |data| context.wl_seat_capabilities = data.capabilities,
+            .name => |data| context.wl_seat_name = data.name,
+        }
     }
 };
 
