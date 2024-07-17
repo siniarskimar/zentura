@@ -29,6 +29,15 @@ pub fn main() !void {
     _ = try vulkan.loadLibrary();
     defer vulkan.unloadLibrary();
 
-    var vkcontext = try vulkan.InstanceContext.init(gpa.allocator(), &window);
-    defer vkcontext.deinit(gpa.allocator());
+    var vkrenderer = try vulkan.Renderer.init(gpa.allocator(), &window);
+    defer vkrenderer.deinit();
+
+    vkrenderer.initCallbacks();
+
+    while (!window.closed()) {
+        window_platform.pollEvents();
+
+        try vkrenderer.present();
+        std.time.sleep(std.time.ns_per_ms);
+    }
 }
