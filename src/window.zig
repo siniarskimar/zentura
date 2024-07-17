@@ -9,9 +9,16 @@ pub const host_is_posix: bool =
 const wayland = if (host_is_posix) @import("./wayland.zig") else {};
 const x11 = if (host_is_posix) @import("./x11.zig") else {};
 
+pub const FnFramebufferResizeCb = fn (ctx: ?*anyopaque, width: u32, height: u32) void;
+
+pub const WindowDimensions = struct {
+    width: u32,
+    height: u32,
+};
+
 pub const log = std.log.scoped(.window);
 
-pub const Platform = if (host_is_posix) union(enum) {
+pub const PosixPlatorm = union(enum) {
     wayland: *wayland.Platform,
     x11: x11.Platform,
 
@@ -67,16 +74,9 @@ pub const Platform = if (host_is_posix) union(enum) {
             .x11 => |plat| plat.pollEvents(),
         }
     }
-} else @compileError("Unsupported OS");
-
-pub const FnFramebufferResizeCb = fn (ctx: ?*anyopaque, width: u32, height: u32) void;
-
-pub const WindowDimensions = struct {
-    width: u32,
-    height: u32,
 };
 
-pub const Window = if (host_is_posix) union(enum) {
+pub const PosixWindow = union(enum) {
     wayland: *wayland.WlWindow,
     x11: *x11.Window,
 
@@ -174,4 +174,11 @@ pub const Window = if (host_is_posix) union(enum) {
             .x11 => |window| .{ .width = window.width, .height = window.height },
         };
     }
-} else @compileError("Unsupported OS");
+};
+
+pub const Platform = if (host_is_posix)
+    PosixPlatorm
+else
+    @compileError("Unsupported OS");
+
+pub const Window = if (host_is_posix) PosixWindow else @compileError("Unsupported OS");
