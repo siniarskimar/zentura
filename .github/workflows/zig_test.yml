@@ -18,4 +18,5 @@ jobs:
       - uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.13.0
+      - run: sudo apt-get update -y && sudo apt-get install -y wayland vulkan-loader mesa
       - run: zig build test
