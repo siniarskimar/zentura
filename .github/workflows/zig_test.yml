@@ -1,4 +1,4 @@
-name: 'Zig test suite'
+name: 'Zig CI'
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
       - '**.zig'
 
 jobs:
-  linux-ubuntu:
+  compile-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,4 +19,12 @@ jobs:
         with:
           version: 0.13.0
       - run: sudo apt-get update -y && sudo apt-get install -y wayland vulkan-loader mesa
-      - run: zig build test
+      - run: zig build check
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+      - run: zig fmt --check src/
