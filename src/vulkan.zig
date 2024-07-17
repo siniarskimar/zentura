@@ -227,18 +227,15 @@ pub const RenderContext = struct {
     present_queue: Queue,
 
     pub fn init(
-        device_extensions: []const [*:0]const u8,
         allocator: std.mem.Allocator,
         instance: Instance,
         surface: vk.SurfaceKHR,
     ) !@This() {
-        errdefer instance.destroySurfaceKHR(surface, null);
-
         const device_candidate = try findDeviceCandidate(allocator, instance, surface);
         const pdev = device_candidate.pdev;
         const pdevprops = device_candidate.props;
 
-        const device = try initializeDeviceCandidate(device_extensions, instance, device_candidate);
+        const device = try initializeDeviceCandidate(&required_device_extensions, instance, device_candidate);
 
         const device_dispatch = try allocator.create(DeviceDispatch);
         errdefer allocator.destroy(device_dispatch);
