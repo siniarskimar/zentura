@@ -815,9 +815,15 @@ pub const Renderer = struct {
 
     pub fn deinit(self: *@This()) void {
         const allocator = self.allocator;
+        self.rctx.dev.deviceWaitIdle() catch std.time.sleep(std.time.ns_per_ms * 20);
+
         destroyFramebuffers(allocator, self.rctx.dev, self.framebuffers);
         destroyCommandBuffers(allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
         self.rctx.dev.destroyCommandPool(self.cmdpool, null);
+
+        self.rctx.dev.destroyPipeline(self.pipeline, null);
+        self.rctx.dev.destroyPipelineLayout(self.pipeline_layout, null);
+        self.rctx.dev.destroyRenderPass(self.render_pass, null);
 
         self.swapchain.destroy(allocator);
         self.rctx.deinit(allocator);
