@@ -1,6 +1,8 @@
 const std = @import("std");
 const wayland = @import("wayland").client;
 const nswindow = @import("./window.zig");
+const Callback = nswindow.Callback;
+
 pub const wl = wayland.wl;
 pub const xdg = wayland.xdg;
 
@@ -128,8 +130,7 @@ pub const WlWindow = struct {
 
     // Synchronization state
     got_resized: bool = false,
-    cb_framebuffer_resize: ?*const nswindow.FnFramebufferResizeCb = null,
-    cb_framebuffer_resize_ctx: ?*anyopaque = null,
+    cb_framebuffer_resize: ?Callback(nswindow.FramebufferResizeCb) = null,
 
     pub fn init(context: *const Platform, width: u32, height: u32) !@This() {
         const wm_base = context.xdg_wm_base orelse return error.XdgWmBaseNull;
@@ -167,18 +168,18 @@ pub const WlWindow = struct {
 
     pub fn setFramebufferResizeCallback(
         self: *@This(),
-        ctx: ?*anyopaque,
-        callback: ?*const nswindow.FnFramebufferResizeCb,
-    ) void {
+        callback: ?Callback(nswindow.FramebufferResizeCb),
+    ) ?Callback(nswindow.FramebufferResizeCb) {
+        const old = self.cb_framebuffer_resize;
         self.cb_framebuffer_resize = callback;
-        self.cb_framebuffer_resize_ctx = ctx;
+        return old;
     }
 
     fn xdgSurfaceHandler(surface: *xdg.Surface, event: xdg.Surface.Event, data: *@This()) void {
         switch (event) {
             .configure => {
                 if (data.cb_framebuffer_resize) |cb| {
-                    cb(data.cb_framebuffer_resize_ctx, data.width, data.height);
+                    cb.ptr(cb.ctx, data.width, data.height);
                 }
                 surface.ackConfigure(event.configure.serial);
             },

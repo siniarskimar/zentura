@@ -9,7 +9,14 @@ pub const host_is_posix: bool =
 const wayland = if (host_is_posix) @import("./wayland.zig") else {};
 const x11 = if (host_is_posix) @import("./x11.zig") else {};
 
-pub const FnFramebufferResizeCb = fn (ctx: ?*anyopaque, width: u32, height: u32) void;
+pub const FramebufferResizeCb = *const fn (ctx: ?*anyopaque, width: u32, height: u32) void;
+
+pub fn Callback(FnPtr: type) type {
+    return struct {
+        ptr: FnPtr,
+        ctx: ?*anyopaque = null,
+    };
+}
 
 pub const WindowDimensions = struct {
     width: u32,
@@ -125,15 +132,14 @@ pub const PosixWindow = union(enum) {
 
     pub fn setFramebufferResizeCallback(
         self: @This(),
-        ctx: ?*anyopaque,
-        callback: ?*const FnFramebufferResizeCb,
-    ) void {
+        callback: ?Callback(FramebufferResizeCb),
+    ) ?Callback(FramebufferResizeCb) {
         switch (self) {
             .wayland => |window| {
-                window.setFramebufferResizeCallback(ctx, callback);
+                return window.setFramebufferResizeCallback(callback);
             },
             .x11 => |window| {
-                window.setFramebufferResizeCallback(ctx, callback);
+                return window.setFramebufferResizeCallback(callback);
             },
         }
     }

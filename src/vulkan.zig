@@ -810,7 +810,7 @@ pub const Renderer = struct {
     }
 
     pub fn initCallbacks(self: *@This()) void {
-        self.window.setFramebufferResizeCallback(self, framebufferResizeCallback);
+        _ = self.window.setFramebufferResizeCallback(.{ .ptr = framebufferResizeCallback, .ctx = self });
     }
 
     pub fn deinit(self: *@This()) void {
