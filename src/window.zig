@@ -87,7 +87,7 @@ pub const PosixWindow = union(enum) {
     wayland: *wayland.WlWindow,
     x11: *x11.Window,
 
-    pub fn init(allocator: std.mem.Allocator, platform: *const Platform, width: u32, height: u32) !@This() {
+    pub fn init(allocator: std.mem.Allocator, platform: *Platform, width: u32, height: u32) !@This() {
         switch (platform.*) {
             .wayland => |plat| {
                 const wlwindow = try allocator.create(wayland.WlWindow);

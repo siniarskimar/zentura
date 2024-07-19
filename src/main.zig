@@ -14,7 +14,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    const window_platform = try nswindow.Platform.init(gpa.allocator());
+    var window_platform = try nswindow.Platform.init(gpa.allocator());
     defer window_platform.deinit(gpa.allocator());
 
     window_platform.pollEvents();

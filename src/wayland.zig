@@ -8,6 +8,14 @@ pub const xdg = wayland.xdg;
 
 pub const log = std.log.scoped(.wayland);
 
+const WL_SURFACE_TAG: [*:0]const u8 = "ZENTURA";
+
+pub const SeatCapabilityCb = *const fn (
+    ctx: ?*anyopaque,
+    wl_seat: *wl.Seat,
+    cap: wl.Seat.Capability,
+) void;
+
 pub const Platform = struct {
     wl_display: *wl.Display,
     wl_registry: *wl.Registry,
@@ -16,10 +24,20 @@ pub const Platform = struct {
     xdg_wm_base: ?*xdg.WmBase = null,
     xdg_wm_base_serial: u32 = 0,
 
+    // Input
     wl_seat: ?*wl.Seat = null,
     wl_seat_serial: u32 = 0,
-    wl_seat_name: ?[*:0]const u8 = null,
     wl_seat_capabilities: wl.Seat.Capability = .{},
+    wl_pointer: ?*wl.Pointer = null,
+    wl_keyboard: ?*wl.Keyboard = null,
+
+    pointer_focused: ?*wl.Surface = null,
+    pointer_x: u32 = 0,
+    pointer_y: u32 = 0,
+    keyboard_focused: ?*wl.Surface = null,
+    keyboard_repeat_delay: u32 = 0,
+    keyboard_repeat_rate: u32 = 0,
+    keymap_fd: std.posix.fd_t = -1,
 
     pub fn init() !@This() {
         const display = try wl.Display.connect(null);
@@ -106,19 +124,115 @@ pub const Platform = struct {
         wm_base.pong(event.ping.serial);
     }
 
-    fn wlSeatListener(_: *wl.Seat, event: wl.Seat.Event, context: *@This()) void {
+    fn wlSeatListener(seat: *wl.Seat, event: wl.Seat.Event, self: *@This()) void {
         switch (event) {
-            .capabilities => |data| context.wl_seat_capabilities = data.capabilities,
-            .name => |data| context.wl_seat_name = data.name,
+            .capabilities => |data| {
+                const cap = data.capabilities;
+                self.wl_seat_capabilities = cap;
+
+                if (cap.pointer and self.wl_pointer == null) {
+                    self.wl_pointer = seat.getPointer() catch |err| blk: {
+                        log.warn("(window) Failed to get pointer seat: {s}", .{@errorName(err)});
+                        break :blk null;
+                    };
+                    self.wl_pointer.?.setListener(*@This(), wlPointerHandler, self);
+                } else if (!cap.pointer and self.wl_pointer != null) {
+                    self.wl_pointer.?.release();
+                    self.wl_pointer = null;
+                }
+
+                if (cap.keyboard and self.wl_keyboard == null) {
+                    self.wl_keyboard = seat.getKeyboard() catch |err| blk: {
+                        log.warn("(window) Failed to get keyboard seat: {s}", .{@errorName(err)});
+                        break :blk null;
+                    };
+                    self.wl_keyboard.?.setListener(*@This(), wlKeyboardHandler, self);
+                } else if (!cap.keyboard and self.wl_keyboard != null) {
+                    self.wl_keyboard.?.release();
+                    self.wl_keyboard = null;
+                }
+            },
+            .name => {},
+        }
+    }
+
+    extern fn wl_proxy_get_tag(proxy: *wl.Proxy) [*:0]const u8;
+
+    fn wlPointerHandler(_: *wl.Pointer, event: wl.Pointer.Event, self: *@This()) void {
+        switch (event) {
+            .enter => |data| if (data.surface) |surface| {
+                const proxy: *wl.Proxy = @ptrCast(surface);
+                const tag = wl_proxy_get_tag(proxy);
+                if (tag != WL_SURFACE_TAG) return;
+
+                self.pointer_focused = surface;
+                self.pointer_x = @intCast(data.surface_x.toInt());
+                self.pointer_y = @intCast(data.surface_y.toInt());
+            },
+            .leave => |data| if (data.surface) |surface| {
+                const proxy: *wl.Proxy = @ptrCast(surface);
+                const tag = wl_proxy_get_tag(proxy);
+                if (tag != WL_SURFACE_TAG) return;
+
+                self.pointer_focused = null;
+            },
+            .button => |data| if (self.pointer_focused) |_| {
+                std.debug.print("pointer button {x}\n", .{data.button});
+            },
+            .motion => |data| if (self.pointer_focused) |_| {
+                self.pointer_x = @intCast(data.surface_x.toInt());
+                self.pointer_y = @intCast(data.surface_y.toInt());
+            },
+            else => {},
+        }
+    }
+
+    fn wlKeyboardHandler(_: *wl.Keyboard, event: wl.Keyboard.Event, self: *@This()) void {
+        switch (event) {
+            .enter => |data| if (data.surface) |surface| {
+                const proxy: *wl.Proxy = @ptrCast(surface);
+                const tag = wl_proxy_get_tag(proxy);
+                if (tag != WL_SURFACE_TAG) return;
+
+                self.keyboard_focused = surface;
+            },
+            .leave => |data| if (data.surface) |surface| {
+                const proxy: *wl.Proxy = @ptrCast(surface);
+                const tag = wl_proxy_get_tag(proxy);
+                if (tag != WL_SURFACE_TAG) return;
+
+                self.keyboard_focused = surface;
+            },
+            .key => |data| {
+                std.debug.print("keyboard key {x} {s}\n", .{ data.key, @tagName(data.state) });
+            },
+            .keymap => |data| {
+                if (data.fd > 0) {
+                    std.posix.close(data.fd);
+                }
+                std.debug.print("keyboard format: {s}\n", .{@tagName(data.format)});
+            },
+            .repeat_info => |data| {
+                self.keyboard_repeat_delay = @intCast(data.delay);
+                self.keyboard_repeat_rate = @intCast(data.rate);
+            },
+            .modifiers => |data| {
+                std.debug.print(
+                    "mods_depressed={b}, mods_latched={b}, mods_locked={b}",
+                    .{ data.mods_depressed, data.mods_latched, data.mods_locked },
+                );
+            },
         }
     }
 };
 
 pub const WlWindow = struct {
-    context: *const Platform,
+    context: *Platform,
     wl_surface: *wl.Surface,
     xdg_surface: *xdg.Surface,
     xdg_toplevel: *xdg.Toplevel,
+    wl_pointer: ?*wl.Pointer = null,
+    wl_keyboard: ?*wl.Keyboard = null,
 
     // Properties
     width: u32,
@@ -132,12 +246,17 @@ pub const WlWindow = struct {
     got_resized: bool = false,
     cb_framebuffer_resize: ?Callback(nswindow.FramebufferResizeCb) = null,
 
-    pub fn init(context: *const Platform, width: u32, height: u32) !@This() {
+    extern fn wl_proxy_set_tag(proxy: *wl.Proxy, tag: [*:0]const u8) void;
+
+    pub fn init(context: *Platform, width: u32, height: u32) !@This() {
         const wm_base = context.xdg_wm_base orelse return error.XdgWmBaseNull;
         const wl_compositor = context.wl_compositor orelse return error.WlCompositorNull;
 
         const surface = try wl_compositor.createSurface();
         errdefer surface.destroy();
+
+        const surface_proxy: *wl.Proxy = @ptrCast(surface);
+        wl_proxy_set_tag(surface_proxy, WL_SURFACE_TAG);
 
         const xdg_surface = try wm_base.getXdgSurface(surface);
         errdefer xdg_surface.destroy();
@@ -161,6 +280,8 @@ pub const WlWindow = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        if (self.wl_pointer) |pointer| pointer.release();
+        if (self.wl_keyboard) |kbd| kbd.release();
         self.xdg_toplevel.destroy();
         self.xdg_surface.destroy();
         self.wl_surface.destroy();
