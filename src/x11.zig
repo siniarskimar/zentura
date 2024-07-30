@@ -1,3 +1,10 @@
+// TODO: Improve error handling, currently there is none
+// and we let X11 crash the application.
+//
+// But this is near impossible to accomplish since there is no way
+// to know if a request has been flushed or not. Flushing right after making
+// a request will hurt performance over network connections.
+
 const std = @import("std");
 const nswindow = @import("./window.zig");
 const Callback = nswindow.Callback;
@@ -27,6 +34,28 @@ pub const Platform = struct {
 
     /// WM alive ping
     NET_WM_PING: c.Atom,
+
+    pub fn vtable() nswindow.Platform.VTable {
+        const S = struct {
+            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+                const self: *Platform = @alignCast(@ptrCast(ptr));
+                self.deinit();
+            }
+            pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
+                const self: *Platform = @alignCast(@ptrCast(ptr));
+                self.pollEvents();
+            }
+            pub fn tag() nswindow.Platform.Tag {
+                return .x11;
+            }
+        };
+        return .{
+            .deinit = S.deinit,
+            .pollEvents = S.pollEvents,
+            .tag = S.tag,
+            .createWindow = createWindow,
+        };
+    }
 
     pub fn init() !@This() {
         const display = c.XOpenDisplay(null) orelse {
@@ -69,6 +98,21 @@ pub const Platform = struct {
         _ = c.XCloseDisplay(self.display);
     }
 
+    pub fn createWindow(
+        ptr: *anyopaque,
+        allocator: std.mem.Allocator,
+        options: nswindow.WindowCreationOptions,
+    ) nswindow.Platform.WindowCreationError!nswindow.Window {
+        const self: *const @This() = @alignCast(@ptrCast(ptr));
+        const window = Window.init(self.*, options.width, options.height);
+        errdefer window.deinit();
+
+        const heap = try allocator.create(Window);
+        heap.* = window;
+
+        return .{ .ptr = heap, .vtable = Window.vtable() };
+    }
+
     pub fn pollEvents(self: @This()) void {
         _ = c.XPending(self.display);
         while (c.QLength(self.display) != 0) {
@@ -78,6 +122,7 @@ pub const Platform = struct {
         }
         _ = c.XFlush(self.display);
     }
+
     fn handleEvent(self: @This(), event: *c.XEvent) void {
         const filtered = c.XFilterEvent(event, c.None) == c.True;
 
@@ -113,7 +158,29 @@ pub const Window = struct {
 
     cb_framebuffer_resize: ?Callback(nswindow.FramebufferResizeCb) = null,
 
-    pub fn init(context: Platform, width: u32, height: u32) !@This() {
+    pub fn vtable() nswindow.Window.VTable {
+        const S = struct {
+            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+                const self: *Window = @alignCast(@ptrCast(ptr));
+                self.deinit();
+            }
+            pub fn closed(ptr: *anyopaque) bool {
+                const self: *const Window = @alignCast(@ptrCast(ptr));
+                return self.state_closed;
+            }
+            pub fn dimensions(ptr: *anyopaque) nswindow.Window.Dimensions {
+                const self: *const Window = @alignCast(@ptrCast(ptr));
+                return .{ .width = self.width, .height = self.height };
+            }
+        };
+        return .{
+            .deinit = S.deinit,
+            .closed = S.closed,
+            .dimensions = S.dimensions,
+        };
+    }
+
+    pub fn init(context: Platform, width: u32, height: u32) @This() {
         const window = c.XCreateSimpleWindow(
             context.display,
             context.xcb_screen.root,
@@ -126,8 +193,8 @@ pub const Window = struct {
             c.InputOutput,
         );
 
-        // RANT: Can't be const because whoever designed XSetWMProtocols
-        // did not puch much thought into it
+        // Can't be const because whoever designed XSetWMProtocols
+        // could not be bothered to make it accept const
         var protocols = [_]c.Atom{ context.WM_DELETE_WINDOW, context.NET_WM_PING };
         _ = c.XSetWMProtocols(context.display, window, &protocols, @intCast(protocols.len));
 
