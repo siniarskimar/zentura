@@ -116,6 +116,14 @@ pub const Window = struct {
         deinit: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
         dimensions: *const fn (ptr: *anyopaque) Dimensions,
         closed: *const fn (ptr: *anyopaque) bool,
+
+        // This doesn't have to be a virtual function call
+        tag: *const fn () Platform.Tag,
+
+        setFramebufferResizeCallback: *const fn (
+            ptr: *anyopaque,
+            cb: ?Callback(FramebufferResizeCb),
+        ) ?Callback(FramebufferResizeCb),
     };
 
     pub const Dimensions = struct {
@@ -133,5 +141,16 @@ pub const Window = struct {
 
     pub fn dimensions(self: @This()) Dimensions {
         return self.vtable.dimensions(self.ptr);
+    }
+
+    pub fn tag(self: @This()) Platform.Tag {
+        return self.vtable.tag();
+    }
+
+    pub fn setFramebufferResizeCallback(
+        self: @This(),
+        cb: ?Callback(FramebufferResizeCb),
+    ) ?Callback(FramebufferResizeCb) {
+        return self.vtable.setFramebufferResizeCallback(self.ptr, cb);
     }
 };

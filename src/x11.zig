@@ -172,11 +172,24 @@ pub const Window = struct {
                 const self: *const Window = @alignCast(@ptrCast(ptr));
                 return .{ .width = self.width, .height = self.height };
             }
+            pub fn tag() nswindow.Platform.Tag {
+                return .x11;
+            }
+            pub fn setFramebufferResizeCallback(
+                ptr: *anyopaque,
+                cb: ?Callback(nswindow.FramebufferResizeCb),
+            ) ?Callback(nswindow.FramebufferResizeCb) {
+                const self: *Window = @alignCast(@ptrCast(ptr));
+                return self.setFramebufferResizeCallback(cb);
+            }
         };
+
         return .{
             .deinit = S.deinit,
             .closed = S.closed,
             .dimensions = S.dimensions,
+            .tag = S.tag,
+            .setFramebufferResizeCallback = S.setFramebufferResizeCallback,
         };
     }
 

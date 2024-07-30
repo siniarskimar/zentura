@@ -304,12 +304,25 @@ pub const WlWindow = struct {
                     .height = self.height,
                 };
             }
+            pub fn tag() nswindow.Platform.Tag {
+                return .wayland;
+            }
+
+            pub fn setFramebufferResizeCallback(
+                ptr: *anyopaque,
+                cb: ?Callback(nswindow.FramebufferResizeCb),
+            ) ?Callback(nswindow.FramebufferResizeCb) {
+                const self: *WlWindow = @alignCast(@ptrCast(ptr));
+                return self.setFramebufferResizeCallback(cb);
+            }
         };
 
         return .{
             .deinit = S.deinit,
             .dimensions = S.dimensions,
             .closed = S.closed,
+            .tag = S.tag,
+            .setFramebufferResizeCallback = S.setFramebufferResizeCallback,
         };
     }
 
