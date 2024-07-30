@@ -36,7 +36,7 @@ pub fn main() !void {
     vkrenderer.initCallbacks();
 
     while (!window.closed()) {
-        window_platform.pollEvents();
+        try window_platform.pollEvents();
 
         try vkrenderer.present();
         std.time.sleep(std.time.ns_per_ms);
