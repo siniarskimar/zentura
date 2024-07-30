@@ -113,6 +113,8 @@ pub const Platform = struct {
         const heap = try allocator.create(WlWindow);
         heap.* = window;
 
+        heap.initListeners();
+
         return .{ .ptr = heap, .vtable = WlWindow.vtable() };
     }
 
