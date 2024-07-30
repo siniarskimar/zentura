@@ -37,9 +37,10 @@ pub const Platform = struct {
 
     pub fn vtable() nswindow.Platform.VTable {
         const S = struct {
-            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
                 const self: *Platform = @alignCast(@ptrCast(ptr));
                 self.deinit();
+                allocator.destroy(self);
             }
             pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
                 const self: *Platform = @alignCast(@ptrCast(ptr));

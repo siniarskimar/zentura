@@ -44,9 +44,10 @@ pub const Platform = struct {
             pub fn tag() nswindow.Platform.Tag {
                 return .wayland;
             }
-            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
                 const self: *const Platform = @alignCast(@ptrCast(ptr));
                 self.deinit();
+                allocator.destroy(self);
             }
             pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
                 const self: *const Platform = @alignCast(@ptrCast(ptr));
@@ -298,9 +299,10 @@ pub const WlWindow = struct {
                 const self: *const WlWindow = @alignCast(@ptrCast(ptr));
                 return self.state_closed;
             }
-            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
                 const self: *WlWindow = @alignCast(@ptrCast(ptr));
                 self.deinit();
+                allocator.destroy(self);
             }
             pub fn dimensions(ptr: *anyopaque) nswindow.Window.Dimensions {
                 const self: *const WlWindow = @alignCast(@ptrCast(ptr));
