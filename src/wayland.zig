@@ -39,6 +39,21 @@ pub const Platform = struct {
     keyboard_repeat_rate: u32 = 0,
     keymap_fd: std.posix.fd_t = -1,
 
+    pub fn vtable() nswindow.Platform.VTable {
+        const S = struct {
+            pub fn tag() nswindow.Platform.Tag {
+                return .wayland;
+            }
+        };
+
+        return .{
+            .deinit = deinit,
+            .tag = S.tag,
+            .pollEvents = pollEvents,
+            .createWindow = createWindow,
+        };
+    }
+
     pub fn init() !@This() {
         const display = try wl.Display.connect(null);
         errdefer display.disconnect();
@@ -52,7 +67,8 @@ pub const Platform = struct {
         };
     }
 
-    pub fn deinit(self: *const @This()) void {
+    pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+        const self: *const @This() = @alignCast(@ptrCast(ptr));
         if (self.wl_seat) |seat| seat.release();
         if (self.wl_compositor) |compositor| compositor.destroy();
         if (self.xdg_wm_base) |wm_base| wm_base.destroy();
@@ -60,15 +76,38 @@ pub const Platform = struct {
         self.wl_display.disconnect();
     }
 
-    pub fn setupListeners(self: *@This()) error{RoundtripFailed}!void {
+    pub fn setupListeners(self: *@This()) void {
         self.wl_registry.setListener(*@This(), globalsListener, self);
-        const roundtrip = self.wl_display.roundtrip();
-        if (roundtrip != .SUCCESS) return error.RoundtripFailed;
     }
 
-    pub fn pollEvents(self: *const @This()) void {
+    pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
+        const self: *const @This() = @alignCast(@ptrCast(ptr));
+
         const result = self.wl_display.roundtrip();
-        if (result != .SUCCESS) std.debug.panic("wl_display roundtrip failed: {s}", .{@tagName(result)});
+        if (result != .SUCCESS) {
+            return error.RoundtripFailed;
+        }
+    }
+
+    pub fn createWindow(
+        ptr: *anyopaque,
+        allocator: std.mem.Allocator,
+        options: nswindow.Platform.WindowCreationOptions,
+    ) nswindow.Platform.WindowCreationError!nswindow.Window {
+        const self: *@This() = @alignCast(@ptrCast(ptr));
+
+        const window = WlWindow.init(self, options.width, options.height) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.XdgWmBaseNull,
+            error.WlCompositorNull,
+            => return error.FeaturesNotSupported,
+        };
+        errdefer window.deinit();
+
+        const heap = try allocator.create(WlWindow);
+        heap.* = window;
+
+        return .{ .ptr = heap, .vtable = WlWindow.vtable() };
     }
 
     pub fn globalsListener(registry: *wl.Registry, event: wl.Registry.Event, context: *Platform) void {
@@ -248,7 +287,37 @@ pub const WlWindow = struct {
 
     extern fn wl_proxy_set_tag(proxy: *wl.Proxy, tag: [*:0]const u8) void;
 
-    pub fn init(context: *Platform, width: u32, height: u32) !@This() {
+    pub fn vtable() nswindow.Window.VTable {
+        const S = struct {
+            pub fn closed(ptr: *anyopaque) bool {
+                const self: *const WlWindow = @alignCast(@ptrCast(ptr));
+                return self.state_closed;
+            }
+            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+                const self: *WlWindow = @alignCast(@ptrCast(ptr));
+                self.deinit();
+            }
+            pub fn dimensions(ptr: *anyopaque) nswindow.Window.Dimensions {
+                const self: *const WlWindow = @alignCast(@ptrCast(ptr));
+                return .{
+                    .width = self.width,
+                    .height = self.height,
+                };
+            }
+        };
+
+        return .{
+            .deinit = S.deinit,
+            .dimensions = S.dimensions,
+            .closed = S.closed,
+        };
+    }
+
+    pub fn init(
+        context: *Platform,
+        width: u32,
+        height: u32,
+    ) error{ XdgWmBaseNull, WlCompositorNull, OutOfMemory }!@This() {
         const wm_base = context.xdg_wm_base orelse return error.XdgWmBaseNull;
         const wl_compositor = context.wl_compositor orelse return error.WlCompositorNull;
 
@@ -279,7 +348,7 @@ pub const WlWindow = struct {
         self.xdg_toplevel.setListener(*@This(), xdgToplevelHandler, self);
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: @This()) void {
         if (self.wl_pointer) |pointer| pointer.release();
         if (self.wl_keyboard) |kbd| kbd.release();
         self.xdg_toplevel.destroy();
