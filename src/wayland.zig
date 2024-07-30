@@ -44,12 +44,20 @@ pub const Platform = struct {
             pub fn tag() nswindow.Platform.Tag {
                 return .wayland;
             }
+            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+                const self: *const Platform = @alignCast(@ptrCast(ptr));
+                self.deinit();
+            }
+            pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
+                const self: *const Platform = @alignCast(@ptrCast(ptr));
+                try self.pollEvents();
+            }
         };
 
         return .{
-            .deinit = deinit,
+            .deinit = S.deinit,
             .tag = S.tag,
-            .pollEvents = pollEvents,
+            .pollEvents = S.pollEvents,
             .createWindow = createWindow,
         };
     }
@@ -67,8 +75,7 @@ pub const Platform = struct {
         };
     }
 
-    pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
-        const self: *const @This() = @alignCast(@ptrCast(ptr));
+    pub fn deinit(self: *const @This()) void {
         if (self.wl_seat) |seat| seat.release();
         if (self.wl_compositor) |compositor| compositor.destroy();
         if (self.xdg_wm_base) |wm_base| wm_base.destroy();
@@ -80,9 +87,7 @@ pub const Platform = struct {
         self.wl_registry.setListener(*@This(), globalsListener, self);
     }
 
-    pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
-        const self: *const @This() = @alignCast(@ptrCast(ptr));
-
+    pub fn pollEvents(self: *const @This()) error{RoundtripFailed}!void {
         const result = self.wl_display.roundtrip();
         if (result != .SUCCESS) {
             return error.RoundtripFailed;
@@ -92,7 +97,7 @@ pub const Platform = struct {
     pub fn createWindow(
         ptr: *anyopaque,
         allocator: std.mem.Allocator,
-        options: nswindow.Platform.WindowCreationOptions,
+        options: nswindow.WindowCreationOptions,
     ) nswindow.Platform.WindowCreationError!nswindow.Window {
         const self: *@This() = @alignCast(@ptrCast(ptr));
 
