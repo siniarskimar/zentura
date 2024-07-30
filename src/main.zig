@@ -17,14 +17,15 @@ pub fn main() !void {
     var window_platform = try nswindow.Platform.init(gpa.allocator());
     defer window_platform.deinit(gpa.allocator());
 
-    window_platform.pollEvents();
+    try window_platform.pollEvents();
 
-    var window = try nswindow.Window.init(gpa.allocator(), &window_platform, 800, 600);
+    var window = try window_platform.createWindow(gpa.allocator(), .{
+        .width = 800,
+        .height = 600,
+    });
     defer window.deinit(gpa.allocator());
 
-    window.setTitle("zentura");
-    window.commit();
-    window_platform.pollEvents();
+    try window_platform.pollEvents();
 
     _ = try vulkan.loadLibrary();
     defer vulkan.unloadLibrary();
