@@ -161,9 +161,10 @@ pub const Window = struct {
 
     pub fn vtable() nswindow.Window.VTable {
         const S = struct {
-            pub fn deinit(ptr: *anyopaque, _: std.mem.Allocator) void {
+            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
                 const self: *Window = @alignCast(@ptrCast(ptr));
                 self.deinit();
+                allocator.destroy(self);
             }
             pub fn closed(ptr: *anyopaque) bool {
                 const self: *const Window = @alignCast(@ptrCast(ptr));
