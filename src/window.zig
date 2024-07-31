@@ -53,6 +53,8 @@ pub const Platform = struct {
                 const wayland = @import("./wayland.zig");
                 const x11 = @import("./x11.zig");
 
+                // TODO(future): detect if wayland or x11 are supported first
+                // by dynamically loading their libraries
                 if (wayland.Platform.init()) |plat| {
                     const heap = try allocator.create(wayland.Platform);
                     heap.* = plat;
