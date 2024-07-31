@@ -531,11 +531,14 @@ pub const Swapchain = struct {
     pub fn present(self: *@This(), cmdbuf: vk.CommandBuffer) !enum { optimal, suboptimal } {
 
         // Wait till current frame finished rendering
+        // This should not deadlock since present fences of swapchain images
+        // are initially in signaled state
         const current = self.currentSwapImage();
         try current.waitForPresent();
         try self.context.dev.resetFences(1, @ptrCast(&current.present_fence));
 
         // Sumbit the command buffer
+        // This queues up the work for the next frame, but doesn't start it yet
         const wait_stage = [_]vk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
         try self.context.dev.queueSubmit(
             self.context.graphics_queue.handle,
@@ -569,12 +572,16 @@ pub const Swapchain = struct {
         const result = try self.context.dev.acquireNextImageKHR(
             self.handle,
             std.math.maxInt(u64),
+            // Since we don't know the index of the next image to be acquired
+            // We have to reference a semaphore outside of self.swap_images
             self.next_image_acquired,
             .null_handle,
         );
 
+        // Make the next image as the current image
         std.mem.swap(vk.Semaphore, &self.swap_images[result.image_index].image_acquired, &self.next_image_acquired);
         self.image_index = result.image_index;
+
         return switch (result.result) {
             .success => .optimal,
             .suboptimal_khr => .suboptimal,
@@ -678,7 +685,12 @@ pub const Swapchain = struct {
         view: vk.ImageView,
 
         image_acquired: vk.Semaphore,
+
+        /// Signaled whenever a framebuffer has finished rendering
+        /// GPU-side only, CPU doesn't know the state of the semaphore
         render_finished: vk.Semaphore,
+
+        /// Signaled whevener a framebuffer is ready to be presented
         present_fence: vk.Fence,
 
         pub fn init(context: *const RenderContext, handle: vk.Image, format: vk.Format) !@This() {
@@ -708,7 +720,10 @@ pub const Swapchain = struct {
             const render_finished = try context.dev.createSemaphore(&.{}, null);
             errdefer context.dev.destroySemaphore(render_finished, null);
 
-            const present_fence = try context.dev.createFence(&.{ .flags = .{ .signaled_bit = true } }, null);
+            const present_fence = try context.dev.createFence(&.{
+                // create it in signaled state so present() doesn't deadlock
+                .flags = .{ .signaled_bit = true },
+            }, null);
             errdefer context.dev.destroyFence(present_fence, null);
 
             return .{
@@ -729,6 +744,7 @@ pub const Swapchain = struct {
             self.context.dev.destroyFence(self.present_fence, null);
         }
 
+        /// Wait till the image is ready to be presented on the screen
         pub fn waitForPresent(self: *const @This()) !void {
             _ = try self.context.dev.waitForFences(1, @ptrCast(&self.present_fence), vk.TRUE, std.math.maxInt(u64));
         }
