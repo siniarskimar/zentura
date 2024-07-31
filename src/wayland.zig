@@ -303,7 +303,7 @@ pub const WlWindow = struct {
             }
             pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
                 const self: *WlWindow = @alignCast(@ptrCast(ptr));
-                self.deinit();
+                @call(.always_inline, WlWindow.deinit, .{self});
                 allocator.destroy(self);
             }
             pub fn dimensions(ptr: *anyopaque) nswindow.Window.Dimensions {
@@ -322,7 +322,7 @@ pub const WlWindow = struct {
                 cb: ?Callback(nswindow.FramebufferResizeCb),
             ) ?Callback(nswindow.FramebufferResizeCb) {
                 const self: *WlWindow = @alignCast(@ptrCast(ptr));
-                return self.setFramebufferResizeCallback(cb);
+                return @call(.always_inline, WlWindow.setFramebufferResizeCallback, .{ self, cb });
             }
         };
 
@@ -370,7 +370,7 @@ pub const WlWindow = struct {
         self.xdg_toplevel.setListener(*@This(), xdgToplevelHandler, self);
     }
 
-    pub fn deinit(self: @This()) void {
+    pub fn deinit(self: *const @This()) void {
         if (self.wl_pointer) |pointer| pointer.release();
         if (self.wl_keyboard) |kbd| kbd.release();
         self.xdg_toplevel.destroy();
