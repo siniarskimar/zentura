@@ -306,12 +306,9 @@ pub const WlWindow = struct {
                 @call(.always_inline, WlWindow.deinit, .{self});
                 allocator.destroy(self);
             }
-            pub fn dimensions(ptr: *anyopaque) nswindow.Window.Dimensions {
+            pub fn dimensions(ptr: *anyopaque) nswindow.Extent {
                 const self: *const WlWindow = @alignCast(@ptrCast(ptr));
-                return .{
-                    .width = self.width,
-                    .height = self.height,
-                };
+                return .{ .width = self.width, .height = self.height };
             }
             pub fn tag() nswindow.Platform.Tag {
                 return .wayland;

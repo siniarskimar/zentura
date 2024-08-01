@@ -170,7 +170,7 @@ pub const Window = struct {
                 const self: *const Window = @alignCast(@ptrCast(ptr));
                 return self.state_closed;
             }
-            pub fn dimensions(ptr: *anyopaque) nswindow.Window.Dimensions {
+            pub fn dimensions(ptr: *anyopaque) nswindow.Extent {
                 const self: *const Window = @alignCast(@ptrCast(ptr));
                 return .{ .width = self.width, .height = self.height };
             }

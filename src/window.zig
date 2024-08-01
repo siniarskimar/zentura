@@ -16,6 +16,11 @@ pub const WindowCreationOptions = struct {
     height: u32,
 };
 
+pub const Extent = struct {
+    width: u32,
+    height: u32,
+};
+
 pub const Platform = struct {
     ptr: *anyopaque,
     vtable: VTable,
@@ -116,7 +121,7 @@ pub const Window = struct {
 
     pub const VTable = struct {
         deinit: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
-        dimensions: *const fn (ptr: *anyopaque) Dimensions,
+        dimensions: *const fn (ptr: *anyopaque) Extent,
         closed: *const fn (ptr: *anyopaque) bool,
 
         // This doesn't have to be a virtual function call
@@ -128,11 +133,6 @@ pub const Window = struct {
         ) ?Callback(FramebufferResizeCb),
     };
 
-    pub const Dimensions = struct {
-        width: u32,
-        height: u32,
-    };
-
     pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
         self.vtable.deinit(self.ptr, allocator);
     }
@@ -141,7 +141,7 @@ pub const Window = struct {
         return self.vtable.closed(self.ptr);
     }
 
-    pub fn dimensions(self: @This()) Dimensions {
+    pub fn dimensions(self: @This()) Extent {
         return self.vtable.dimensions(self.ptr);
     }
 
