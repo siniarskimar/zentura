@@ -2,6 +2,7 @@ const std = @import("std");
 const wayland = @import("wayland").client;
 const nswindow = @import("./window.zig");
 const Callback = nswindow.Callback;
+const Extent = nswindow.Extent;
 
 pub const wl = wayland.wl;
 pub const xdg = wayland.xdg;
@@ -95,13 +96,12 @@ pub const Platform = struct {
         }
     }
 
+    const WindowCreationError = nswindow.Platform.WindowCreationError;
     pub fn createWindow(
-        ptr: *anyopaque,
+        self: *const @This(),
         allocator: std.mem.Allocator,
         options: nswindow.WindowCreationOptions,
-    ) nswindow.Platform.WindowCreationError!nswindow.Window {
-        const self: *@This() = @alignCast(@ptrCast(ptr));
-
+    ) WindowCreationError!nswindow.Window {
         const window = WlWindow.init(self, options.width, options.height) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
             error.XdgWmBaseNull,
@@ -115,7 +115,7 @@ pub const Platform = struct {
 
         heap.initListeners();
 
-        return .{ .ptr = heap, .vtable = WlWindow.vtable() };
+        return .{ .inner = .{ .wayland = heap } };
     }
 
     pub fn globalsListener(registry: *wl.Registry, event: wl.Registry.Event, context: *Platform) void {
@@ -274,7 +274,7 @@ pub const Platform = struct {
 };
 
 pub const WlWindow = struct {
-    context: *Platform,
+    context: *const Platform,
     wl_surface: *wl.Surface,
     xdg_surface: *xdg.Surface,
     xdg_toplevel: *xdg.Toplevel,
@@ -295,45 +295,8 @@ pub const WlWindow = struct {
 
     extern fn wl_proxy_set_tag(proxy: *wl.Proxy, tag: [*:0]const u8) void;
 
-    pub fn vtable() nswindow.Window.VTable {
-        const S = struct {
-            pub fn closed(ptr: *anyopaque) bool {
-                const self: *const WlWindow = @alignCast(@ptrCast(ptr));
-                return self.state_closed;
-            }
-            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
-                const self: *WlWindow = @alignCast(@ptrCast(ptr));
-                @call(.always_inline, WlWindow.deinit, .{self});
-                allocator.destroy(self);
-            }
-            pub fn dimensions(ptr: *anyopaque) nswindow.Extent {
-                const self: *const WlWindow = @alignCast(@ptrCast(ptr));
-                return .{ .width = self.width, .height = self.height };
-            }
-            pub fn tag() nswindow.Platform.Tag {
-                return .wayland;
-            }
-
-            pub fn setFramebufferResizeCallback(
-                ptr: *anyopaque,
-                cb: ?Callback(nswindow.FramebufferResizeCb),
-            ) ?Callback(nswindow.FramebufferResizeCb) {
-                const self: *WlWindow = @alignCast(@ptrCast(ptr));
-                return @call(.always_inline, WlWindow.setFramebufferResizeCallback, .{ self, cb });
-            }
-        };
-
-        return .{
-            .deinit = S.deinit,
-            .dimensions = S.dimensions,
-            .closed = S.closed,
-            .tag = S.tag,
-            .setFramebufferResizeCallback = S.setFramebufferResizeCallback,
-        };
-    }
-
     pub fn init(
-        context: *Platform,
+        context: *const Platform,
         width: u32,
         height: u32,
     ) error{ XdgWmBaseNull, WlCompositorNull, OutOfMemory }!@This() {
@@ -382,6 +345,21 @@ pub const WlWindow = struct {
         const old = self.cb_framebuffer_resize;
         self.cb_framebuffer_resize = callback;
         return old;
+    }
+
+    pub fn closed(self: @This()) bool {
+        return self.state_closed;
+    }
+
+    pub fn extent(self: @This()) Extent {
+        return .{ .width = self.width, .height = self.height };
+    }
+
+    pub fn vulkanExtensions() []const [*:0]const u8 {
+        const vk = @import("vulkan");
+        return &[_][*:0]const u8{
+            vk.extensions.khr_wayland_surface.name,
+        };
     }
 
     fn xdgSurfaceHandler(surface: *xdg.Surface, event: xdg.Surface.Event, data: *@This()) void {

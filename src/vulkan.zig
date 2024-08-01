@@ -108,25 +108,16 @@ const SurfaceDispatch = struct {
     }
 
     fn createSurface(self: @This(), generic_window: *const nswindow.Window) !vk.SurfaceKHR {
-        switch (generic_window.tag()) {
-            .wayland => switch (builtin.target.os.tag) {
-                .linux, .freebsd, .netbsd => {
-                    const wayland = @import("./wayland.zig");
-                    const window: *wayland.WlWindow = @alignCast(@ptrCast(generic_window.ptr));
-
+        switch (nswindow.Window.InnerType) {
+            nswindow.PosixWindow => switch (generic_window.inner) {
+                .wayland => |window| {
                     if (self.vkCreateWaylandSurfaceKHR == null) {
                         log.err("Vulkan instance does not have vkCreateWaylandSurfaceKHR, but lists VK_KHR_wayland_surface as supported", .{});
                         return error.CommandLoadFailure;
                     }
                     return self.createWaylandSurface(@ptrCast(window.context.wl_display), @ptrCast(window.wl_surface));
                 },
-                else => |os| @compileError(std.fmt.comptimePrint("Wayland support for {} is not implemented", .{os})),
-            },
-            .x11 => switch (builtin.os.tag) {
-                .linux, .freebsd, .netbsd => {
-                    const x11 = @import("./x11.zig");
-                    const window: *x11.Window = @alignCast(@ptrCast(generic_window.ptr));
-
+                .x11 => |window| {
                     if (self.vkCreateXcbSurfaceKHR != null) {
                         return self.createXcbSurface(@ptrCast(window.context.xcb_connection), @intCast(window.window_handle));
                     }
@@ -136,8 +127,8 @@ const SurfaceDispatch = struct {
                     }
                     return self.createXlibSurface(@ptrCast(window.context.display), window.window_handle);
                 },
-                else => |os| @compileError(std.fmt.comptimePrint("X11 support for {} is not implemented", .{os})),
             },
+            else => unreachable,
         }
     }
 };
@@ -189,10 +180,7 @@ pub const InstanceContext = struct {
 
         const base_dispatch = try BaseDispatch.load(getInstanceProcAddress);
 
-        const compositor_exts = switch (window.tag()) {
-            .wayland => &[_][*:0]const u8{"VK_KHR_wayland_surface"},
-            .x11 => &[_][*:0]const u8{ "VK_KHR_xlib_surface", "VK_KHR_xcb_surface" },
-        };
+        const compositor_exts = window.vulkanExtensions();
 
         const instance_extensions = try allocator.alloc([*:0]const u8, required_instance_extensions.len + compositor_exts.len);
         defer allocator.free(instance_extensions);
@@ -783,7 +771,7 @@ pub const Renderer = struct {
         rctx.* = try RenderContext.init(allocator, ctx.instance, surface);
         errdefer rctx.deinit(allocator);
 
-        const window_dims = window.dimensions();
+        const window_dims = window.extent();
         var swapchain = try Swapchain.create(
             allocator,
             ctx.instance,
@@ -868,7 +856,7 @@ pub const Renderer = struct {
 
         if (result == .suboptimal or self.should_resize) {
             self.should_resize = false;
-            const dims = self.window.dimensions();
+            const dims = self.window.extent();
             try self.swapchain.recreate(
                 self.allocator,
                 .{ .width = dims.width, .height = dims.height },

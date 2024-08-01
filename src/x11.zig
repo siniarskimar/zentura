@@ -8,6 +8,8 @@
 const std = @import("std");
 const nswindow = @import("./window.zig");
 const Callback = nswindow.Callback;
+const Extent = nswindow.Extent;
+
 pub const c = @cImport({
     @cInclude("X11/Xlib.h");
     @cInclude("X11/Xresource.h");
@@ -34,29 +36,6 @@ pub const Platform = struct {
 
     /// WM alive ping
     NET_WM_PING: c.Atom,
-
-    pub fn vtable() nswindow.Platform.VTable {
-        const S = struct {
-            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
-                const self: *Platform = @alignCast(@ptrCast(ptr));
-                self.deinit();
-                allocator.destroy(self);
-            }
-            pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
-                const self: *Platform = @alignCast(@ptrCast(ptr));
-                self.pollEvents();
-            }
-            pub fn tag() nswindow.Platform.Tag {
-                return .x11;
-            }
-        };
-        return .{
-            .deinit = S.deinit,
-            .pollEvents = S.pollEvents,
-            .tag = S.tag,
-            .createWindow = createWindow,
-        };
-    }
 
     pub fn init() !@This() {
         const display = c.XOpenDisplay(null) orelse {
@@ -99,22 +78,19 @@ pub const Platform = struct {
         _ = c.XCloseDisplay(self.display);
     }
 
+    const WindowCreationError = nswindow.Platform.WindowCreationError;
     pub fn createWindow(
-        ptr: *anyopaque,
-        allocator: std.mem.Allocator,
+        self: *const @This(),
+        _: std.mem.Allocator,
         options: nswindow.WindowCreationOptions,
-    ) nswindow.Platform.WindowCreationError!nswindow.Window {
-        const self: *const @This() = @alignCast(@ptrCast(ptr));
+    ) WindowCreationError!nswindow.Window {
         const window = Window.init(self.*, options.width, options.height);
         errdefer window.deinit();
 
-        const heap = try allocator.create(Window);
-        heap.* = window;
-
-        return .{ .ptr = heap, .vtable = Window.vtable() };
+        return .{ .inner = .{ .x11 = window } };
     }
 
-    pub fn pollEvents(self: @This()) void {
+    pub fn pollEvents(self: @This()) nswindow.Platform.PollEventsError!void {
         _ = c.XPending(self.display);
         while (c.QLength(self.display) != 0) {
             var event: c.XEvent = undefined;
@@ -159,42 +135,6 @@ pub const Window = struct {
 
     cb_framebuffer_resize: ?Callback(nswindow.FramebufferResizeCb) = null,
 
-    pub fn vtable() nswindow.Window.VTable {
-        const S = struct {
-            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
-                const self: *Window = @alignCast(@ptrCast(ptr));
-                self.deinit();
-                allocator.destroy(self);
-            }
-            pub fn closed(ptr: *anyopaque) bool {
-                const self: *const Window = @alignCast(@ptrCast(ptr));
-                return self.state_closed;
-            }
-            pub fn dimensions(ptr: *anyopaque) nswindow.Extent {
-                const self: *const Window = @alignCast(@ptrCast(ptr));
-                return .{ .width = self.width, .height = self.height };
-            }
-            pub fn tag() nswindow.Platform.Tag {
-                return .x11;
-            }
-            pub fn setFramebufferResizeCallback(
-                ptr: *anyopaque,
-                cb: ?Callback(nswindow.FramebufferResizeCb),
-            ) ?Callback(nswindow.FramebufferResizeCb) {
-                const self: *Window = @alignCast(@ptrCast(ptr));
-                return self.setFramebufferResizeCallback(cb);
-            }
-        };
-
-        return .{
-            .deinit = S.deinit,
-            .closed = S.closed,
-            .dimensions = S.dimensions,
-            .tag = S.tag,
-            .setFramebufferResizeCallback = S.setFramebufferResizeCallback,
-        };
-    }
-
     pub fn init(context: Platform, width: u32, height: u32) @This() {
         const window = c.XCreateSimpleWindow(
             context.display,
@@ -224,6 +164,22 @@ pub const Window = struct {
 
     pub fn deinit(self: @This()) void {
         _ = c.XDestroyWindow(self.context.display, self.window_handle);
+    }
+
+    pub fn closed(self: @This()) bool {
+        return self.state_closed;
+    }
+
+    pub fn extent(self: @This()) Extent {
+        return .{ .width = self.width, .height = self.height };
+    }
+
+    pub fn vulkanExtentions() []const [*:0]const u8 {
+        const vk = @import("vulkan");
+        return &[_][*:0]const u8{
+            vk.extensions.khr_xcb_surface.name,
+            vk.extensions.khr_xlib_surface.name,
+        };
     }
 
     fn handleEvent(self: *@This(), event: *c.XEvent, filtered: bool) void {
