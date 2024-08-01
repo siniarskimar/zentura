@@ -40,30 +40,6 @@ pub const Platform = struct {
     keyboard_repeat_rate: u32 = 0,
     keymap_fd: std.posix.fd_t = -1,
 
-    pub fn vtable() nswindow.Platform.VTable {
-        const S = struct {
-            pub fn tag() nswindow.Platform.Tag {
-                return .wayland;
-            }
-            pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
-                const self: *const Platform = @alignCast(@ptrCast(ptr));
-                self.deinit();
-                allocator.destroy(self);
-            }
-            pub fn pollEvents(ptr: *anyopaque) nswindow.Platform.PollEventsError!void {
-                const self: *const Platform = @alignCast(@ptrCast(ptr));
-                try self.pollEvents();
-            }
-        };
-
-        return .{
-            .deinit = S.deinit,
-            .tag = S.tag,
-            .pollEvents = S.pollEvents,
-            .createWindow = createWindow,
-        };
-    }
-
     pub fn init() !@This() {
         const display = try wl.Display.connect(null);
         errdefer display.disconnect();
