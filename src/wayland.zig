@@ -267,7 +267,7 @@ pub const WlWindow = struct {
 
     // Synchronization state
     got_resized: bool = false,
-    cb_framebuffer_resize: ?Callback(nswindow.FramebufferResizeCb) = null,
+    cb_framebuffer_resize: ?nswindow.FramebufferResizeCb = null,
 
     extern fn wl_proxy_set_tag(proxy: *wl.Proxy, tag: [*:0]const u8) void;
 
@@ -316,8 +316,8 @@ pub const WlWindow = struct {
 
     pub fn setFramebufferResizeCallback(
         self: *@This(),
-        callback: ?Callback(nswindow.FramebufferResizeCb),
-    ) ?Callback(nswindow.FramebufferResizeCb) {
+        callback: ?nswindow.FramebufferResizeCb,
+    ) ?nswindow.FramebufferResizeCb {
         const old = self.cb_framebuffer_resize;
         self.cb_framebuffer_resize = callback;
         return old;

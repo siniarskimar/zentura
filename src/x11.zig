@@ -133,7 +133,7 @@ pub const Window = struct {
 
     state_closed: bool = false,
 
-    cb_framebuffer_resize: ?Callback(nswindow.FramebufferResizeCb) = null,
+    cb_framebuffer_resize: ?nswindow.FramebufferResizeCb = null,
 
     pub fn init(context: Platform, width: u32, height: u32) @This() {
         const window = c.XCreateSimpleWindow(
@@ -230,8 +230,8 @@ pub const Window = struct {
 
     pub fn setFramebufferResizeCallback(
         self: *@This(),
-        callback: ?Callback(nswindow.FramebufferResizeCb),
-    ) ?Callback(nswindow.FramebufferResizeCb) {
+        callback: ?nswindow.FramebufferResizeCb,
+    ) ?nswindow.FramebufferResizeCb {
         const old = self.cb_framebuffer_resize;
         self.cb_framebuffer_resize = callback;
         return old;

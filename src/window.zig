@@ -1,15 +1,16 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub const FramebufferResizeCb = *const fn (ctx: ?*anyopaque, width: u32, height: u32) void;
-
-pub fn Callback(FnPtr: type) type {
+pub fn Callback(Fn: type) type {
     return struct {
         ptr: FnPtr,
         ctx: ?*anyopaque = null,
+
+        pub const FnPtr = *const Fn;
     };
 }
 
+pub const FramebufferResizeCb = Callback(fn (ctx: ?*anyopaque, width: u32, height: u32) void);
 pub const WindowCreationOptions = struct {
     title: []const u8 = "zentura",
     width: u32,
@@ -151,8 +152,8 @@ pub const Window = struct {
 
     pub fn setFramebufferResizeCallback(
         self: *@This(),
-        cb: ?Callback(FramebufferResizeCb),
-    ) ?Callback(FramebufferResizeCb) {
+        cb: ?FramebufferResizeCb,
+    ) ?FramebufferResizeCb {
         return self.inner.setFramebufferResizeCallback(cb);
     }
 
@@ -193,8 +194,8 @@ pub const PosixWindow = union(enum) {
 
     pub fn setFramebufferResizeCallback(
         self: *@This(),
-        cb: ?Callback(FramebufferResizeCb),
-    ) ?Callback(FramebufferResizeCb) {
+        cb: ?FramebufferResizeCb,
+    ) ?FramebufferResizeCb {
         switch (self.*) {
             .wayland => |impl| return impl.setFramebufferResizeCallback(cb),
             .x11 => |*impl| return impl.setFramebufferResizeCallback(cb),
