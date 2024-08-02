@@ -48,6 +48,7 @@ pub fn build(b: *std.Build) void {
     exe_zentura.linkSystemLibrary("X11");
     exe_zentura.linkSystemLibrary("X11-xcb");
     exe_zentura.linkSystemLibrary("xcb");
+    exe_zentura.linkSystemLibrary("xkbcommon");
     scanner.addCSource(exe_zentura);
     b.installArtifact(exe_zentura);
 

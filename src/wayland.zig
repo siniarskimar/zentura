@@ -4,6 +4,10 @@ const nswindow = @import("./window.zig");
 const Callback = nswindow.Callback;
 const Extent = nswindow.Extent;
 
+const c = @cImport({
+    @cInclude("xkbcommon/xkbcommon.h");
+});
+
 pub const wl = wayland.wl;
 pub const xdg = wayland.xdg;
 
@@ -31,6 +35,9 @@ pub const Platform = struct {
     wl_seat_capabilities: wl.Seat.Capability = .{},
     wl_pointer: ?*wl.Pointer = null,
     wl_keyboard: ?*wl.Keyboard = null,
+    xkb_context: ?*c.xkb_context = null,
+    xkb_keymap: ?*c.xkb_keymap = null,
+    xkb_state: ?*c.xkb_state = null,
 
     pointer_focused: ?*wl.Surface = null,
     pointer_x: u32 = 0,
@@ -218,32 +225,80 @@ pub const Platform = struct {
                 if (tag != WL_SURFACE_TAG) return;
 
                 self.keyboard_focused = surface;
+
+                if (self.xkb_state) |state| for (data.keys.slice(u32)) |evdev_key| {
+                    const key = evdev_key + 8;
+                    // const sym = c.xkb_state_key_get_one_sym(state, key);
+
+                    var buf: [8]u8 = undefined;
+                    _ = c.xkb_state_key_get_utf8(state, key, &buf, buf.len);
+                    const ulen = std.unicode.utf8ByteSequenceLength(buf[0]) catch continue;
+                    const uchar = std.unicode.utf8Decode(buf[0..ulen]) catch continue;
+
+                    std.debug.print("kbd enter: {u}\n", .{uchar});
+                };
             },
             .leave => |data| if (data.surface) |surface| {
                 const proxy: *wl.Proxy = @ptrCast(surface);
                 const tag = wl_proxy_get_tag(proxy);
                 if (tag != WL_SURFACE_TAG) return;
 
-                self.keyboard_focused = surface;
+                self.keyboard_focused = null;
             },
-            .key => |data| {
-                std.debug.print("keyboard key {x} {s}\n", .{ data.key, @tagName(data.state) });
+            .key => |data| if (self.xkb_state) |state| {
+                const key = data.key + 8;
+                var buf: [8]u8 = undefined;
+                _ = c.xkb_state_key_get_utf8(state, key, &buf, buf.len);
+                const ulen = std.unicode.utf8ByteSequenceLength(buf[0]) catch return;
+                const uchar = std.unicode.utf8Decode(buf[0..ulen]) catch return;
+
+                std.debug.print("keyboard key {u} {s}\n", .{ uchar, @tagName(data.state) });
             },
             .keymap => |data| {
-                if (data.fd > 0) {
-                    std.posix.close(data.fd);
+                defer std.posix.close(data.fd);
+                if (data.format == .no_keymap) {
+                    log.err("raw keyboard keymap is unsupported", .{});
+                    return;
                 }
-                std.debug.print("keyboard format: {s}\n", .{@tagName(data.format)});
+                if (self.xkb_context == null) {
+                    self.xkb_context = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse {
+                        log.err("failed to create xkb context", .{});
+                        return;
+                    };
+                }
+                const context = self.xkb_context.?;
+                const keymap_string = std.posix.mmap(
+                    null,
+                    data.size,
+                    std.posix.PROT.READ,
+                    std.posix.MAP{ .TYPE = .PRIVATE },
+                    data.fd,
+                    0,
+                ) catch |err| std.debug.panic("keymap mmap failed: {}", .{err});
+                defer std.posix.munmap(keymap_string);
+
+                if (self.xkb_state) |old_state| c.xkb_state_unref(old_state);
+                if (self.xkb_keymap) |old_keymap| c.xkb_keymap_unref(old_keymap);
+
+                self.xkb_keymap = c.xkb_keymap_new_from_string(
+                    context,
+                    keymap_string.ptr,
+                    c.XKB_KEYMAP_FORMAT_TEXT_V1,
+                    c.XKB_KEYMAP_COMPILE_NO_FLAGS,
+                );
+                self.xkb_state = c.xkb_state_new(self.xkb_keymap.?);
             },
             .repeat_info => |data| {
                 self.keyboard_repeat_delay = @intCast(data.delay);
                 self.keyboard_repeat_rate = @intCast(data.rate);
             },
-            .modifiers => |data| {
-                std.debug.print(
-                    "mods_depressed={b}, mods_latched={b}, mods_locked={b}",
-                    .{ data.mods_depressed, data.mods_latched, data.mods_locked },
+            .modifiers => |data| if (self.xkb_state) |state| {
+                // zig fmt: off
+                _ = c.xkb_state_update_mask(state,
+                    data.mods_depressed, data.mods_latched, data.mods_locked,
+                    0, 0, data.group,
                 );
+                // zig fmt: on
             },
         }
     }
