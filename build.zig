@@ -14,6 +14,7 @@ pub fn build(b: *std.Build) void {
     scanner.generate("xdg_wm_base", 3);
     scanner.generate("wl_compositor", 6);
     scanner.generate("wl_seat", 8);
+    scanner.generate("wl_output", 4);
 
     const vk_registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
     const dep_vkzig = b.dependency("vulkan_zig", .{

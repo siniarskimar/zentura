@@ -292,6 +292,7 @@ pub const WlWindow = struct {
     state_maximized: bool = false,
     state_fullscreen: bool = false,
     state_activated: bool = false,
+    content_scale: i32 = 1,
 
     // Synchronization state
     got_resized: bool = false,
@@ -330,6 +331,7 @@ pub const WlWindow = struct {
     }
 
     pub fn initListeners(self: *@This()) void {
+        self.wl_surface.setListener(*@This(), wlSurfaceHandler, self);
         self.xdg_surface.setListener(*@This(), xdgSurfaceHandler, self);
         self.xdg_toplevel.setListener(*@This(), xdgToplevelHandler, self);
     }
@@ -364,6 +366,19 @@ pub const WlWindow = struct {
         return &[_][*:0]const u8{
             vk.extensions.khr_wayland_surface.name,
         };
+    }
+
+    fn wlSurfaceHandler(surface: *wl.Surface, event: wl.Surface.Event, self: *@This()) void {
+        switch (event) {
+            .enter => {},
+            .leave => {},
+            .preferred_buffer_scale => |data| {
+                self.content_scale = data.factor;
+                surface.setBufferScale(self.content_scale);
+                surface.commit();
+            },
+            .preferred_buffer_transform => {},
+        }
     }
 
     fn keyCodeHandler(
