@@ -13,13 +13,9 @@ pub const xdg = wayland.xdg;
 
 pub const log = std.log.scoped(.wayland);
 
-const WL_SURFACE_TAG: [*:0]const u8 = "ZENTURA";
+extern fn wl_proxy_get_tag(proxy: *wl.Proxy) [*:0]const u8;
 
-pub const SeatCapabilityCb = *const fn (
-    ctx: ?*anyopaque,
-    wl_seat: *wl.Seat,
-    cap: wl.Seat.Capability,
-) void;
+const WL_SURFACE_TAG: [*:0]const u8 = "ZENTURA";
 
 pub const Platform = struct {
     wl_display: *wl.Display,
@@ -32,19 +28,9 @@ pub const Platform = struct {
     // Input
     wl_seat: ?*wl.Seat = null,
     wl_seat_serial: u32 = 0,
-    wl_seat_capabilities: wl.Seat.Capability = .{},
-    // wl_pointer: ?*wl.Pointer = null,
-    wl_keyboard: ?*wl.Keyboard = null,
-    xkb_context: ?*c.xkb_context = null,
-    xkb_keymap: ?*c.xkb_keymap = null,
-    xkb_state: ?*c.xkb_state = null,
 
-    // pointer_focused: ?*wl.Surface = null,
-    // pointer_x: u32 = 0,
-    // pointer_y: u32 = 0,
-    keyboard_focused: ?*wl.Surface = null,
-    keyboard_repeat_delay: u32 = 0,
-    keyboard_repeat_rate: u32 = 0,
+    xkb_context: ?*c.xkb_context,
+    kbd: ?Keyboard = null,
 
     pub fn init() !@This() {
         const display = try wl.Display.connect(null);
@@ -53,16 +39,20 @@ pub const Platform = struct {
         const registry = try display.getRegistry();
         errdefer registry.destroy();
 
+        const xkb_context = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse
+            return error.XKBContextCreate;
+
         return .{
             .wl_display = display,
             .wl_registry = registry,
+            .xkb_context = xkb_context,
         };
     }
 
     pub fn deinit(self: *const @This()) void {
-        if (self.xkb_state) |state| c.xkb_state_unref(state);
-        if (self.xkb_keymap) |keymap| c.xkb_keymap_unref(keymap);
-        if (self.xkb_context) |context| c.xkb_context_unref(context);
+        if (self.kbd) |kbd| kbd.deinit();
+        c.xkb_context_unref(self.xkb_context);
+
         if (self.wl_seat) |seat| seat.release();
         if (self.wl_compositor) |compositor| compositor.destroy();
         if (self.xdg_wm_base) |wm_base| wm_base.destroy();
@@ -160,35 +150,48 @@ pub const Platform = struct {
         switch (event) {
             .capabilities => |data| {
                 const cap = data.capabilities;
-                self.wl_seat_capabilities = cap;
 
-                // if (cap.pointer and self.wl_pointer == null) {
-                //     self.wl_pointer = seat.getPointer() catch |err| blk: {
-                //         log.warn("(window) Failed to get pointer seat: {s}", .{@errorName(err)});
-                //         break :blk null;
-                //     };
-                //     self.wl_pointer.?.setListener(*@This(), wlPointerHandler, self);
-                // } else if (!cap.pointer and self.wl_pointer != null) {
-                //     self.wl_pointer.?.release();
-                //     self.wl_pointer = null;
-                // }
-
-                if (cap.keyboard and self.wl_keyboard == null) {
-                    self.wl_keyboard = seat.getKeyboard() catch |err| blk: {
-                        log.warn("(window) Failed to get keyboard seat: {s}", .{@errorName(err)});
-                        break :blk null;
+                if (cap.keyboard and self.kbd == null) {
+                    const wl_keyboard = seat.getKeyboard() catch |err| {
+                        log.warn("failed to get keyboard seat: {s}", .{@errorName(err)});
+                        return;
                     };
-                    self.wl_keyboard.?.setListener(*@This(), wlKeyboardHandler, self);
-                } else if (!cap.keyboard and self.wl_keyboard != null) {
-                    self.wl_keyboard.?.release();
-                    self.wl_keyboard = null;
+                    self.kbd = .{
+                        .wl_keyboard = wl_keyboard,
+                        .platform = self,
+                    };
+                    wl_keyboard.setListener(*Keyboard, Keyboard.wlKeyboardHandler, &self.kbd.?);
+                } else if (!cap.keyboard and self.kbd != null) {
+                    self.kbd.?.deinit();
+                    self.kbd = null;
                 }
             },
             .name => {},
         }
     }
+};
 
-    extern fn wl_proxy_get_tag(proxy: *wl.Proxy) [*:0]const u8;
+pub const Keyboard = struct {
+    platform: *Platform,
+    wl_keyboard: *wl.Keyboard,
+    keymap: ?*c.xkb_keymap = null,
+    state: ?*c.xkb_state = null,
+
+    mod_shift_idx: c.xkb_mod_index_t = c.XKB_MOD_INVALID,
+    mod_ctrl_idx: c.xkb_mod_index_t = c.XKB_MOD_INVALID,
+    mod_alt_idx: c.xkb_mod_index_t = c.XKB_MOD_INVALID,
+    mod_capslock_idx: c.xkb_mod_index_t = c.XKB_MOD_INVALID,
+
+    repeat_delay: u32 = 0,
+    repeat_rate: u32 = 0,
+
+    focused: ?*wl.Surface = null,
+
+    pub fn deinit(self: @This()) void {
+        c.xkb_state_unref(self.state);
+        c.xkb_keymap_unref(self.keymap);
+        self.wl_keyboard.release();
+    }
 
     fn wlKeyboardHandler(_: *wl.Keyboard, event: wl.Keyboard.Event, self: *@This()) void {
         switch (event) {
@@ -197,15 +200,15 @@ pub const Platform = struct {
                 const tag = wl_proxy_get_tag(proxy);
                 if (tag != WL_SURFACE_TAG) return;
 
-                self.keyboard_focused = surface;
+                self.focused = surface;
 
-                if (self.xkb_state) |state| for (data.keys.slice(u32)) |evdev_key| {
+                if (self.state) |state| for (data.keys.slice(u32)) |evdev_key| {
                     const key = evdev_key + 8;
                     const userdata = proxy.getUserData() orelse
                         std.debug.panic("wl_surface userdata is null", .{});
 
                     const window: *WlWindow = @ptrCast(@alignCast(userdata));
-                    window.keyCodeHandler(state, key, .pressed);
+                    window.keyCodeHandler(self, state, key, .pressed, false);
                 };
             },
             .leave => |data| if (data.surface) |surface| {
@@ -213,9 +216,9 @@ pub const Platform = struct {
                 const tag = wl_proxy_get_tag(proxy);
                 if (tag != WL_SURFACE_TAG) return;
 
-                self.keyboard_focused = null;
+                self.focused = null;
             },
-            .key => |data| if (self.xkb_state) |state| if (self.keyboard_focused) |surface| {
+            .key => |data| if (self.state) |state| if (self.focused) |surface| {
                 const key: u32 = data.key + 8;
                 const proxy: *wl.Proxy = @ptrCast(surface);
                 const tag = wl_proxy_get_tag(proxy);
@@ -225,7 +228,7 @@ pub const Platform = struct {
                     std.debug.panic("wl_surface userdata is null: {p}", .{surface});
 
                 const window: *WlWindow = @ptrCast(@alignCast(userdata));
-                window.keyCodeHandler(state, key, data.state);
+                window.keyCodeHandler(self, state, key, data.state, false);
             },
             .keymap => |data| {
                 defer std.posix.close(data.fd);
@@ -233,13 +236,6 @@ pub const Platform = struct {
                     log.err("raw keyboard keymap is unsupported", .{});
                     return;
                 }
-                if (self.xkb_context == null) {
-                    self.xkb_context = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse {
-                        log.err("failed to create xkb context", .{});
-                        return;
-                    };
-                }
-                const context = self.xkb_context.?;
                 const keymap_string = std.posix.mmap(
                     null,
                     data.size,
@@ -250,22 +246,36 @@ pub const Platform = struct {
                 ) catch |err| std.debug.panic("keymap mmap failed: {}", .{err});
                 defer std.posix.munmap(keymap_string);
 
-                if (self.xkb_state) |old_state| c.xkb_state_unref(old_state);
-                if (self.xkb_keymap) |old_keymap| c.xkb_keymap_unref(old_keymap);
+                if (self.state) |old_state| c.xkb_state_unref(old_state);
+                if (self.keymap) |old_keymap| c.xkb_keymap_unref(old_keymap);
+
                 const keymap = c.xkb_keymap_new_from_string(
-                    context,
+                    self.platform.xkb_context,
                     keymap_string.ptr,
                     c.XKB_KEYMAP_FORMAT_TEXT_V1,
                     c.XKB_KEYMAP_COMPILE_NO_FLAGS,
-                );
-                self.xkb_keymap = keymap;
-                self.xkb_state = c.xkb_state_new(self.xkb_keymap.?);
+                ) orelse {
+                    log.err("failed to create xkb_keymap", .{});
+                    return;
+                };
+                const state = c.xkb_state_new(keymap) orelse {
+                    log.err("failed to create xkb_state", .{});
+                    c.xkb_keymap_unref(keymap);
+                    return;
+                };
+                self.mod_shift_idx = c.xkb_keymap_mod_get_index(keymap, c.XKB_MOD_NAME_SHIFT);
+                self.mod_ctrl_idx = c.xkb_keymap_mod_get_index(keymap, c.XKB_MOD_NAME_CTRL);
+                self.mod_alt_idx = c.xkb_keymap_mod_get_index(keymap, c.XKB_MOD_NAME_ALT);
+                self.mod_capslock_idx = c.xkb_keymap_mod_get_index(keymap, c.XKB_MOD_NAME_CAPS);
+
+                self.keymap = keymap;
+                self.state = state;
             },
             .repeat_info => |data| {
-                self.keyboard_repeat_delay = @intCast(data.delay);
-                self.keyboard_repeat_rate = @intCast(data.rate);
+                self.repeat_delay = @intCast(data.delay);
+                self.repeat_rate = @intCast(data.rate);
             },
-            .modifiers => |data| if (self.xkb_state) |state| {
+            .modifiers => |data| if (self.state) |state| {
                 // zig fmt: off
                 _ = c.xkb_state_update_mask(state,
                     data.mods_depressed, data.mods_latched, data.mods_locked,
@@ -389,52 +399,48 @@ pub const WlWindow = struct {
     }
 
     fn keyCodeHandler(
-        _: *@This(),
+        self: *@This(),
+        kbd: *Keyboard,
         state: *c.xkb_state,
         keycode: c.xkb_keycode_t,
-        _: wl.Keyboard.KeyState,
+        keystate: wl.Keyboard.KeyState,
+        repeat: bool,
     ) void {
-        // const evdev_keycode = keycode - 8;
-        const keymap = c.xkb_state_get_keymap(state).?;
-        // const cmods = c.xkb_state_key_get_consumed_mods(state, keycode);
-        const layout = c.xkb_state_key_get_layout(state, keycode);
+        const evdev_keycode = keycode - 8;
+        const translated = nswindow.KeyCode.fromEvdev(evdev_keycode) orelse return;
 
-        var syms: [*]c.xkb_keysym_t = undefined;
-        const syms_leni = c.xkb_keymap_key_get_syms_by_level(
-            keymap,
-            keycode,
-            layout,
-            0,
-            @ptrCast(&syms),
-        );
-        if (syms_leni <= 0) return;
+        const mods = nswindow.KeyModifiers{
+            .ctrl = c.xkb_state_mod_index_is_active(
+                state,
+                kbd.mod_ctrl_idx,
+                c.XKB_STATE_MODS_DEPRESSED | c.XKB_STATE_MODS_EFFECTIVE,
+            ) > 0,
+            .alt = c.xkb_state_mod_index_is_active(
+                state,
+                kbd.mod_alt_idx,
+                c.XKB_STATE_MODS_DEPRESSED | c.XKB_STATE_MODS_EFFECTIVE,
+            ) > 0,
+            .shift = c.xkb_state_mod_index_is_active(
+                state,
+                kbd.mod_shift_idx,
+                c.XKB_STATE_MODS_DEPRESSED | c.XKB_STATE_MODS_EFFECTIVE,
+            ) > 0,
+            .capslock = c.xkb_state_mod_index_is_active(
+                state,
+                kbd.mod_capslock_idx,
+                c.XKB_STATE_MODS_DEPRESSED | c.XKB_STATE_MODS_EFFECTIVE,
+            ) > 0,
+            .numlock = false,
+            .super = false,
+        };
 
-        const syms_len: usize = @intCast(syms_leni);
-        const syms_slice = syms[0..syms_len];
-
-        var utf8_buf: [8]u8 = undefined;
-        const utf8_leni = c.xkb_keysym_to_utf8(syms_slice[0], &utf8_buf, utf8_buf.len);
-        if (utf8_leni <= 0) return;
-
-        var translated_utf8: [8]u8 = undefined;
-        const translated_leni = c.xkb_state_key_get_utf8(
-            state,
-            keycode,
-            &translated_utf8,
-            translated_utf8.len,
-        );
-        if (translated_leni <= 0) std.debug.panic("xkb_state_key_get_utf8 returned -1", .{});
-
-        const translated_len = std.unicode.utf8ByteSequenceLength(translated_utf8[0]) catch unreachable;
-        const translated_slice = translated_utf8[0..translated_len];
-
-        const utf8_len: usize = std.unicode.utf8CodepointSequenceLength(utf8_buf[0]) catch unreachable;
-        const utf8_slice = utf8_buf[0..utf8_len];
-
-        std.debug.print("{u} {u}\n", .{
-            std.unicode.utf8Decode(utf8_slice) catch unreachable,
-            std.unicode.utf8Decode(translated_slice) catch unreachable,
-        });
+        if (self.cb_key_callback) |cb| {
+            cb.ptr(cb.ctx, translated, mods, switch (keystate) {
+                .pressed => .pressed,
+                .released => .released,
+                else => std.debug.panic("invalid wayland keystate", .{}),
+            }, repeat);
+        }
     }
 
     fn xdgSurfaceHandler(surface: *xdg.Surface, event: xdg.Surface.Event, data: *@This()) void {
