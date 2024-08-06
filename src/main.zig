@@ -27,6 +27,27 @@ pub fn main() !void {
 
     try window_platform.pollEvents();
 
+    _ = window.setKeyCallback(.{
+        .ptr = &(struct {
+            pub fn keyCallback(
+                _: ?*anyopaque,
+                key: nswindow.KeyCode,
+                mods: nswindow.KeyModifiers,
+                keystate: nswindow.KeyState,
+                _: bool,
+            ) void {
+                const stdout = std.io.getStdOut();
+                stdout.writeAll(@tagName(keystate)) catch return;
+                stdout.writeAll(" ") catch return;
+                if (mods.ctrl) stdout.writeAll("ctrl+") catch return;
+                if (mods.alt) stdout.writeAll("alt+") catch return;
+                if (mods.shift) stdout.writeAll("shift+") catch return;
+                stdout.writeAll(@tagName(key)) catch return;
+                stdout.writeAll("\n") catch return;
+            }
+        }).keyCallback,
+    });
+
     _ = try vulkan.loadLibrary();
     defer vulkan.unloadLibrary();
 
