@@ -33,15 +33,15 @@ pub const Platform = struct {
     wl_seat: ?*wl.Seat = null,
     wl_seat_serial: u32 = 0,
     wl_seat_capabilities: wl.Seat.Capability = .{},
-    wl_pointer: ?*wl.Pointer = null,
+    // wl_pointer: ?*wl.Pointer = null,
     wl_keyboard: ?*wl.Keyboard = null,
     xkb_context: ?*c.xkb_context = null,
     xkb_keymap: ?*c.xkb_keymap = null,
     xkb_state: ?*c.xkb_state = null,
 
-    pointer_focused: ?*wl.Surface = null,
-    pointer_x: u32 = 0,
-    pointer_y: u32 = 0,
+    // pointer_focused: ?*wl.Surface = null,
+    // pointer_x: u32 = 0,
+    // pointer_y: u32 = 0,
     keyboard_focused: ?*wl.Surface = null,
     keyboard_repeat_delay: u32 = 0,
     keyboard_repeat_rate: u32 = 0,
@@ -160,16 +160,16 @@ pub const Platform = struct {
                 const cap = data.capabilities;
                 self.wl_seat_capabilities = cap;
 
-                if (cap.pointer and self.wl_pointer == null) {
-                    self.wl_pointer = seat.getPointer() catch |err| blk: {
-                        log.warn("(window) Failed to get pointer seat: {s}", .{@errorName(err)});
-                        break :blk null;
-                    };
-                    self.wl_pointer.?.setListener(*@This(), wlPointerHandler, self);
-                } else if (!cap.pointer and self.wl_pointer != null) {
-                    self.wl_pointer.?.release();
-                    self.wl_pointer = null;
-                }
+                // if (cap.pointer and self.wl_pointer == null) {
+                //     self.wl_pointer = seat.getPointer() catch |err| blk: {
+                //         log.warn("(window) Failed to get pointer seat: {s}", .{@errorName(err)});
+                //         break :blk null;
+                //     };
+                //     self.wl_pointer.?.setListener(*@This(), wlPointerHandler, self);
+                // } else if (!cap.pointer and self.wl_pointer != null) {
+                //     self.wl_pointer.?.release();
+                //     self.wl_pointer = null;
+                // }
 
                 if (cap.keyboard and self.wl_keyboard == null) {
                     self.wl_keyboard = seat.getKeyboard() catch |err| blk: {
@@ -187,35 +187,6 @@ pub const Platform = struct {
     }
 
     extern fn wl_proxy_get_tag(proxy: *wl.Proxy) [*:0]const u8;
-
-    fn wlPointerHandler(_: *wl.Pointer, event: wl.Pointer.Event, self: *@This()) void {
-        switch (event) {
-            .enter => |data| if (data.surface) |surface| {
-                const proxy: *wl.Proxy = @ptrCast(surface);
-                const tag = wl_proxy_get_tag(proxy);
-                if (tag != WL_SURFACE_TAG) return;
-
-                self.pointer_focused = surface;
-                self.pointer_x = @intCast(data.surface_x.toInt());
-                self.pointer_y = @intCast(data.surface_y.toInt());
-            },
-            .leave => |data| if (data.surface) |surface| {
-                const proxy: *wl.Proxy = @ptrCast(surface);
-                const tag = wl_proxy_get_tag(proxy);
-                if (tag != WL_SURFACE_TAG) return;
-
-                self.pointer_focused = null;
-            },
-            .button => |data| if (self.pointer_focused) |_| {
-                std.debug.print("pointer button {x}\n", .{data.button});
-            },
-            .motion => |data| if (self.pointer_focused) |_| {
-                self.pointer_x = @intCast(data.surface_x.toInt());
-                self.pointer_y = @intCast(data.surface_y.toInt());
-            },
-            else => {},
-        }
-    }
 
     fn wlKeyboardHandler(_: *wl.Keyboard, event: wl.Keyboard.Event, self: *@This()) void {
         switch (event) {
