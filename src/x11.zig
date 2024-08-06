@@ -134,6 +134,7 @@ pub const Window = struct {
     state_closed: bool = false,
 
     cb_framebuffer_resize: ?nswindow.FramebufferResizeCb = null,
+    cb_key_callback: ?nswindow.KeyCallback = null,
 
     pub fn init(context: Platform, width: u32, height: u32) @This() {
         const window = c.XCreateSimpleWindow(
@@ -180,6 +181,12 @@ pub const Window = struct {
             vk.extensions.khr_xcb_surface.name,
             vk.extensions.khr_xlib_surface.name,
         };
+    }
+
+    pub fn setKeyCallback(self: *@This(), cb: ?nswindow.KeyCallback) ?nswindow.KeyCallback {
+        const old = self.cb_key_callback;
+        self.cb_key_callback = cb;
+        return old;
     }
 
     fn handleEvent(self: *@This(), event: *c.XEvent, filtered: bool) void {

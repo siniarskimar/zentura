@@ -297,6 +297,7 @@ pub const WlWindow = struct {
     // Synchronization state
     got_resized: bool = false,
     cb_framebuffer_resize: ?nswindow.FramebufferResizeCb = null,
+    cb_key_callback: ?nswindow.KeyCallback = null,
 
     extern fn wl_proxy_set_tag(proxy: *wl.Proxy, tag: [*:0]const u8) void;
 
@@ -350,6 +351,12 @@ pub const WlWindow = struct {
     ) ?nswindow.FramebufferResizeCb {
         const old = self.cb_framebuffer_resize;
         self.cb_framebuffer_resize = callback;
+        return old;
+    }
+
+    pub fn setKeyCallback(self: *@This(), cb: ?nswindow.KeyCallback) ?nswindow.KeyCallback {
+        const old = self.cb_key_callback;
+        self.cb_key_callback = cb;
         return old;
     }
 
