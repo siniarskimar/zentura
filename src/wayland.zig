@@ -45,7 +45,6 @@ pub const Platform = struct {
     keyboard_focused: ?*wl.Surface = null,
     keyboard_repeat_delay: u32 = 0,
     keyboard_repeat_rate: u32 = 0,
-    keymap_fd: std.posix.fd_t = -1,
 
     pub fn init() !@This() {
         const display = try wl.Display.connect(null);
@@ -199,14 +198,11 @@ pub const Platform = struct {
 
                 if (self.xkb_state) |state| for (data.keys.slice(u32)) |evdev_key| {
                     const key = evdev_key + 8;
-                    // const sym = c.xkb_state_key_get_one_sym(state, key);
+                    const userdata = proxy.getUserData() orelse
+                        std.debug.panic("wl_surface userdata is null", .{});
 
-                    var buf: [8]u8 = undefined;
-                    _ = c.xkb_state_key_get_utf8(state, key, &buf, buf.len);
-                    const ulen = std.unicode.utf8ByteSequenceLength(buf[0]) catch continue;
-                    const uchar = std.unicode.utf8Decode(buf[0..ulen]) catch continue;
-
-                    std.debug.print("kbd enter: {u}\n", .{uchar});
+                    const window: *WlWindow = @ptrCast(@alignCast(userdata));
+                    window.keyCodeHandler(state, key, .pressed);
                 };
             },
             .leave => |data| if (data.surface) |surface| {
@@ -216,14 +212,17 @@ pub const Platform = struct {
 
                 self.keyboard_focused = null;
             },
-            .key => |data| if (self.xkb_state) |state| {
-                const key = data.key + 8;
-                var buf: [8]u8 = undefined;
-                _ = c.xkb_state_key_get_utf8(state, key, &buf, buf.len);
-                const ulen = std.unicode.utf8ByteSequenceLength(buf[0]) catch return;
-                const uchar = std.unicode.utf8Decode(buf[0..ulen]) catch return;
+            .key => |data| if (self.xkb_state) |state| if (self.keyboard_focused) |surface| {
+                const key: u32 = data.key + 8;
+                const proxy: *wl.Proxy = @ptrCast(surface);
+                const tag = wl_proxy_get_tag(proxy);
+                if (tag != WL_SURFACE_TAG) return;
 
-                std.debug.print("keyboard key {u} {s}\n", .{ uchar, @tagName(data.state) });
+                const userdata = proxy.getUserData() orelse
+                    std.debug.panic("wl_surface userdata is null: {p}", .{surface});
+
+                const window: *WlWindow = @ptrCast(@alignCast(userdata));
+                window.keyCodeHandler(state, key, data.state);
             },
             .keymap => |data| {
                 defer std.posix.close(data.fd);
@@ -250,13 +249,13 @@ pub const Platform = struct {
 
                 if (self.xkb_state) |old_state| c.xkb_state_unref(old_state);
                 if (self.xkb_keymap) |old_keymap| c.xkb_keymap_unref(old_keymap);
-
-                self.xkb_keymap = c.xkb_keymap_new_from_string(
+                const keymap = c.xkb_keymap_new_from_string(
                     context,
                     keymap_string.ptr,
                     c.XKB_KEYMAP_FORMAT_TEXT_V1,
                     c.XKB_KEYMAP_COMPILE_NO_FLAGS,
                 );
+                self.xkb_keymap = keymap;
                 self.xkb_state = c.xkb_state_new(self.xkb_keymap.?);
             },
             .repeat_info => |data| {
@@ -362,6 +361,55 @@ pub const WlWindow = struct {
         return &[_][*:0]const u8{
             vk.extensions.khr_wayland_surface.name,
         };
+    }
+
+    fn keyCodeHandler(
+        _: *@This(),
+        state: *c.xkb_state,
+        keycode: c.xkb_keycode_t,
+        _: wl.Keyboard.KeyState,
+    ) void {
+        // const evdev_keycode = keycode - 8;
+        const keymap = c.xkb_state_get_keymap(state).?;
+        // const cmods = c.xkb_state_key_get_consumed_mods(state, keycode);
+        const layout = c.xkb_state_key_get_layout(state, keycode);
+
+        var syms: [*]c.xkb_keysym_t = undefined;
+        const syms_leni = c.xkb_keymap_key_get_syms_by_level(
+            keymap,
+            keycode,
+            layout,
+            0,
+            @ptrCast(&syms),
+        );
+        if (syms_leni <= 0) return;
+
+        const syms_len: usize = @intCast(syms_leni);
+        const syms_slice = syms[0..syms_len];
+
+        var utf8_buf: [8]u8 = undefined;
+        const utf8_leni = c.xkb_keysym_to_utf8(syms_slice[0], &utf8_buf, utf8_buf.len);
+        if (utf8_leni <= 0) return;
+
+        var translated_utf8: [8]u8 = undefined;
+        const translated_leni = c.xkb_state_key_get_utf8(
+            state,
+            keycode,
+            &translated_utf8,
+            translated_utf8.len,
+        );
+        if (translated_leni <= 0) std.debug.panic("xkb_state_key_get_utf8 returned -1", .{});
+
+        const translated_len = std.unicode.utf8ByteSequenceLength(translated_utf8[0]) catch unreachable;
+        const translated_slice = translated_utf8[0..translated_len];
+
+        const utf8_len: usize = std.unicode.utf8CodepointSequenceLength(utf8_buf[0]) catch unreachable;
+        const utf8_slice = utf8_buf[0..utf8_len];
+
+        std.debug.print("{u} {u}\n", .{
+            std.unicode.utf8Decode(utf8_slice) catch unreachable,
+            std.unicode.utf8Decode(translated_slice) catch unreachable,
+        });
     }
 
     fn xdgSurfaceHandler(surface: *xdg.Surface, event: xdg.Surface.Event, data: *@This()) void {
