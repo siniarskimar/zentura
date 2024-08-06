@@ -60,6 +60,9 @@ pub const Platform = struct {
     }
 
     pub fn deinit(self: *const @This()) void {
+        if (self.xkb_state) |state| c.xkb_state_unref(state);
+        if (self.xkb_keymap) |keymap| c.xkb_keymap_unref(keymap);
+        if (self.xkb_context) |context| c.xkb_context_unref(context);
         if (self.wl_seat) |seat| seat.release();
         if (self.wl_compositor) |compositor| compositor.destroy();
         if (self.xdg_wm_base) |wm_base| wm_base.destroy();
