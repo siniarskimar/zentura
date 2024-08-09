@@ -94,7 +94,7 @@ pub const KeyCode = enum(u16) {
     f9, f10, f11, f12,
     // zig fmt: on
 
-    const evdev = @cImport(@cInclude("linux/input-event-codes.h"));
+    const evdev = @import("c");
     const evdev_translation = .{
         .{ evdev.KEY_A, KeyCode.a },
         .{ evdev.KEY_B, KeyCode.b },

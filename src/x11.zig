@@ -10,14 +10,7 @@ const nswindow = @import("./window.zig");
 const Callback = nswindow.Callback;
 const Extent = nswindow.Extent;
 
-pub const c = @cImport({
-    @cInclude("X11/Xlib.h");
-    @cInclude("X11/Xresource.h");
-    @cInclude("X11/Xlib-xcb.h");
-    @cInclude("xcb/xcb.h");
-    @cInclude("X11/Xutil.h");
-});
-
+pub const c = @import("c");
 pub const log = std.log.scoped(.x11);
 
 pub const Platform = struct {

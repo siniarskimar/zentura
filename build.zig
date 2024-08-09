@@ -18,14 +18,23 @@ pub fn build(b: *std.Build) void {
 
     const vk_registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
     const dep_vkzig = b.dependency("vulkan_zig", .{
-        .optimize = std.builtin.OptimizeMode.ReleaseSafe,
+        .optimize = .ReleaseSafe,
     });
     const vk_gen = dep_vkzig.artifact("vulkan-zig-generator");
     const run_vk_gen = b.addRunArtifact(vk_gen);
     run_vk_gen.addFileArg(vk_registry);
 
-    const mod_vulkan = b.createModule(.{ .root_source_file = run_vk_gen.addOutputFileArg("vk.zig") });
+    const mod_vulkan = b.createModule(.{
+        .root_source_file = run_vk_gen.addOutputFileArg("vk.zig"),
+    });
     const mod_wayland = b.createModule(.{ .root_source_file = scanner.result });
+
+    const posix_h = b.addTranslateC(.{
+        .root_source_file = b.path("./src/posix.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
 
     const shaders = vulkan_zig.ShaderCompileStep.create(
         b,
@@ -44,6 +53,7 @@ pub fn build(b: *std.Build) void {
     exe_zentura.root_module.addImport("wayland", mod_wayland);
     exe_zentura.root_module.addImport("vulkan", mod_vulkan);
     exe_zentura.root_module.addImport("shaders", shaders.getModule());
+    exe_zentura.root_module.addImport("c", posix_h.createModule());
     exe_zentura.linkLibC();
     exe_zentura.linkSystemLibrary("wayland-client");
     exe_zentura.linkSystemLibrary("X11");

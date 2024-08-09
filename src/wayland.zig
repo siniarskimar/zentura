@@ -4,9 +4,7 @@ const nswindow = @import("./window.zig");
 const Callback = nswindow.Callback;
 const Extent = nswindow.Extent;
 
-const c = @cImport({
-    @cInclude("xkbcommon/xkbcommon.h");
-});
+const c = @import("c");
 
 pub const wl = wayland.wl;
 pub const xdg = wayland.xdg;
