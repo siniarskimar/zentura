@@ -1,10 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const log = std.log;
 const vulkan = @import("./vulkan.zig");
-const nswindow = @import("./window.zig");
-const vk = vulkan.vk;
 const shaders = @import("shaders");
+const c = @import("c");
 
 const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
@@ -14,52 +14,52 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    var window_platform = try nswindow.Platform.init(gpa.allocator());
-    defer window_platform.deinit(gpa.allocator());
+    if (builtin.os.tag == .linux) {
+        _ = c.SDL_SetHint(c.SDL_HINT_VIDEODRIVER, "wayland,x11");
+    }
+    if (c.SDL_InitSubSystem(c.SDL_INIT_VIDEO) != 0) {
+        log.err("failed to initialize SDL video: {s}", .{c.SDL_GetError()});
+        return error.SDLInitFailed;
+    }
+    defer c.SDL_Quit();
 
-    try window_platform.pollEvents();
+    const window = c.SDL_CreateWindow(
+        "zentura",
+        c.SDL_WINDOWPOS_UNDEFINED,
+        c.SDL_WINDOWPOS_UNDEFINED,
+        800,
+        600,
+        c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_VULKAN,
+    );
+    if (window == null) {
+        log.err("failed to create SDL window: {s}", .{c.SDL_GetError()});
+        return error.CreateWindowFailed;
+    }
+    defer c.SDL_DestroyWindow(window);
 
-    var window = try window_platform.createWindow(gpa.allocator(), .{
-        .width = 800,
-        .height = 600,
-    });
-    defer window.deinit(gpa.allocator());
-
-    try window_platform.pollEvents();
-
-    _ = window.setKeyCallback(.{
-        .ptr = &(struct {
-            pub fn keyCallback(
-                _: ?*anyopaque,
-                key: nswindow.KeyCode,
-                mods: nswindow.KeyModifiers,
-                keystate: nswindow.KeyState,
-                _: bool,
-            ) void {
-                const stdout = std.io.getStdOut();
-                stdout.writeAll(@tagName(keystate)) catch return;
-                stdout.writeAll(" ") catch return;
-                if (mods.ctrl) stdout.writeAll("ctrl+") catch return;
-                if (mods.alt) stdout.writeAll("alt+") catch return;
-                if (mods.shift) stdout.writeAll("shift+") catch return;
-                stdout.writeAll(@tagName(key)) catch return;
-                stdout.writeAll("\n") catch return;
-            }
-        }).keyCallback,
-    });
-
-    _ = try vulkan.loadLibrary();
-    defer vulkan.unloadLibrary();
-
-    var vkrenderer = try vulkan.Renderer.init(gpa.allocator(), &window);
+    var vkrenderer = try vulkan.Renderer.init(gpa.allocator(), window.?);
     defer vkrenderer.deinit();
 
-    vkrenderer.initCallbacks();
+    var should_close: bool = false;
 
-    while (!window.closed()) {
-        try window_platform.pollEvents();
-
+    while (!should_close) {
+        var event: c.SDL_Event = undefined;
+        while (c.SDL_PollEvent(&event) == 1) {
+            switch (event.type) {
+                c.SDL_QUIT => {
+                    should_close = true;
+                },
+                c.SDL_WINDOWEVENT => switch (event.window.event) {
+                    c.SDL_WINDOWEVENT_SIZE_CHANGED,
+                    c.SDL_WINDOWEVENT_RESIZED,
+                    => {
+                        vkrenderer.should_resize = true;
+                    },
+                    else => {},
+                },
+                else => {},
+            }
+        }
         try vkrenderer.present();
-        std.time.sleep(std.time.ns_per_ms);
     }
 }

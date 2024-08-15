@@ -1,13 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const nswindow = @import("window.zig");
+const c = @import("c");
 
 pub const log = std.log.scoped(.vulkan);
 pub const vk = @import("vulkan");
 
 /// Features for which to generate and load function pointers
-/// Comments with `SEPERATE:` indicate that given feature is loaded
-/// outside of vulkan-zig
 const apis: []const vk.ApiInfo = &.{
     .{
         .base_commands = .{
@@ -20,7 +18,6 @@ const apis: []const vk.ApiInfo = &.{
     vk.features.version_1_0,
     vk.features.version_1_1,
     vk.extensions.khr_surface,
-    // SEPERATE: vk.extensions.khr_wayland_surface,
     vk.extensions.khr_swapchain,
 };
 
@@ -36,134 +33,17 @@ pub const BaseDispatch = vk.BaseWrapper(apis);
 pub const InstanceDispatch = vk.InstanceWrapper(apis);
 pub const DeviceDispatch = vk.DeviceWrapper(apis);
 
-const SurfaceDispatch = struct {
-    instance: vk.Instance,
-    vkCreateWaylandSurfaceKHR: ?vk.PfnCreateWaylandSurfaceKHR = null,
-    vkCreateXlibSurfaceKHR: ?vk.PfnCreateXlibSurfaceKHR = null,
-    vkCreateXcbSurfaceKHR: ?vk.PfnCreateXcbSurfaceKHR = null,
-
-    fn load(instance: vk.Instance, getInstanceProcAddress: vkGetInstanceProcAddressFn) @This() {
-        return .{
-            .instance = instance,
-            .vkCreateWaylandSurfaceKHR = @ptrCast(getInstanceProcAddress(instance, "vkCreateWaylandSurfaceKHR")),
-            .vkCreateXlibSurfaceKHR = @ptrCast(getInstanceProcAddress(instance, "vkCreateXlibSurfaceKHR")),
-            .vkCreateXcbSurfaceKHR = @ptrCast(getInstanceProcAddress(instance, "vkCreateXcbSurfaceKHR")),
-        };
-    }
-
-    fn createWaylandSurface(self: @This(), wl_display: *vk.wl_display, wl_surface: *vk.wl_surface) !vk.SurfaceKHR {
-        const vkCreateWaylandSurface = self.vkCreateWaylandSurfaceKHR orelse return error.CommandLoadFailure;
-        var surface: vk.SurfaceKHR = .null_handle;
-        const result = vkCreateWaylandSurface(self.instance, &vk.WaylandSurfaceCreateInfoKHR{
-            .display = wl_display,
-            .surface = wl_surface,
-        }, null, &surface);
-
-        switch (result) {
-            vk.Result.success => {},
-            vk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
-            vk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
-            else => return error.Unknown,
-        }
-
-        return surface;
-    }
-
-    fn createXlibSurface(self: @This(), display: *vk.Display, window: vk.Window) !vk.SurfaceKHR {
-        const vkCreateXlibSurface = self.vkCreateXlibSurfaceKHR orelse return error.CommandLoadFailure;
-
-        var surface: vk.SurfaceKHR = .null_handle;
-        const result = vkCreateXlibSurface(self.instance, &vk.XlibSurfaceCreateInfoKHR{
-            .dpy = display,
-            .window = window,
-        }, null, &surface);
-
-        switch (result) {
-            vk.Result.success => {},
-            vk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
-            vk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
-            else => return error.Unknown,
-        }
-
-        return surface;
-    }
-
-    fn createXcbSurface(self: @This(), connection: *vk.xcb_connection_t, window: vk.xcb_window_t) !vk.SurfaceKHR {
-        const vkCreateXcbSurface = self.vkCreateXcbSurfaceKHR orelse return error.CommandLoadFailure;
-
-        var surface: vk.SurfaceKHR = .null_handle;
-        const result = vkCreateXcbSurface(self.instance, &vk.XcbSurfaceCreateInfoKHR{
-            .connection = connection,
-            .window = window,
-        }, null, &surface);
-
-        switch (result) {
-            vk.Result.success => {},
-            vk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
-            vk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
-            else => return error.Unknown,
-        }
-
-        return surface;
-    }
-
-    fn createSurface(self: @This(), generic_window: *const nswindow.Window) !vk.SurfaceKHR {
-        switch (nswindow.Window.InnerType) {
-            nswindow.PosixWindow => switch (generic_window.inner) {
-                .wayland => |window| {
-                    if (self.vkCreateWaylandSurfaceKHR == null) {
-                        log.err("Vulkan instance does not have vkCreateWaylandSurfaceKHR, but lists VK_KHR_wayland_surface as supported", .{});
-                        return error.CommandLoadFailure;
-                    }
-                    return self.createWaylandSurface(@ptrCast(window.context.wl_display), @ptrCast(window.wl_surface));
-                },
-                .x11 => |window| {
-                    if (self.vkCreateXcbSurfaceKHR != null) {
-                        return self.createXcbSurface(@ptrCast(window.context.xcb_connection), @intCast(window.window_handle));
-                    }
-                    if (self.vkCreateXlibSurfaceKHR == null) {
-                        log.err("Vulkan instance does not have vkCreateXlibSurfaceKHR, but lists VK_KHR_xlib_surface as supported", .{});
-                        return error.CommandLoadFailure;
-                    }
-                    return self.createXlibSurface(@ptrCast(window.context.display), window.window_handle);
-                },
-            },
-            else => unreachable,
-        }
-    }
-};
-
 pub const Instance = vk.InstanceProxy(apis);
 pub const Device = vk.DeviceProxy(apis);
 
-pub const vkGetInstanceProcAddressFn = *const fn (instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction;
-
-var vulkan_so_library: ?std.DynLib = null;
-
-pub fn loadLibrary() !*std.DynLib {
-    const filename = switch (builtin.os.tag) {
-        .linux => "libvulkan.so",
-        .netbsd, .freebsd => "libvulkan.so",
-        .windows => "vulkan-1.dll",
-        else => @compileError("Unsupported OS"),
-    };
-    vulkan_so_library = try std.DynLib.open(filename);
-    const lib = &(vulkan_so_library.?);
-
-    // Vulkan SO has to have vkGetInstanceProcAddress
-    _ = lib.lookup(vkGetInstanceProcAddressFn, "vkGetInstanceProcAddr") orelse
-        return error.InvalidShaderLibrary;
-    return lib;
-}
-
-pub fn unloadLibrary() void {
-    if (vulkan_so_library) |*lib| lib.close();
-}
+pub const vkGetInstanceProcAddressFn = *const fn (
+    instance: vk.Instance,
+    procname: [*:0]const u8,
+) callconv(.C) vk.PfnVoidFunction;
 
 pub const InstanceContext = struct {
     instance: Instance,
     base_dispatch: BaseDispatch,
-    surface_dispatch: SurfaceDispatch,
 
     const app_info: vk.ApplicationInfo = .{
         .p_application_name = "zentura",
@@ -174,19 +54,25 @@ pub const InstanceContext = struct {
 
     pub const CommandBuffer = vk.CommandBufferProxy(apis);
 
-    pub fn init(allocator: std.mem.Allocator, window: *const nswindow.Window) !@This() {
-        if (vulkan_so_library == null) return error.VulkanSoNotLoaded;
-        const getInstanceProcAddress = vulkan_so_library.?.lookup(vkGetInstanceProcAddressFn, "vkGetInstanceProcAddr") orelse unreachable;
+    pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
+        const getInstanceProcAddress = @as(
+            ?vkGetInstanceProcAddressFn,
+            @ptrCast(c.SDL_Vulkan_GetVkGetInstanceProcAddr()),
+        ) orelse return error.vkGetInstanceProcAddress;
 
         const base_dispatch = try BaseDispatch.load(getInstanceProcAddress);
 
-        const compositor_exts = window.vulkanExtensions();
+        var sdl_ext_count: c_uint = 0;
+        if (c.SDL_Vulkan_GetInstanceExtensions(window, &sdl_ext_count, null) == c.SDL_FALSE) {
+            return error.SDLGetInstanceExtensions;
+        }
 
-        const instance_extensions = try allocator.alloc([*:0]const u8, required_instance_extensions.len + compositor_exts.len);
-        defer allocator.free(instance_extensions);
+        const sdl_exts = try allocator.alloc([*c]const u8, sdl_ext_count);
+        defer allocator.free(sdl_exts);
 
-        std.mem.copyForwards([*:0]const u8, instance_extensions, &required_instance_extensions);
-        std.mem.copyForwards([*:0]const u8, instance_extensions[required_instance_extensions.len..], compositor_exts);
+        if (c.SDL_Vulkan_GetInstanceExtensions(window, &sdl_ext_count, sdl_exts.ptr) == c.SDL_FALSE) {
+            return error.SDLGetInstanceExtensions;
+        }
 
         const vlayers = if (builtin.mode == .Debug)
             [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"}
@@ -195,8 +81,8 @@ pub const InstanceContext = struct {
 
         const instance = try base_dispatch.createInstance(&vk.InstanceCreateInfo{
             .p_application_info = &app_info,
-            .enabled_extension_count = @intCast(instance_extensions.len),
-            .pp_enabled_extension_names = instance_extensions.ptr,
+            .enabled_extension_count = @intCast(sdl_exts.len),
+            .pp_enabled_extension_names = @ptrCast(sdl_exts.ptr),
             .enabled_layer_count = vlayers.len,
             .pp_enabled_layer_names = &vlayers,
             .flags = .{},
@@ -209,7 +95,6 @@ pub const InstanceContext = struct {
         return .{
             .instance = Instance.init(instance, instance_dispatch),
             .base_dispatch = base_dispatch,
-            .surface_dispatch = SurfaceDispatch.load(instance, getInstanceProcAddress),
         };
     }
 
@@ -740,7 +625,7 @@ pub const Swapchain = struct {
 };
 
 pub const Renderer = struct {
-    window: *nswindow.Window,
+    window: *c.SDL_Window,
     allocator: std.mem.Allocator,
 
     ctx: InstanceContext,
@@ -758,11 +643,21 @@ pub const Renderer = struct {
 
     const shaders = @import("shaders");
 
-    pub fn init(allocator: std.mem.Allocator, window: *nswindow.Window) !@This() {
-        const ctx = try InstanceContext.init(allocator, window);
+    extern fn SDL_Vulkan_CreateSurface(
+        window: *c.SDL_Window,
+        instance: vk.Instance,
+        surface: *vk.SurfaceKHR,
+    ) c.SDL_bool;
+
+    pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
+        var ctx = try InstanceContext.init(allocator, window);
         errdefer ctx.deinit(allocator);
 
-        const surface = try ctx.surface_dispatch.createSurface(window);
+        var surface: vk.SurfaceKHR = .null_handle;
+        if (SDL_Vulkan_CreateSurface(window, ctx.instance.handle, &surface) == c.SDL_FALSE) {
+            log.err("failed to create Vulkan surface: {s}", .{c.SDL_GetError()});
+            return error.CreateSurfaceFailed;
+        }
         errdefer ctx.instance.destroySurfaceKHR(surface, null);
 
         const rctx = try allocator.create(RenderContext);
@@ -771,12 +666,15 @@ pub const Renderer = struct {
         rctx.* = try RenderContext.init(allocator, ctx.instance, surface);
         errdefer rctx.deinit(allocator);
 
-        const window_dims = window.extent();
+        var window_width: c_int = undefined;
+        var window_height: c_int = undefined;
+        c.SDL_Vulkan_GetDrawableSize(window, &window_width, &window_height);
+
         var swapchain = try Swapchain.create(
             allocator,
             ctx.instance,
             rctx,
-            .{ .width = window_dims.width, .height = window_dims.height },
+            .{ .width = @intCast(window_width), .height = @intCast(window_height) },
         );
         errdefer swapchain.destroy(allocator);
 
@@ -856,10 +754,13 @@ pub const Renderer = struct {
 
         if (result == .suboptimal or self.should_resize) {
             self.should_resize = false;
-            const dims = self.window.extent();
+            var window_width: c_int = undefined;
+            var window_height: c_int = undefined;
+            c.SDL_Vulkan_GetDrawableSize(self.window, &window_width, &window_height);
+
             try self.swapchain.recreate(
                 self.allocator,
-                .{ .width = dims.width, .height = dims.height },
+                .{ .width = @intCast(window_width), .height = @intCast(window_height) },
             );
 
             destroyFramebuffers(self.allocator, self.rctx.dev, self.framebuffers);
