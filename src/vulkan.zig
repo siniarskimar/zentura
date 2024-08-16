@@ -609,36 +609,36 @@ pub const Swapchain = struct {
             const image_acquired = try context.dev.createSemaphore(&.{}, null);
             errdefer context.dev.destroySemaphore(image_acquired, null);
 
-            const render_finished = try context.dev.createSemaphore(&.{}, null);
-            errdefer context.dev.destroySemaphore(render_finished, null);
+            const render_semaphore = try context.dev.createSemaphore(&.{}, null);
+            errdefer context.dev.destroySemaphore(render_semaphore, null);
 
-            const present_fence = try context.dev.createFence(&.{
+            const render_fence = try context.dev.createFence(&.{
                 // create it in signaled state so present() doesn't deadlock
                 .flags = .{ .signaled_bit = true },
             }, null);
-            errdefer context.dev.destroyFence(present_fence, null);
+            errdefer context.dev.destroyFence(render_fence, null);
 
             return .{
                 .context = context,
                 .handle = handle,
                 .view = view,
                 .image_acquired = image_acquired,
-                .render_finished = render_finished,
-                .present_fence = present_fence,
+                .render_semaphore = render_semaphore,
+                .render_fence = render_fence,
             };
         }
 
         pub fn deinit(self: *@This()) void {
-            self.waitForPresent() catch return;
+            _ = self.context.dev.waitForFences(
+                1,
+                &.{self.render_fence},
+                vk.TRUE,
+                std.time.ns_per_ms * 500,
+            ) catch {};
             self.context.dev.destroyImageView(self.view, null);
             self.context.dev.destroySemaphore(self.image_acquired, null);
-            self.context.dev.destroySemaphore(self.render_finished, null);
-            self.context.dev.destroyFence(self.present_fence, null);
-        }
-
-        /// Wait till the image is ready to be presented on the screen
-        pub fn waitForPresent(self: *const @This()) !void {
-            _ = try self.context.dev.waitForFences(1, @ptrCast(&self.present_fence), vk.TRUE, std.math.maxInt(u64));
+            self.context.dev.destroySemaphore(self.render_semaphore, null);
+            self.context.dev.destroyFence(self.render_fence, null);
         }
     };
 };
@@ -659,6 +659,7 @@ pub const Renderer = struct {
     cmdbufs: []vk.CommandBuffer,
 
     should_resize: bool = false,
+    frame_count: u64 = 0,
 
     const shaders = @import("shaders");
 
@@ -707,7 +708,10 @@ pub const Renderer = struct {
         errdefer rctx.dev.destroyPipeline(pipeline, null);
 
         const cmdpool = try rctx.dev.createCommandPool(
-            &.{ .queue_family_index = rctx.graphics_queue.family },
+            &vk.CommandPoolCreateInfo{
+                .queue_family_index = rctx.graphics_queue.family,
+                .flags = .{ .reset_command_buffer_bit = true },
+            },
             null,
         );
         errdefer rctx.dev.destroyCommandPool(cmdpool, null);
@@ -715,14 +719,11 @@ pub const Renderer = struct {
         const framebuffers = try createFramebuffers(allocator, rctx.dev, render_pass, swapchain);
         errdefer destroyFramebuffers(allocator, rctx.dev, framebuffers);
 
-        const cmdbufs = try createCommandBuffers(
+        const cmdbufs = try allocateCommandBuffers(
             allocator,
             rctx.dev,
             cmdpool,
-            render_pass,
             framebuffers,
-            pipeline,
-            swapchain.extent,
         );
         errdefer destroyCommandBuffers(allocator, rctx.dev, cmdpool, cmdbufs);
 
@@ -740,10 +741,6 @@ pub const Renderer = struct {
             .cmdbufs = cmdbufs,
             .framebuffers = framebuffers,
         };
-    }
-
-    pub fn initCallbacks(self: *@This()) void {
-        _ = self.window.setFramebufferResizeCallback(.{ .ptr = framebufferResizeCallback, .ctx = self });
     }
 
     pub fn deinit(self: *@This()) void {
@@ -765,11 +762,71 @@ pub const Renderer = struct {
     }
 
     pub fn present(self: *@This()) !void {
+        const dev = self.rctx.dev;
+        const extent = self.swapchain.extent;
         const cmdbuf = self.cmdbufs[self.swapchain.image_index];
+        const framebuffer = self.framebuffers[self.swapchain.image_index];
+        switch (try dev.waitForFences(
+            1,
+            &.{self.swapchain.currentSwapImage().render_fence},
+            vk.TRUE,
+            std.time.ns_per_s,
+        )) {
+            vk.Result.success => {},
+            vk.Result.timeout => return error.Timeout,
+            else => return error.Unknown,
+        }
+        try dev.resetFences(1, &.{self.swapchain.currentSwapImage().render_fence});
+        try dev.resetCommandBuffer(cmdbuf, .{});
+
+        const clear = vk.ClearValue{ .color = .{
+            .float_32 = .{
+                0,
+                @abs(std.math.sin(@as(f32, @floatFromInt(self.frame_count)) / 120.0)),
+                0,
+                1,
+            },
+        } };
+        const viewport = vk.Viewport{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(self.swapchain.extent.width),
+            .height = @floatFromInt(self.swapchain.extent.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+        const scissor = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.swapchain.extent,
+        };
+        try dev.beginCommandBuffer(cmdbuf, &.{});
+
+        dev.cmdSetViewport(cmdbuf, 0, 1, @ptrCast(&viewport));
+        dev.cmdSetScissor(cmdbuf, 0, 1, @ptrCast(&scissor));
+
+        const render_area = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = extent,
+        };
+
+        dev.cmdBeginRenderPass(cmdbuf, &.{
+            .render_pass = self.render_pass,
+            .framebuffer = framebuffer,
+            .render_area = render_area,
+            .clear_value_count = 1,
+            .p_clear_values = @ptrCast(&clear),
+        }, .@"inline");
+
+        dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
+        dev.cmdDraw(cmdbuf, 3, 1, 0, 0);
+        dev.cmdEndRenderPass(cmdbuf);
+        try dev.endCommandBuffer(cmdbuf);
+
         const result = self.swapchain.present(cmdbuf) catch |err| switch (err) {
             error.OutOfDateKHR => .suboptimal,
             else => return err,
         };
+        self.frame_count += 1;
 
         if (result == .suboptimal or self.should_resize) {
             self.should_resize = false;
@@ -791,25 +848,13 @@ pub const Renderer = struct {
             );
 
             destroyCommandBuffers(self.allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
-            self.cmdbufs = try createCommandBuffers(
+            self.cmdbufs = try allocateCommandBuffers(
                 self.allocator,
                 self.rctx.dev,
                 self.cmdpool,
-                self.render_pass,
                 self.framebuffers,
-                self.pipeline,
-                self.swapchain.extent,
             );
         }
-    }
-
-    pub fn framebufferResizeCallback(ctx: ?*anyopaque, width: u32, height: u32) void {
-        _ = width;
-        _ = height;
-        std.debug.assert(ctx != null);
-
-        var self: *@This() = @alignCast(@ptrCast(ctx.?));
-        self.should_resize = true;
     }
 
     fn destroyCommandBuffers(
@@ -827,14 +872,11 @@ pub const Renderer = struct {
         allocator.free(framebuffers);
     }
 
-    fn createCommandBuffers(
+    fn allocateCommandBuffers(
         allocator: std.mem.Allocator,
         dev: Device,
         cmdpool: vk.CommandPool,
-        render_pass: vk.RenderPass,
         framebuffers: []vk.Framebuffer,
-        pipeline: vk.Pipeline,
-        extent: vk.Extent2D,
     ) ![]vk.CommandBuffer {
         const cmdbufs = try allocator.alloc(vk.CommandBuffer, framebuffers.len);
         errdefer allocator.free(cmdbufs);
@@ -844,46 +886,6 @@ pub const Renderer = struct {
             .level = .primary,
             .command_buffer_count = @intCast(cmdbufs.len),
         }, cmdbufs.ptr);
-        errdefer dev.freeCommandBuffers(cmdpool, @intCast(cmdbufs.len), cmdbufs.ptr);
-
-        const clear = vk.ClearValue{ .color = .{ .float_32 = .{ 0, 0, 0, 1 } } };
-        const viewport = vk.Viewport{
-            .x = 0,
-            .y = 0,
-            .width = @floatFromInt(extent.width),
-            .height = @floatFromInt(extent.height),
-            .min_depth = 0,
-            .max_depth = 1,
-        };
-        const scissor = vk.Rect2D{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = extent,
-        };
-
-        for (cmdbufs, framebuffers) |cmdbuf, fb| {
-            try dev.beginCommandBuffer(cmdbuf, &.{});
-
-            dev.cmdSetViewport(cmdbuf, 0, 1, @ptrCast(&viewport));
-            dev.cmdSetScissor(cmdbuf, 0, 1, @ptrCast(&scissor));
-
-            const render_area = vk.Rect2D{
-                .offset = .{ .x = 0, .y = 0 },
-                .extent = extent,
-            };
-
-            dev.cmdBeginRenderPass(cmdbuf, &.{
-                .render_pass = render_pass,
-                .framebuffer = fb,
-                .render_area = render_area,
-                .clear_value_count = 1,
-                .p_clear_values = @ptrCast(&clear),
-            }, .@"inline");
-
-            dev.cmdBindPipeline(cmdbuf, .graphics, pipeline);
-            dev.cmdDraw(cmdbuf, 3, 1, 0, 0);
-            dev.cmdEndRenderPass(cmdbuf);
-            try dev.endCommandBuffer(cmdbuf);
-        }
 
         return cmdbufs;
     }
