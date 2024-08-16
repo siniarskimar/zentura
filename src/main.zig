@@ -6,8 +6,63 @@ const vulkan = @import("./vulkan.zig");
 const shaders = @import("shaders");
 const c = @import("c");
 
+const ft = @cImport({
+    @cInclude("ft2build.h");
+    @cInclude("freetype/freetype.h");
+});
+
 const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
+};
+
+const TextBuffer = struct {
+    allocator: std.mem.Allocator,
+    buffer: std.ArrayListUnmanaged(u8) = .{},
+    lines: std.ArrayListUnmanaged([]const u8) = .{},
+
+    pub fn init(allocator: std.mem.Allocator) @This() {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.buffer.deinit(self.allocator);
+        self.lines.deinit(self.allocator);
+    }
+
+    pub fn computeLines(self: *@This()) !void {
+        self.lines.clearRetainingCapacity();
+        var start: usize = 0;
+        for (self.buffer.items, 0..) |ch, idx| {
+            if (ch != '\n') continue;
+            try self.lines.append(self.allocator, self.buffer.items[start..idx]);
+            start = idx + 1;
+        }
+        if (start != self.buffer.items.len) {
+            try self.lines.append(self.allocator, self.buffer.items[start..]);
+        }
+    }
+
+    pub fn getLineIndex(self: *const @This(), x: u64, y: u64) usize {
+        if (self.lines.items.len == 0) {
+            return 0;
+        }
+        const line = if (self.lines.items.len <= y)
+            self.lines.getLast()
+        else
+            self.lines.items[y];
+
+        const line_idx = @intFromPtr(self.buffer.items.ptr) - @intFromPtr(line.ptr);
+        return line_idx + @min(x, line.len - 1);
+    }
+
+    pub fn insert(self: *@This(), x: u64, y: u64, slice: []const u8) !void {
+        if (self.lines.items.len < y) {
+            try self.buffer.appendSlice(self.allocator, slice);
+        } else {
+            try self.buffer.insertSlice(self.allocator, self.getLineIndex(x, y), slice);
+        }
+        try self.computeLines();
+    }
 };
 
 pub fn main() !void {
@@ -22,6 +77,42 @@ pub fn main() !void {
         return error.SDLInitFailed;
     }
     defer c.SDL_Quit();
+
+    var ft_library: ft.FT_Library = null;
+    if (ft.FT_Init_FreeType(&ft_library) != 0) {
+        log.err("failed to initialize Freetype", .{});
+        return error.FTInitFailed;
+    }
+    defer _ = ft.FT_Done_FreeType(ft_library);
+
+    var ft_face: ft.FT_Face = null;
+
+    const srccodepro = std.fs.cwd().readFileAlloc(
+        gpa.allocator(),
+        "/usr/share/fonts/adobe-source-code-pro/SourceCodePro-Regular.otf",
+        500 * 1024, // 500 KiB
+    ) catch |err| switch (err) {
+        error.FileNotFound => {
+            log.err("could not load Source Code Pro font into memory: FileNotFound", .{});
+            return err;
+        },
+        else => return err,
+    };
+    defer gpa.allocator().free(srccodepro);
+
+    if (ft.FT_New_Memory_Face(
+        ft_library,
+        srccodepro.ptr,
+        @intCast(srccodepro.len),
+        0,
+        &ft_face,
+    ) != 0) {
+        log.err("failed to create FT_Face from srccodepro", .{});
+        return error.FaceCreateError;
+    }
+    defer _ = ft.FT_Done_Face(ft_face);
+
+    _ = ft.FT_Select_Charmap(ft_face, ft.FT_ENCODING_UNICODE);
 
     const window = c.SDL_CreateWindow(
         "zentura",
@@ -41,6 +132,11 @@ pub fn main() !void {
     defer vkrenderer.deinit();
 
     var should_close: bool = false;
+    var text_buffer = TextBuffer.init(gpa.allocator());
+    defer text_buffer.deinit();
+
+    var cursor_x: u64 = 0;
+    var cursor_y: u64 = 0;
 
     while (!should_close) {
         var event: c.SDL_Event = undefined;
@@ -57,9 +153,35 @@ pub fn main() !void {
                     },
                     else => {},
                 },
+                c.SDL_KEYDOWN => {
+                    const kev = event.key;
+                    if (kev.keysym.sym == c.SDLK_KP_ENTER) {
+                        try text_buffer.insert(cursor_x, cursor_y, &[1]u8{'\n'});
+                        cursor_x = 0;
+                        cursor_y += 1;
+                    }
+                    // if (kev.keysym.sym == c.SDLK_KP_BACKSPACE) {
+                    //     _ = text_buffer.popOrNull();
+                    // }
+                },
+                c.SDL_TEXTINPUT => {
+                    if (std.unicode.utf8ByteSequenceLength(event.text.text[0])) |len| {
+                        try text_buffer.insert(cursor_x, cursor_y, event.text.text[0..len]);
+                    } else |_| {
+                        const len = std.mem.sliceTo(&event.text.text, 0).len;
+
+                        try text_buffer.insert(cursor_x, cursor_y, event.text.text[0..len]);
+                    }
+                },
                 else => {},
             }
         }
+        // var text_y: u32 = 10;
+        // var newline_it = std.mem.splitScalar(u8, text_buffer.items, '\n');
+        // while (newline_it.next()) |line| {
+        //     try vkrenderer.drawText(line, 30, text_y);
+        //     text_y += 10;
+        // }
         try vkrenderer.present();
     }
 }

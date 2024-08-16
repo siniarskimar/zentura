@@ -7,10 +7,13 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const vk_registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
-    const dep_vkzig = b.dependency("vulkan_zig", .{
+    const dep_freetype = b.dependency("freetype2", .{
         .optimize = .ReleaseSafe,
+        .enable_brotli = false,
     });
+    const lib_freetype = dep_freetype.artifact("freetype");
+    const vk_registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
+    const dep_vkzig = b.dependency("vulkan_zig", .{ .optimize = .ReleaseSafe });
     const vk_gen = dep_vkzig.artifact("vulkan-zig-generator");
     const run_vk_gen = b.addRunArtifact(vk_gen);
     run_vk_gen.addFileArg(vk_registry);
@@ -44,6 +47,7 @@ pub fn build(b: *std.Build) void {
     exe_zentura.root_module.addImport("shaders", shaders.getModule());
     exe_zentura.root_module.addImport("c", c_headers.createModule());
     exe_zentura.linkLibC();
+    exe_zentura.linkLibrary(lib_freetype);
     exe_zentura.linkSystemLibrary("sdl2");
     b.installArtifact(exe_zentura);
 
