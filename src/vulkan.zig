@@ -401,14 +401,13 @@ pub const Swapchain = struct {
         };
     }
 
+    /// Enqueue cmdbuf for the current frame and acquire the next swap-image
+    /// Asserts that the current frame has finished rendering
     pub fn present(self: *@This(), cmdbuf: vk.CommandBuffer) !enum { optimal, suboptimal } {
-
-        // Wait till current frame finished rendering
-        // This should not deadlock since present fences of swapchain images
-        // are initially in signaled state
-        const current = self.currentSwapImage();
-        try current.waitForPresent();
-        try self.context.dev.resetFences(1, @ptrCast(&current.present_fence));
+        const current_img = self.currentSwapImage();
+        if (try self.context.dev.getFenceStatus(current_img.render_fence) != .not_ready) {
+            std.debug.panic("assertion failed: current frame has not finished rendering", .{});
+        }
 
         // Sumbit the command buffer
         // This queues up the work for the next frame, but doesn't start it yet
@@ -419,22 +418,22 @@ pub const Swapchain = struct {
             &[_]vk.SubmitInfo{.{
                 .wait_semaphore_count = 1,
                 // Wait till the next image is acquired
-                .p_wait_semaphores = @ptrCast(&current.image_acquired),
+                .p_wait_semaphores = @ptrCast(&current_img.image_acquired),
                 .p_wait_dst_stage_mask = &wait_stage,
                 .command_buffer_count = 1,
                 .p_command_buffers = @ptrCast(&cmdbuf),
                 .signal_semaphore_count = 1,
                 // Signal that rendering finished on GPU
-                .p_signal_semaphores = @ptrCast(&current.render_finished),
+                .p_signal_semaphores = @ptrCast(&current_img.render_semaphore),
             }},
-            // Trip present_fence once work has completed
-            current.present_fence,
+            // Trip render_fence once work has completed
+            current_img.render_fence,
         );
 
-        // Present current frame
+        // Present current_img when rendering has finished
         _ = try self.context.dev.queuePresentKHR(self.context.present_queue.handle, &.{
             .wait_semaphore_count = 1,
-            .p_wait_semaphores = @ptrCast(&current.render_finished),
+            .p_wait_semaphores = @ptrCast(&current_img.render_semaphore),
             .swapchain_count = 1,
             .p_swapchains = @ptrCast(&self.handle),
             .p_image_indices = @ptrCast(&self.image_index),
@@ -448,11 +447,16 @@ pub const Swapchain = struct {
             // Since we don't know the index of the next image to be acquired
             // We have to reference a semaphore outside of self.swap_images
             self.next_image_acquired,
+            // Optional fence to signal
             .null_handle,
         );
 
-        // Make the next image as the current image
-        std.mem.swap(vk.Semaphore, &self.swap_images[result.image_index].image_acquired, &self.next_image_acquired);
+        // Make the next image as the present image
+        std.mem.swap(
+            vk.Semaphore,
+            &self.swap_images[result.image_index].image_acquired,
+            &self.next_image_acquired,
+        );
         self.image_index = result.image_index;
 
         return switch (result.result) {
@@ -475,7 +479,7 @@ pub const Swapchain = struct {
     }
 
     pub fn destroy(self: *@This(), allocator: std.mem.Allocator) void {
-        // HACK: If we fail to wait, just wait on the CPU and cross fingers the GPU
+        // If we fail to wait, just wait on the CPU and cross fingers the GPU
         // completed all jobs
         self.context.dev.deviceWaitIdle() catch |err| {
             log.warn("deviceWaitIdle failed: {s}", .{@errorName(err)});
@@ -518,6 +522,16 @@ pub const Swapchain = struct {
         }
     }
 
+    /// Tries to find V-sync enabled mode `mailbox_khr`, else fallback to `fifo_khr`.
+    ///
+    /// `mailbox_khr` maintains a single-entry queue. Whenever a new image is pushed
+    /// it gets replaced with new one.
+    ///
+    /// [p] - [1]
+    ///
+    /// `fifo_khr` maintains a mutiple-entry queue. Each entry is appened to the end of the queue
+    ///
+    /// [p] - [1] - [2] - ...
     fn findPresentationMode(
         allocator: std.mem.Allocator,
         instance: Instance,
@@ -533,6 +547,8 @@ pub const Swapchain = struct {
         return .fifo_khr;
     }
 
+    /// Tries to find RGB8 srgb surface format.
+    /// If the search fails, returns whatever the first format was reported
     fn findSurfaceFormat(
         allocator: std.mem.Allocator,
         instance: Instance,
@@ -552,19 +568,22 @@ pub const Swapchain = struct {
 
         return surface_formats[0];
     }
+
     const SwapImage = struct {
         context: *const RenderContext,
         handle: vk.Image,
         view: vk.ImageView,
 
+        /// Signaled whenever this SwapImage has been released by the OS
+        /// and is ready to be rendered to
         image_acquired: vk.Semaphore,
 
         /// Signaled whenever a framebuffer has finished rendering
         /// GPU-side only, CPU doesn't know the state of the semaphore
-        render_finished: vk.Semaphore,
+        render_semaphore: vk.Semaphore,
 
-        /// Signaled whevener a framebuffer is ready to be presented
-        present_fence: vk.Fence,
+        /// Same as render_semaphore but this fence the CPU is signaled
+        render_fence: vk.Fence,
 
         pub fn init(context: *const RenderContext, handle: vk.Image, format: vk.Format) !@This() {
             const view = try context.dev.createImageView(&vk.ImageViewCreateInfo{
@@ -981,27 +1000,16 @@ pub const Renderer = struct {
         };
 
         const rasterizer_info = vk.PipelineRasterizationStateCreateInfo{
-            //: PipelineRasterizationStateCreateFlags
             .flags = .{},
-            //: Bool32
             .depth_clamp_enable = vk.FALSE,
-            //: Bool32
             .rasterizer_discard_enable = vk.FALSE,
-            //: PolygonMode
             .polygon_mode = .fill,
-            //: CullModeFlags
             .cull_mode = .{ .back_bit = true },
-            //: FrontFace
             .front_face = .clockwise,
-            //: Bool32
             .depth_bias_enable = vk.FALSE,
-            //: f32
             .depth_bias_constant_factor = 0,
-            //: f32
             .depth_bias_clamp = 0,
-            //: f32
             .depth_bias_slope_factor = 0,
-            //: f32
             .line_width = 1,
         };
         const multisampling_info = vk.PipelineMultisampleStateCreateInfo{
