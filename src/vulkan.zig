@@ -532,17 +532,18 @@ pub const Swapchain = struct {
     /// `fifo_khr` maintains a mutiple-entry queue. Each entry is appened to the end of the queue
     ///
     /// [p] - [1] - [2] - ...
+    // TODO: When using mailbox_khr, manually limit frame rate to display's refresh rate
     fn findPresentationMode(
-        allocator: std.mem.Allocator,
-        instance: Instance,
-        context: *const RenderContext,
+        _: std.mem.Allocator,
+        _: Instance,
+        _: *const RenderContext,
     ) !vk.PresentModeKHR {
-        const modes = try instance.getPhysicalDeviceSurfacePresentModesAllocKHR(context.pdev, context.surface, allocator);
-        defer allocator.free(modes);
+        // const modes = try instance.getPhysicalDeviceSurfacePresentModesAllocKHR(context.pdev, context.surface, allocator);
+        // defer allocator.free(modes);
 
-        for (modes) |mode| {
-            if (mode == .mailbox_khr) return mode;
-        }
+        // for (modes) |mode| {
+        //     if (mode == .mailbox_khr) return mode;
+        // }
 
         return .fifo_khr;
     }
