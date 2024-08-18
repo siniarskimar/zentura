@@ -6,10 +6,7 @@ const vulkan = @import("./vulkan.zig");
 const shaders = @import("shaders");
 const c = @import("c");
 
-const ft = @cImport({
-    @cInclude("ft2build.h");
-    @cInclude("freetype/freetype.h");
-});
+const ft = vulkan.ft;
 
 const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
@@ -85,35 +82,6 @@ pub fn main() !void {
     }
     defer _ = ft.FT_Done_FreeType(ft_library);
 
-    var ft_face: ft.FT_Face = null;
-
-    const srccodepro = std.fs.cwd().readFileAlloc(
-        gpa.allocator(),
-        "/usr/share/fonts/adobe-source-code-pro/SourceCodePro-Regular.otf",
-        500 * 1024, // 500 KiB
-    ) catch |err| switch (err) {
-        error.FileNotFound => {
-            log.err("could not load Source Code Pro font into memory: FileNotFound", .{});
-            return err;
-        },
-        else => return err,
-    };
-    defer gpa.allocator().free(srccodepro);
-
-    if (ft.FT_New_Memory_Face(
-        ft_library,
-        srccodepro.ptr,
-        @intCast(srccodepro.len),
-        0,
-        &ft_face,
-    ) != 0) {
-        log.err("failed to create FT_Face from srccodepro", .{});
-        return error.FaceCreateError;
-    }
-    defer _ = ft.FT_Done_Face(ft_face);
-
-    _ = ft.FT_Select_Charmap(ft_face, ft.FT_ENCODING_UNICODE);
-
     const window = c.SDL_CreateWindow(
         "zentura",
         c.SDL_WINDOWPOS_UNDEFINED,
@@ -128,7 +96,7 @@ pub fn main() !void {
     }
     defer c.SDL_DestroyWindow(window);
 
-    var vkrenderer = try vulkan.Renderer.init(gpa.allocator(), window.?);
+    var vkrenderer = try vulkan.Renderer.init(gpa.allocator(), window.?, ft_library);
     defer vkrenderer.deinit();
 
     var should_close: bool = false;

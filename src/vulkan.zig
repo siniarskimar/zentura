@@ -5,6 +5,11 @@ const c = @import("c");
 pub const log = std.log.scoped(.vulkan);
 pub const vk = @import("vulkan");
 
+pub const ft = @cImport({
+    @cInclude("ft2build.h");
+    @cInclude("freetype/freetype.h");
+});
+
 /// Features for which to generate and load function pointers
 const apis: []const vk.ApiInfo = &.{
     .{
@@ -661,6 +666,8 @@ pub const Renderer = struct {
 
     should_resize: bool = false,
     frame_count: u64 = 0,
+    ft_library: ft.FT_Library,
+    ft_face: ft.FT_Face = null,
 
     const shaders = @import("shaders");
 
@@ -670,7 +677,7 @@ pub const Renderer = struct {
         surface: *vk.SurfaceKHR,
     ) c.SDL_bool;
 
-    pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
+    pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.FT_Library) !@This() {
         var ctx = try InstanceContext.init(allocator, window);
         errdefer ctx.deinit(allocator);
 
@@ -733,6 +740,7 @@ pub const Renderer = struct {
             .allocator = allocator,
             .ctx = ctx,
             .rctx = rctx,
+            .ft_library = ft_library,
             .swapchain = swapchain,
 
             .render_pass = render_pass,
