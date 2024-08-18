@@ -109,8 +109,8 @@ pub const RenderContext = struct {
     surface: vk.SurfaceKHR,
 
     pdev: vk.PhysicalDevice,
-    pdevprops: vk.PhysicalDeviceProperties,
-    pdevmemprops: vk.PhysicalDeviceMemoryProperties,
+    properties: vk.PhysicalDeviceProperties,
+    memproperties: vk.PhysicalDeviceMemoryProperties,
 
     dev: Device,
     graphics_queue: Queue,
@@ -123,7 +123,7 @@ pub const RenderContext = struct {
     ) !@This() {
         const device_candidate = try findDeviceCandidate(allocator, instance, surface);
         const pdev = device_candidate.pdev;
-        const pdevprops = device_candidate.props;
+        const props = device_candidate.props;
 
         const device = try initializeDeviceCandidate(&required_device_extensions, instance, device_candidate);
 
@@ -138,8 +138,8 @@ pub const RenderContext = struct {
             .instance = instance,
             .surface = surface,
             .pdev = pdev,
-            .pdevprops = pdevprops,
-            .pdevmemprops = instance.getPhysicalDeviceMemoryProperties(pdev),
+            .properties = props,
+            .memproperties = instance.getPhysicalDeviceMemoryProperties(pdev),
             .dev = dev,
 
             .graphics_queue = Queue.init(dev, device_candidate.queues.graphics_family, 0),
