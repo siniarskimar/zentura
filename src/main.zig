@@ -66,9 +66,6 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    if (builtin.os.tag == .linux) {
-        _ = c.SDL_SetHint(c.SDL_HINT_VIDEODRIVER, "wayland,x11");
-    }
     if (c.SDL_InitSubSystem(c.SDL_INIT_VIDEO) != 0) {
         log.err("failed to initialize SDL video: {s}", .{c.SDL_GetError()});
         return error.SDLInitFailed;
