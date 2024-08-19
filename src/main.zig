@@ -2,11 +2,11 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const log = std.log;
-const vulkan = @import("./vulkan.zig");
+const vk = @import("./vk.zig");
 const shaders = @import("shaders");
 const c = @import("c");
 
-const ft = vulkan.ft;
+const ft = vk.ft;
 
 const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
@@ -93,7 +93,7 @@ pub fn main() !void {
     }
     defer c.SDL_DestroyWindow(window);
 
-    var vkrenderer = try vulkan.Renderer.init(gpa.allocator(), window.?, ft_library);
+    var vkrenderer = try vk.Renderer.init(gpa.allocator(), window.?, ft_library);
     defer vkrenderer.deinit();
 
     var should_close: bool = false;

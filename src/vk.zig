@@ -5,6 +5,7 @@ const c = @import("c");
 pub const log = std.log.scoped(.vulkan);
 const zvk = @import("zig-vulkan");
 
+// TODO(ziglang/zig/#20630): move this to `src/c.h`
 pub const ft = @cImport({
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
