@@ -3,10 +3,11 @@ const builtin = @import("builtin");
 
 const log = std.log;
 const vk = @import("./vk.zig");
+const VkRenderer = @import("./VkRenderer.zig");
 const shaders = @import("shaders");
 const c = @import("c");
 
-const ft = vk.ft;
+const ft = VkRenderer.ft;
 
 const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
@@ -43,7 +44,7 @@ pub fn main() !void {
     }
     defer c.SDL_DestroyWindow(window);
 
-    var vkrenderer = try vk.Renderer.init(gpa.allocator(), window.?, ft_library);
+    var vkrenderer = try VkRenderer.init(gpa.allocator(), window.?, ft_library);
     defer vkrenderer.deinit();
 
     var should_close: bool = false;
