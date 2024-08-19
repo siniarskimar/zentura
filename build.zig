@@ -42,7 +42,7 @@ pub fn build(b: *std.Build) void {
     const vk_gen = dep_vkzig.artifact("vulkan-zig-generator");
     const run_vk_gen = b.addRunArtifact(vk_gen);
     run_vk_gen.addFileArg(vk_registry);
-    exe_zentura.root_module.addImport("vulkan", b.createModule(.{
+    exe_zentura.root_module.addImport("zig-vulkan", b.createModule(.{
         .root_source_file = run_vk_gen.addOutputFileArg("vk.zig"),
     }));
 

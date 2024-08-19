@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const c = @import("c");
 
 pub const log = std.log.scoped(.vulkan);
-pub const vk = @import("vulkan");
+const zvk = @import("zig-vulkan");
 
 pub const ft = @cImport({
     @cInclude("ft2build.h");
@@ -11,7 +11,7 @@ pub const ft = @cImport({
 });
 
 /// Features for which to generate and load function pointers
-const apis: []const vk.ApiInfo = &.{
+const apis: []const zvk.ApiInfo = &.{
     .{
         .base_commands = .{
             .createInstance = true,
@@ -20,44 +20,44 @@ const apis: []const vk.ApiInfo = &.{
             .createDevice = true,
         },
     },
-    vk.features.version_1_0,
-    vk.features.version_1_1,
-    vk.extensions.khr_surface,
-    vk.extensions.khr_swapchain,
+    zvk.features.version_1_0,
+    zvk.features.version_1_1,
+    zvk.extensions.khr_surface,
+    zvk.extensions.khr_swapchain,
 };
 
 pub const required_instance_extensions = [_][*:0]const u8{
-    vk.extensions.khr_surface.name,
+    zvk.extensions.khr_surface.name,
 };
 
 pub const required_device_extensions = [_][*:0]const u8{
-    vk.extensions.khr_swapchain.name,
+    zvk.extensions.khr_swapchain.name,
 };
 
-pub const BaseDispatch = vk.BaseWrapper(apis);
-pub const InstanceDispatch = vk.InstanceWrapper(apis);
-pub const DeviceDispatch = vk.DeviceWrapper(apis);
+pub const BaseDispatch = zvk.BaseWrapper(apis);
+pub const InstanceDispatch = zvk.InstanceWrapper(apis);
+pub const DeviceDispatch = zvk.DeviceWrapper(apis);
 
-pub const Instance = vk.InstanceProxy(apis);
-pub const Device = vk.DeviceProxy(apis);
+pub const Instance = zvk.InstanceProxy(apis);
+pub const Device = zvk.DeviceProxy(apis);
 
 pub const vkGetInstanceProcAddressFn = *const fn (
-    instance: vk.Instance,
+    instance: zvk.Instance,
     procname: [*:0]const u8,
-) callconv(.C) vk.PfnVoidFunction;
+) callconv(.C) zvk.PfnVoidFunction;
 
 pub const InstanceContext = struct {
     instance: Instance,
     base_dispatch: BaseDispatch,
 
-    const app_info: vk.ApplicationInfo = .{
+    const app_info: zvk.ApplicationInfo = .{
         .p_application_name = "zentura",
         .application_version = 0,
         .engine_version = 0,
-        .api_version = vk.API_VERSION_1_1,
+        .api_version = zvk.API_VERSION_1_1,
     };
 
-    pub const CommandBuffer = vk.CommandBufferProxy(apis);
+    pub const CommandBuffer = zvk.CommandBufferProxy(apis);
 
     pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
         const getInstanceProcAddress = @as(
@@ -84,7 +84,7 @@ pub const InstanceContext = struct {
         else
             [_][*:0]const u8{};
 
-        const instance = try base_dispatch.createInstance(&vk.InstanceCreateInfo{
+        const instance = try base_dispatch.createInstance(&zvk.InstanceCreateInfo{
             .p_application_info = &app_info,
             .enabled_extension_count = @intCast(sdl_exts.len),
             .pp_enabled_extension_names = @ptrCast(sdl_exts.ptr),
@@ -111,11 +111,11 @@ pub const InstanceContext = struct {
 
 pub const RenderContext = struct {
     instance: Instance,
-    surface: vk.SurfaceKHR,
+    surface: zvk.SurfaceKHR,
 
-    pdev: vk.PhysicalDevice,
-    properties: vk.PhysicalDeviceProperties,
-    memproperties: vk.PhysicalDeviceMemoryProperties,
+    pdev: zvk.PhysicalDevice,
+    properties: zvk.PhysicalDeviceProperties,
+    memproperties: zvk.PhysicalDeviceMemoryProperties,
 
     dev: Device,
     graphics_queue: Queue,
@@ -124,7 +124,7 @@ pub const RenderContext = struct {
     pub fn init(
         allocator: std.mem.Allocator,
         instance: Instance,
-        surface: vk.SurfaceKHR,
+        surface: zvk.SurfaceKHR,
     ) !@This() {
         const device_candidate = try findDeviceCandidate(allocator, instance, surface);
         const pdev = device_candidate.pdev;
@@ -160,7 +160,7 @@ pub const RenderContext = struct {
     }
 
     const Queue = struct {
-        handle: vk.Queue,
+        handle: zvk.Queue,
         family: u32,
 
         fn init(device: Device, family: u32, queue_index: u32) @This() {
@@ -177,12 +177,12 @@ pub const RenderContext = struct {
     };
 
     const DeviceCandidate = struct {
-        pdev: vk.PhysicalDevice,
-        props: vk.PhysicalDeviceProperties,
+        pdev: zvk.PhysicalDevice,
+        props: zvk.PhysicalDeviceProperties,
         queues: DeviceQueueFamilies,
     };
 
-    fn findDeviceCandidate(allocator: std.mem.Allocator, instance: Instance, surface: vk.SurfaceKHR) !DeviceCandidate {
+    fn findDeviceCandidate(allocator: std.mem.Allocator, instance: Instance, surface: zvk.SurfaceKHR) !DeviceCandidate {
         const physical_devices = try instance.enumeratePhysicalDevicesAlloc(allocator);
         defer allocator.free(physical_devices);
 
@@ -210,8 +210,8 @@ pub const RenderContext = struct {
     fn findRequiredQueues(
         allocator: std.mem.Allocator,
         instance: Instance,
-        dev: vk.PhysicalDevice,
-        surface: vk.SurfaceKHR,
+        dev: zvk.PhysicalDevice,
+        surface: zvk.SurfaceKHR,
     ) !DeviceQueueFamilies {
         const families = try instance.getPhysicalDeviceQueueFamilyPropertiesAlloc(dev, allocator);
         defer allocator.free(families);
@@ -225,7 +225,7 @@ pub const RenderContext = struct {
             if (graphics == null and fprops.queue_flags.graphics_bit) {
                 graphics = family;
             }
-            if (present == null and (try instance.getPhysicalDeviceSurfaceSupportKHR(dev, family, surface) == vk.TRUE)) {
+            if (present == null and (try instance.getPhysicalDeviceSurfaceSupportKHR(dev, family, surface) == zvk.TRUE)) {
                 present = family;
             }
             if (graphics != null and present != null) {
@@ -240,7 +240,7 @@ pub const RenderContext = struct {
     fn deviceSupportsRequiredExtensions(
         allocator: std.mem.Allocator,
         instance: Instance,
-        device: vk.PhysicalDevice,
+        device: zvk.PhysicalDevice,
     ) !bool {
         const ext_properties = try instance.enumerateDeviceExtensionPropertiesAlloc(device, null, allocator);
         defer allocator.free(ext_properties);
@@ -259,7 +259,7 @@ pub const RenderContext = struct {
         return true;
     }
 
-    fn deviceSupportsSurface(instance: Instance, device: vk.PhysicalDevice, surface: vk.SurfaceKHR) !bool {
+    fn deviceSupportsSurface(instance: Instance, device: zvk.PhysicalDevice, surface: zvk.SurfaceKHR) !bool {
         var format_count: u32 = undefined;
         var present_mode_count: u32 = undefined;
 
@@ -273,15 +273,15 @@ pub const RenderContext = struct {
         device_extensions: []const [*:0]const u8,
         instance: Instance,
         candidate: DeviceCandidate,
-    ) !vk.Device {
+    ) !zvk.Device {
         const priority = [_]f32{1};
 
-        return try instance.createDevice(candidate.pdev, &vk.DeviceCreateInfo{
+        return try instance.createDevice(candidate.pdev, &zvk.DeviceCreateInfo{
             .queue_create_info_count = if (candidate.queues.graphics_family == candidate.queues.present_family)
                 1
             else
                 2,
-            .p_queue_create_infos = &[_]vk.DeviceQueueCreateInfo{ .{
+            .p_queue_create_infos = &[_]zvk.DeviceQueueCreateInfo{ .{
                 .queue_family_index = candidate.queues.graphics_family,
                 .queue_count = 1,
                 .p_queue_priorities = &priority,
@@ -300,25 +300,25 @@ pub const Swapchain = struct {
     instance: Instance,
     context: *const RenderContext,
 
-    handle: vk.SwapchainKHR,
-    extent: vk.Extent2D,
-    surface_format: vk.SurfaceFormatKHR,
-    present_mode: vk.PresentModeKHR,
+    handle: zvk.SwapchainKHR,
+    extent: zvk.Extent2D,
+    surface_format: zvk.SurfaceFormatKHR,
+    present_mode: zvk.PresentModeKHR,
 
     swap_images: []SwapImage,
     image_index: u32,
-    next_image_acquired: vk.Semaphore,
+    next_image_acquired: zvk.Semaphore,
 
     pub fn create(
         allocator: std.mem.Allocator,
         instance: Instance,
         context: *const RenderContext,
-        extent: vk.Extent2D,
+        extent: zvk.Extent2D,
     ) !@This() {
         return try recycle(allocator, instance, context, extent, .null_handle);
     }
 
-    pub fn recreate(self: *@This(), allocator: std.mem.Allocator, extent: vk.Extent2D) !void {
+    pub fn recreate(self: *@This(), allocator: std.mem.Allocator, extent: zvk.Extent2D) !void {
         const instance = self.instance;
         const context = self.context;
 
@@ -331,8 +331,8 @@ pub const Swapchain = struct {
         allocator: std.mem.Allocator,
         instance: Instance,
         context: *const RenderContext,
-        extent: vk.Extent2D,
-        old_swapchain: vk.SwapchainKHR,
+        extent: zvk.Extent2D,
+        old_swapchain: zvk.SwapchainKHR,
     ) !@This() {
         const caps = try instance.getPhysicalDeviceSurfaceCapabilitiesKHR(context.pdev, context.surface);
         const actual_extent = findActualExtent(caps, extent);
@@ -347,7 +347,7 @@ pub const Swapchain = struct {
             image_count = caps.max_image_count;
         }
 
-        var create_info = vk.SwapchainCreateInfoKHR{
+        var create_info = zvk.SwapchainCreateInfoKHR{
             .surface = context.surface,
             .min_image_count = image_count,
             .image_format = surface_format.format,
@@ -358,7 +358,7 @@ pub const Swapchain = struct {
             .image_sharing_mode = .exclusive,
 
             .present_mode = presentation_mode,
-            .clipped = vk.TRUE,
+            .clipped = zvk.TRUE,
             .pre_transform = caps.current_transform,
             .composite_alpha = .{ .opaque_bit_khr = true },
 
@@ -391,7 +391,7 @@ pub const Swapchain = struct {
         const result = try context.dev.acquireNextImageKHR(swapchain, std.math.maxInt(u64), next_image_acquired, .null_handle);
         if (result.result != .success) return error.ImageAcquireFailed;
 
-        std.mem.swap(vk.Semaphore, &swap_images[result.image_index].image_acquired, &next_image_acquired);
+        std.mem.swap(zvk.Semaphore, &swap_images[result.image_index].image_acquired, &next_image_acquired);
 
         return .{
             .instance = instance,
@@ -408,7 +408,7 @@ pub const Swapchain = struct {
 
     /// Enqueue cmdbuf for the current frame and acquire the next swap-image
     /// Asserts that the current frame has finished rendering
-    pub fn present(self: *@This(), cmdbuf: vk.CommandBuffer) !enum { optimal, suboptimal } {
+    pub fn present(self: *@This(), cmdbuf: zvk.CommandBuffer) !enum { optimal, suboptimal } {
         const current_img = self.currentSwapImage();
         if (try self.context.dev.getFenceStatus(current_img.render_fence) != .not_ready) {
             std.debug.panic("assertion failed: current frame has not finished rendering", .{});
@@ -416,11 +416,11 @@ pub const Swapchain = struct {
 
         // Sumbit the command buffer
         // This queues up the work for the next frame, but doesn't start it yet
-        const wait_stage = [_]vk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
+        const wait_stage = [_]zvk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
         try self.context.dev.queueSubmit(
             self.context.graphics_queue.handle,
             1,
-            &[_]vk.SubmitInfo{.{
+            &[_]zvk.SubmitInfo{.{
                 .wait_semaphore_count = 1,
                 // Wait till the next image is acquired
                 .p_wait_semaphores = @ptrCast(&current_img.image_acquired),
@@ -458,7 +458,7 @@ pub const Swapchain = struct {
 
         // Make the next image as the present image
         std.mem.swap(
-            vk.Semaphore,
+            zvk.Semaphore,
             &self.swap_images[result.image_index].image_acquired,
             &self.next_image_acquired,
         );
@@ -497,8 +497,8 @@ pub const Swapchain = struct {
     fn initSwapchainImages(
         allocator: std.mem.Allocator,
         context: *const RenderContext,
-        swapchain: vk.SwapchainKHR,
-        format: vk.Format,
+        swapchain: zvk.SwapchainKHR,
+        format: zvk.Format,
     ) ![]SwapImage {
         const images = try context.dev.getSwapchainImagesAllocKHR(swapchain, allocator);
         defer allocator.free(images);
@@ -516,7 +516,7 @@ pub const Swapchain = struct {
         return swap_images;
     }
 
-    fn findActualExtent(caps: vk.SurfaceCapabilitiesKHR, extent: vk.Extent2D) vk.Extent2D {
+    fn findActualExtent(caps: zvk.SurfaceCapabilitiesKHR, extent: zvk.Extent2D) zvk.Extent2D {
         if (caps.current_extent.width != std.math.maxInt(u32)) {
             return caps.current_extent;
         } else {
@@ -542,7 +542,7 @@ pub const Swapchain = struct {
         _: std.mem.Allocator,
         _: Instance,
         _: *const RenderContext,
-    ) !vk.PresentModeKHR {
+    ) !zvk.PresentModeKHR {
         // const modes = try instance.getPhysicalDeviceSurfacePresentModesAllocKHR(context.pdev, context.surface, allocator);
         // defer allocator.free(modes);
 
@@ -559,11 +559,11 @@ pub const Swapchain = struct {
         allocator: std.mem.Allocator,
         instance: Instance,
         context: *const RenderContext,
-    ) !vk.SurfaceFormatKHR {
+    ) !zvk.SurfaceFormatKHR {
         const surface_formats = try instance.getPhysicalDeviceSurfaceFormatsAllocKHR(context.pdev, context.surface, allocator);
         defer allocator.free(surface_formats);
 
-        const preffered = vk.SurfaceFormatKHR{
+        const preffered = zvk.SurfaceFormatKHR{
             .format = .r8g8b8_srgb,
             .color_space = .srgb_nonlinear_khr,
         };
@@ -577,22 +577,22 @@ pub const Swapchain = struct {
 
     const SwapImage = struct {
         context: *const RenderContext,
-        handle: vk.Image,
-        view: vk.ImageView,
+        handle: zvk.Image,
+        view: zvk.ImageView,
 
         /// Signaled whenever this SwapImage has been released by the OS
         /// and is ready to be rendered to
-        image_acquired: vk.Semaphore,
+        image_acquired: zvk.Semaphore,
 
         /// Signaled whenever a framebuffer has finished rendering
         /// GPU-side only, CPU doesn't know the state of the semaphore
-        render_semaphore: vk.Semaphore,
+        render_semaphore: zvk.Semaphore,
 
         /// Same as render_semaphore but this fence the CPU is signaled
-        render_fence: vk.Fence,
+        render_fence: zvk.Fence,
 
-        pub fn init(context: *const RenderContext, handle: vk.Image, format: vk.Format) !@This() {
-            const view = try context.dev.createImageView(&vk.ImageViewCreateInfo{
+        pub fn init(context: *const RenderContext, handle: zvk.Image, format: zvk.Format) !@This() {
+            const view = try context.dev.createImageView(&zvk.ImageViewCreateInfo{
                 .image = handle,
                 .view_type = .@"2d",
                 .format = format,
@@ -638,7 +638,7 @@ pub const Swapchain = struct {
             _ = self.context.dev.waitForFences(
                 1,
                 &.{self.render_fence},
-                vk.TRUE,
+                zvk.TRUE,
                 std.time.ns_per_ms * 500,
             ) catch {};
             self.context.dev.destroyImageView(self.view, null);
@@ -657,12 +657,12 @@ pub const Renderer = struct {
     rctx: *RenderContext,
     swapchain: Swapchain,
 
-    render_pass: vk.RenderPass,
-    pipeline_layout: vk.PipelineLayout,
-    pipeline: vk.Pipeline,
-    cmdpool: vk.CommandPool,
-    framebuffers: []vk.Framebuffer,
-    cmdbufs: []vk.CommandBuffer,
+    render_pass: zvk.RenderPass,
+    pipeline_layout: zvk.PipelineLayout,
+    pipeline: zvk.Pipeline,
+    cmdpool: zvk.CommandPool,
+    framebuffers: []zvk.Framebuffer,
+    cmdbufs: []zvk.CommandBuffer,
 
     should_resize: bool = false,
     frame_count: u64 = 0,
@@ -673,15 +673,15 @@ pub const Renderer = struct {
 
     extern fn SDL_Vulkan_CreateSurface(
         window: *c.SDL_Window,
-        instance: vk.Instance,
-        surface: *vk.SurfaceKHR,
+        instance: zvk.Instance,
+        surface: *zvk.SurfaceKHR,
     ) c.SDL_bool;
 
     pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.FT_Library) !@This() {
         var ctx = try InstanceContext.init(allocator, window);
         errdefer ctx.deinit(allocator);
 
-        var surface: vk.SurfaceKHR = .null_handle;
+        var surface: zvk.SurfaceKHR = .null_handle;
         if (SDL_Vulkan_CreateSurface(window, ctx.instance.handle, &surface) == c.SDL_FALSE) {
             log.err("failed to create Vulkan surface: {s}", .{c.SDL_GetError()});
             return error.CreateSurfaceFailed;
@@ -709,14 +709,14 @@ pub const Renderer = struct {
         const render_pass = try createRenderPass(rctx.dev, swapchain);
         errdefer rctx.dev.destroyRenderPass(render_pass, null);
 
-        const layout = try rctx.dev.createPipelineLayout(&vk.PipelineLayoutCreateInfo{}, null);
+        const layout = try rctx.dev.createPipelineLayout(&zvk.PipelineLayoutCreateInfo{}, null);
         errdefer rctx.dev.destroyPipelineLayout(layout, null);
 
         const pipeline = try createVulkanPipeline(rctx.dev, layout, render_pass);
         errdefer rctx.dev.destroyPipeline(pipeline, null);
 
         const cmdpool = try rctx.dev.createCommandPool(
-            &vk.CommandPoolCreateInfo{
+            &zvk.CommandPoolCreateInfo{
                 .queue_family_index = rctx.graphics_queue.family,
                 .flags = .{ .reset_command_buffer_bit = true },
             },
@@ -778,17 +778,17 @@ pub const Renderer = struct {
         switch (try dev.waitForFences(
             1,
             &.{self.swapchain.currentSwapImage().render_fence},
-            vk.TRUE,
+            zvk.TRUE,
             std.time.ns_per_s,
         )) {
-            vk.Result.success => {},
-            vk.Result.timeout => return error.Timeout,
+            zvk.Result.success => {},
+            zvk.Result.timeout => return error.Timeout,
             else => return error.Unknown,
         }
         try dev.resetFences(1, &.{self.swapchain.currentSwapImage().render_fence});
         try dev.resetCommandBuffer(cmdbuf, .{});
 
-        const clear = vk.ClearValue{ .color = .{
+        const clear = zvk.ClearValue{ .color = .{
             .float_32 = .{
                 0,
                 @abs(std.math.sin(@as(f32, @floatFromInt(self.frame_count)) / 120.0)),
@@ -796,7 +796,7 @@ pub const Renderer = struct {
                 1,
             },
         } };
-        const viewport = vk.Viewport{
+        const viewport = zvk.Viewport{
             .x = 0,
             .y = 0,
             .width = @floatFromInt(self.swapchain.extent.width),
@@ -804,11 +804,11 @@ pub const Renderer = struct {
             .min_depth = 0,
             .max_depth = 1,
         };
-        const scissor = vk.Rect2D{
+        const scissor = zvk.Rect2D{
             .offset = .{ .x = 0, .y = 0 },
             .extent = self.swapchain.extent,
         };
-        try dev.beginCommandBuffer(cmdbuf, &vk.CommandBufferBeginInfo{
+        try dev.beginCommandBuffer(cmdbuf, &zvk.CommandBufferBeginInfo{
             .flags = .{ .one_time_submit_bit = true },
         });
         dev.cmdPipelineBarrier(
@@ -821,8 +821,8 @@ pub const Renderer = struct {
             0,
             null,
             1,
-            &[_]vk.ImageMemoryBarrier{
-                vk.ImageMemoryBarrier{
+            &[_]zvk.ImageMemoryBarrier{
+                zvk.ImageMemoryBarrier{
                     .image = self.swapchain.swap_images[self.swapchain.image_index].handle,
                     .src_access_mask = .{ .memory_write_bit = true },
                     .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
@@ -830,12 +830,12 @@ pub const Renderer = struct {
                     .new_layout = .color_attachment_optimal,
                     .src_queue_family_index = self.rctx.graphics_queue.family,
                     .dst_queue_family_index = self.rctx.graphics_queue.family,
-                    .subresource_range = vk.ImageSubresourceRange{
+                    .subresource_range = zvk.ImageSubresourceRange{
                         .aspect_mask = .{ .color_bit = true },
                         .base_mip_level = 0,
-                        .level_count = vk.REMAINING_MIP_LEVELS,
+                        .level_count = zvk.REMAINING_MIP_LEVELS,
                         .base_array_layer = 0,
-                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                        .layer_count = zvk.REMAINING_ARRAY_LAYERS,
                     },
                 },
             },
@@ -844,7 +844,7 @@ pub const Renderer = struct {
         dev.cmdSetViewport(cmdbuf, 0, 1, @ptrCast(&viewport));
         dev.cmdSetScissor(cmdbuf, 0, 1, @ptrCast(&scissor));
 
-        const render_area = vk.Rect2D{
+        const render_area = zvk.Rect2D{
             .offset = .{ .x = 0, .y = 0 },
             .extent = extent,
         };
@@ -871,8 +871,8 @@ pub const Renderer = struct {
             0,
             null,
             1,
-            &[_]vk.ImageMemoryBarrier{
-                vk.ImageMemoryBarrier{
+            &[_]zvk.ImageMemoryBarrier{
+                zvk.ImageMemoryBarrier{
                     .image = self.swapchain.swap_images[self.swapchain.image_index].handle,
                     .src_access_mask = .{ .memory_write_bit = true },
                     .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
@@ -880,12 +880,12 @@ pub const Renderer = struct {
                     .new_layout = .present_src_khr,
                     .src_queue_family_index = self.rctx.graphics_queue.family,
                     .dst_queue_family_index = self.rctx.graphics_queue.family,
-                    .subresource_range = vk.ImageSubresourceRange{
+                    .subresource_range = zvk.ImageSubresourceRange{
                         .aspect_mask = .{ .color_bit = true },
                         .base_mip_level = 0,
-                        .level_count = vk.REMAINING_MIP_LEVELS,
+                        .level_count = zvk.REMAINING_MIP_LEVELS,
                         .base_array_layer = 0,
-                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                        .layer_count = zvk.REMAINING_ARRAY_LAYERS,
                     },
                 },
             },
@@ -930,14 +930,14 @@ pub const Renderer = struct {
     fn destroyCommandBuffers(
         allocator: std.mem.Allocator,
         dev: Device,
-        cmdpool: vk.CommandPool,
-        cmdbufs: []vk.CommandBuffer,
+        cmdpool: zvk.CommandPool,
+        cmdbufs: []zvk.CommandBuffer,
     ) void {
         dev.freeCommandBuffers(cmdpool, @intCast(cmdbufs.len), cmdbufs.ptr);
         allocator.free(cmdbufs);
     }
 
-    fn destroyFramebuffers(allocator: std.mem.Allocator, dev: Device, framebuffers: []vk.Framebuffer) void {
+    fn destroyFramebuffers(allocator: std.mem.Allocator, dev: Device, framebuffers: []zvk.Framebuffer) void {
         for (framebuffers) |fb| dev.destroyFramebuffer(fb, null);
         allocator.free(framebuffers);
     }
@@ -945,10 +945,10 @@ pub const Renderer = struct {
     fn allocateCommandBuffers(
         allocator: std.mem.Allocator,
         dev: Device,
-        cmdpool: vk.CommandPool,
-        framebuffers: []vk.Framebuffer,
-    ) ![]vk.CommandBuffer {
-        const cmdbufs = try allocator.alloc(vk.CommandBuffer, framebuffers.len);
+        cmdpool: zvk.CommandPool,
+        framebuffers: []zvk.Framebuffer,
+    ) ![]zvk.CommandBuffer {
+        const cmdbufs = try allocator.alloc(zvk.CommandBuffer, framebuffers.len);
         errdefer allocator.free(cmdbufs);
 
         try dev.allocateCommandBuffers(&.{
@@ -963,17 +963,17 @@ pub const Renderer = struct {
     fn createFramebuffers(
         allocator: std.mem.Allocator,
         dev: Device,
-        render_pass: vk.RenderPass,
+        render_pass: zvk.RenderPass,
         swapchain: Swapchain,
-    ) ![]vk.Framebuffer {
-        var framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
+    ) ![]zvk.Framebuffer {
+        var framebuffers = try allocator.alloc(zvk.Framebuffer, swapchain.swap_images.len);
         errdefer allocator.free(framebuffers);
 
         var idx: usize = 0;
         errdefer for (framebuffers[0..idx]) |fb| dev.destroyFramebuffer(fb, null);
 
         while (idx < framebuffers.len) {
-            framebuffers[idx] = try dev.createFramebuffer(&vk.FramebufferCreateInfo{
+            framebuffers[idx] = try dev.createFramebuffer(&zvk.FramebufferCreateInfo{
                 .render_pass = render_pass,
                 .attachment_count = 1,
                 .p_attachments = @ptrCast(&swapchain.swap_images[idx].view),
@@ -987,8 +987,8 @@ pub const Renderer = struct {
         return framebuffers;
     }
 
-    fn createRenderPass(dev: Device, swapchain: Swapchain) !vk.RenderPass {
-        const color_attachment = vk.AttachmentDescription{
+    fn createRenderPass(dev: Device, swapchain: Swapchain) !zvk.RenderPass {
+        const color_attachment = zvk.AttachmentDescription{
             .format = swapchain.surface_format.format,
             .samples = .{ .@"1_bit" = true },
             .load_op = .clear,
@@ -999,18 +999,18 @@ pub const Renderer = struct {
             .final_layout = .color_attachment_optimal,
         };
 
-        const color_attachment_ref = vk.AttachmentReference{
+        const color_attachment_ref = zvk.AttachmentReference{
             .attachment = 0,
             .layout = .color_attachment_optimal,
         };
 
-        const subpass = vk.SubpassDescription{
+        const subpass = zvk.SubpassDescription{
             .pipeline_bind_point = .graphics,
             .color_attachment_count = 1,
             .p_color_attachments = @ptrCast(&color_attachment_ref),
         };
 
-        return try dev.createRenderPass(&vk.RenderPassCreateInfo{
+        return try dev.createRenderPass(&zvk.RenderPassCreateInfo{
             .attachment_count = 1,
             .p_attachments = @ptrCast(&color_attachment),
             .subpass_count = 1,
@@ -1020,22 +1020,22 @@ pub const Renderer = struct {
 
     fn createVulkanPipeline(
         dev: Device,
-        layout: vk.PipelineLayout,
-        render_pass: vk.RenderPass,
-    ) !vk.Pipeline {
-        const vert_module = try dev.createShaderModule(&vk.ShaderModuleCreateInfo{
+        layout: zvk.PipelineLayout,
+        render_pass: zvk.RenderPass,
+    ) !zvk.Pipeline {
+        const vert_module = try dev.createShaderModule(&zvk.ShaderModuleCreateInfo{
             .code_size = shaders.triangle_vert.len,
             .p_code = @ptrCast(&shaders.triangle_vert),
         }, null);
         defer dev.destroyShaderModule(vert_module, null);
 
-        const frag_module = try dev.createShaderModule(&vk.ShaderModuleCreateInfo{
+        const frag_module = try dev.createShaderModule(&zvk.ShaderModuleCreateInfo{
             .code_size = shaders.triangle_frag.len,
             .p_code = @ptrCast(&shaders.triangle_frag),
         }, null);
         defer dev.destroyShaderModule(frag_module, null);
 
-        const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
+        const shader_stages = [_]zvk.PipelineShaderStageCreateInfo{
             .{
                 .module = vert_module,
                 .p_name = "main",
@@ -1048,52 +1048,52 @@ pub const Renderer = struct {
             },
         };
 
-        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
+        const vertex_input_info = zvk.PipelineVertexInputStateCreateInfo{
             .vertex_binding_description_count = 0,
             .vertex_attribute_description_count = 0,
         };
 
-        const input_assembly_info = vk.PipelineInputAssemblyStateCreateInfo{
+        const input_assembly_info = zvk.PipelineInputAssemblyStateCreateInfo{
             .topology = .triangle_list,
-            .primitive_restart_enable = vk.FALSE,
+            .primitive_restart_enable = zvk.FALSE,
         };
 
-        const dynamic_state = [_]vk.DynamicState{ .viewport, .scissor };
-        const dynamic_state_info = vk.PipelineDynamicStateCreateInfo{
+        const dynamic_state = [_]zvk.DynamicState{ .viewport, .scissor };
+        const dynamic_state_info = zvk.PipelineDynamicStateCreateInfo{
             .dynamic_state_count = dynamic_state.len,
             .p_dynamic_states = &dynamic_state,
         };
 
-        const viewport_state = vk.PipelineViewportStateCreateInfo{
+        const viewport_state = zvk.PipelineViewportStateCreateInfo{
             .viewport_count = 1,
             .p_viewports = undefined,
             .scissor_count = 1,
             .p_scissors = undefined,
         };
 
-        const rasterizer_info = vk.PipelineRasterizationStateCreateInfo{
+        const rasterizer_info = zvk.PipelineRasterizationStateCreateInfo{
             .flags = .{},
-            .depth_clamp_enable = vk.FALSE,
-            .rasterizer_discard_enable = vk.FALSE,
+            .depth_clamp_enable = zvk.FALSE,
+            .rasterizer_discard_enable = zvk.FALSE,
             .polygon_mode = .fill,
             .cull_mode = .{ .back_bit = true },
             .front_face = .clockwise,
-            .depth_bias_enable = vk.FALSE,
+            .depth_bias_enable = zvk.FALSE,
             .depth_bias_constant_factor = 0,
             .depth_bias_clamp = 0,
             .depth_bias_slope_factor = 0,
             .line_width = 1,
         };
-        const multisampling_info = vk.PipelineMultisampleStateCreateInfo{
+        const multisampling_info = zvk.PipelineMultisampleStateCreateInfo{
             .rasterization_samples = .{ .@"1_bit" = true },
             .min_sample_shading = 1,
-            .alpha_to_coverage_enable = vk.FALSE,
-            .alpha_to_one_enable = vk.FALSE,
-            .sample_shading_enable = vk.FALSE,
+            .alpha_to_coverage_enable = zvk.FALSE,
+            .alpha_to_one_enable = zvk.FALSE,
+            .sample_shading_enable = zvk.FALSE,
         };
 
-        const colorblending_attach_info = vk.PipelineColorBlendAttachmentState{
-            .blend_enable = vk.FALSE,
+        const colorblending_attach_info = zvk.PipelineColorBlendAttachmentState{
+            .blend_enable = zvk.FALSE,
             .src_color_blend_factor = .one,
             .dst_color_blend_factor = .zero,
             .color_blend_op = .add,
@@ -1103,15 +1103,15 @@ pub const Renderer = struct {
             .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = false },
         };
 
-        const colorblending_info = vk.PipelineColorBlendStateCreateInfo{
-            .logic_op_enable = vk.FALSE,
+        const colorblending_info = zvk.PipelineColorBlendStateCreateInfo{
+            .logic_op_enable = zvk.FALSE,
             .logic_op = .copy,
             .attachment_count = 1,
             .p_attachments = @ptrCast(&colorblending_attach_info),
             .blend_constants = .{ 0, 0, 0, 0 },
         };
 
-        const pipeline_info = vk.GraphicsPipelineCreateInfo{
+        const pipeline_info = zvk.GraphicsPipelineCreateInfo{
             .stage_count = 2,
             .p_stages = &shader_stages,
             .p_vertex_input_state = &vertex_input_info,
@@ -1130,7 +1130,7 @@ pub const Renderer = struct {
             .base_pipeline_index = -1,
         };
 
-        var pipeline: vk.Pipeline = .null_handle;
+        var pipeline: zvk.Pipeline = .null_handle;
         _ = try dev.createGraphicsPipelines(
             .null_handle,
             1,
