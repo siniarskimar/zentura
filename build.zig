@@ -7,20 +7,27 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const dep_freetype = b.dependency("freetype2", .{
-        .optimize = .ReleaseSafe,
-        .enable_brotli = false,
+    const exe_zentura = b.addExecutable(.{
+        .name = "zentura",
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
     });
-    const lib_freetype = dep_freetype.artifact("freetype");
-    const vk_registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
-    const dep_vkzig = b.dependency("vulkan_zig", .{ .optimize = .ReleaseSafe });
-    const vk_gen = dep_vkzig.artifact("vulkan-zig-generator");
-    const run_vk_gen = b.addRunArtifact(vk_gen);
-    run_vk_gen.addFileArg(vk_registry);
 
-    const mod_vulkan = b.createModule(.{
-        .root_source_file = run_vk_gen.addOutputFileArg("vk.zig"),
-    });
+    exe_zentura.linkLibC();
+    if (b.systemIntegrationOption("freetype2", .{})) {
+        exe_zentura.linkSystemLibrary("freetype2");
+    } else {
+        const dep_freetype = b.dependency("freetype2", .{
+            .optimize = .ReleaseSafe,
+            .enable_brotli = false,
+        });
+        const lib_freetype = dep_freetype.artifact("freetype");
+        exe_zentura.linkLibrary(lib_freetype);
+    }
+    exe_zentura.linkSystemLibrary("sdl2");
+    exe_zentura.linkSystemLibrary("fontconfig");
+    b.installArtifact(exe_zentura);
 
     const c_headers = b.addTranslateC(.{
         .root_source_file = b.path("./src/c.h"),
@@ -28,6 +35,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+    exe_zentura.root_module.addImport("c", c_headers.createModule());
+
+    const vk_registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
+    const dep_vkzig = b.dependency("vulkan_zig", .{ .optimize = .ReleaseSafe });
+    const vk_gen = dep_vkzig.artifact("vulkan-zig-generator");
+    const run_vk_gen = b.addRunArtifact(vk_gen);
+    run_vk_gen.addFileArg(vk_registry);
+    exe_zentura.root_module.addImport("vulkan", b.createModule(.{
+        .root_source_file = run_vk_gen.addOutputFileArg("vk.zig"),
+    }));
 
     const shaders = vulkan_zig.ShaderCompileStep.create(
         b,
@@ -36,21 +53,7 @@ pub fn build(b: *std.Build) void {
     );
     shaders.add("triangle_vert", "src/shader/triangle.vert", .{});
     shaders.add("triangle_frag", "src/shader/triangle.frag", .{});
-
-    const exe_zentura = b.addExecutable(.{
-        .name = "zentura",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    exe_zentura.root_module.addImport("vulkan", mod_vulkan);
     exe_zentura.root_module.addImport("shaders", shaders.getModule());
-    exe_zentura.root_module.addImport("c", c_headers.createModule());
-    exe_zentura.linkLibC();
-    exe_zentura.linkLibrary(lib_freetype);
-    exe_zentura.linkSystemLibrary("sdl2");
-    exe_zentura.linkSystemLibrary("fontconfig");
-    b.installArtifact(exe_zentura);
 
     const run_zentura = b.addRunArtifact(exe_zentura);
     if (b.args) |args| {
