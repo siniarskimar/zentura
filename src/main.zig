@@ -12,56 +12,6 @@ const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
 };
 
-const TextBuffer = struct {
-    allocator: std.mem.Allocator,
-    buffer: std.ArrayListUnmanaged(u8) = .{},
-    lines: std.ArrayListUnmanaged([]const u8) = .{},
-
-    pub fn init(allocator: std.mem.Allocator) @This() {
-        return .{ .allocator = allocator };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.buffer.deinit(self.allocator);
-        self.lines.deinit(self.allocator);
-    }
-
-    pub fn computeLines(self: *@This()) !void {
-        self.lines.clearRetainingCapacity();
-        var start: usize = 0;
-        for (self.buffer.items, 0..) |ch, idx| {
-            if (ch != '\n') continue;
-            try self.lines.append(self.allocator, self.buffer.items[start..idx]);
-            start = idx + 1;
-        }
-        if (start != self.buffer.items.len) {
-            try self.lines.append(self.allocator, self.buffer.items[start..]);
-        }
-    }
-
-    pub fn getLineIndex(self: *const @This(), x: u64, y: u64) usize {
-        if (self.lines.items.len == 0) {
-            return 0;
-        }
-        const line = if (self.lines.items.len <= y)
-            self.lines.getLast()
-        else
-            self.lines.items[y];
-
-        const line_idx = @intFromPtr(self.buffer.items.ptr) - @intFromPtr(line.ptr);
-        return line_idx + @min(x, line.len - 1);
-    }
-
-    pub fn insert(self: *@This(), x: u64, y: u64, slice: []const u8) !void {
-        if (self.lines.items.len < y) {
-            try self.buffer.appendSlice(self.allocator, slice);
-        } else {
-            try self.buffer.insertSlice(self.allocator, self.getLineIndex(x, y), slice);
-        }
-        try self.computeLines();
-    }
-};
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -97,11 +47,8 @@ pub fn main() !void {
     defer vkrenderer.deinit();
 
     var should_close: bool = false;
-    var text_buffer = TextBuffer.init(gpa.allocator());
+    var text_buffer = std.ArrayList(u8).init(gpa.allocator());
     defer text_buffer.deinit();
-
-    var cursor_x: u64 = 0;
-    var cursor_y: u64 = 0;
 
     while (!should_close) {
         var event: c.SDL_Event = undefined;
@@ -121,32 +68,21 @@ pub fn main() !void {
                 c.SDL_KEYDOWN => {
                     const kev = event.key;
                     if (kev.keysym.sym == c.SDLK_KP_ENTER) {
-                        try text_buffer.insert(cursor_x, cursor_y, &[1]u8{'\n'});
-                        cursor_x = 0;
-                        cursor_y += 1;
+                        try text_buffer.appendSlice("\\n");
                     }
-                    // if (kev.keysym.sym == c.SDLK_KP_BACKSPACE) {
-                    //     _ = text_buffer.popOrNull();
-                    // }
                 },
                 c.SDL_TEXTINPUT => {
                     if (std.unicode.utf8ByteSequenceLength(event.text.text[0])) |len| {
-                        try text_buffer.insert(cursor_x, cursor_y, event.text.text[0..len]);
+                        try text_buffer.appendSlice(event.text.text[0..len]);
                     } else |_| {
                         const len = std.mem.sliceTo(&event.text.text, 0).len;
 
-                        try text_buffer.insert(cursor_x, cursor_y, event.text.text[0..len]);
+                        try text_buffer.appendSlice(event.text.text[0..len]);
                     }
                 },
                 else => {},
             }
         }
-        // var text_y: u32 = 10;
-        // var newline_it = std.mem.splitScalar(u8, text_buffer.items, '\n');
-        // while (newline_it.next()) |line| {
-        //     try vkrenderer.drawText(line, 30, text_y);
-        //     text_y += 10;
-        // }
         try vkrenderer.present();
     }
 }
