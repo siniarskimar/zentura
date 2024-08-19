@@ -808,7 +808,38 @@ pub const Renderer = struct {
             .offset = .{ .x = 0, .y = 0 },
             .extent = self.swapchain.extent,
         };
-        try dev.beginCommandBuffer(cmdbuf, &.{});
+        try dev.beginCommandBuffer(cmdbuf, &vk.CommandBufferBeginInfo{
+            .flags = .{ .one_time_submit_bit = true },
+        });
+        dev.cmdPipelineBarrier(
+            cmdbuf,
+            .{ .all_graphics_bit = true },
+            .{ .all_graphics_bit = true },
+            .{ .by_region_bit = true },
+            0,
+            null,
+            0,
+            null,
+            1,
+            &[_]vk.ImageMemoryBarrier{
+                vk.ImageMemoryBarrier{
+                    .image = self.swapchain.swap_images[self.swapchain.image_index].handle,
+                    .src_access_mask = .{ .memory_write_bit = true },
+                    .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+                    .old_layout = .undefined,
+                    .new_layout = .color_attachment_optimal,
+                    .src_queue_family_index = self.rctx.graphics_queue.family,
+                    .dst_queue_family_index = self.rctx.graphics_queue.family,
+                    .subresource_range = vk.ImageSubresourceRange{
+                        .aspect_mask = .{ .color_bit = true },
+                        .base_mip_level = 0,
+                        .level_count = vk.REMAINING_MIP_LEVELS,
+                        .base_array_layer = 0,
+                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                    },
+                },
+            },
+        );
 
         dev.cmdSetViewport(cmdbuf, 0, 1, @ptrCast(&viewport));
         dev.cmdSetScissor(cmdbuf, 0, 1, @ptrCast(&scissor));
@@ -829,6 +860,36 @@ pub const Renderer = struct {
         dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
         dev.cmdDraw(cmdbuf, 3, 1, 0, 0);
         dev.cmdEndRenderPass(cmdbuf);
+
+        dev.cmdPipelineBarrier(
+            cmdbuf,
+            .{ .all_graphics_bit = true },
+            .{ .all_graphics_bit = true },
+            .{ .by_region_bit = true },
+            0,
+            null,
+            0,
+            null,
+            1,
+            &[_]vk.ImageMemoryBarrier{
+                vk.ImageMemoryBarrier{
+                    .image = self.swapchain.swap_images[self.swapchain.image_index].handle,
+                    .src_access_mask = .{ .memory_write_bit = true },
+                    .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+                    .old_layout = .color_attachment_optimal,
+                    .new_layout = .present_src_khr,
+                    .src_queue_family_index = self.rctx.graphics_queue.family,
+                    .dst_queue_family_index = self.rctx.graphics_queue.family,
+                    .subresource_range = vk.ImageSubresourceRange{
+                        .aspect_mask = .{ .color_bit = true },
+                        .base_mip_level = 0,
+                        .level_count = vk.REMAINING_MIP_LEVELS,
+                        .base_array_layer = 0,
+                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                    },
+                },
+            },
+        );
         try dev.endCommandBuffer(cmdbuf);
 
         const result = self.swapchain.present(cmdbuf) catch |err| switch (err) {
@@ -934,8 +995,8 @@ pub const Renderer = struct {
             .store_op = .store,
             .stencil_load_op = .dont_care,
             .stencil_store_op = .dont_care,
-            .initial_layout = .undefined,
-            .final_layout = .present_src_khr,
+            .initial_layout = .color_attachment_optimal,
+            .final_layout = .color_attachment_optimal,
         };
 
         const color_attachment_ref = vk.AttachmentReference{
