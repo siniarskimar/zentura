@@ -67,7 +67,7 @@ pub fn main() !void {
                 },
                 c.SDL_KEYDOWN => {
                     const kev = event.key;
-                    if (kev.keysym.sym == c.SDLK_KP_ENTER) {
+                    if (kev.keysym.sym == c.SDLK_RETURN or kev.keysym.sym == c.SDLK_KP_ENTER) {
                         try text_buffer.appendSlice("\\n");
                     }
                 },
