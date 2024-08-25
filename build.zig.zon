@@ -20,5 +20,9 @@
             .url = "https://github.com/Snektron/vulkan-zig/archive/66b7b773bb61e2102025f2d5ff0ae8c5f53e19cc.tar.gz",
             .hash = "12208958f173b8b81bfac797955f0416ab38b21d1f69d4ebf6c7ca460a828a41cd45",
         },
+        .vulkan_memory_allocator = .{
+            .url = "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/archive/b8e57472fffa3bd6e0a0b675f4615bf0a823ec4d.tar.gz",
+            .hash = "1220b3f4a825fd2ab6453279a845129daffbf5b01dc06314558256a0c3f228e4de3d",
+        },
     },
 }

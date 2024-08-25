@@ -8,10 +8,16 @@ const Device = vk.Device;
 const log = vk.log;
 
 const c = @import("c");
+
+// ---
 // TODO(ziglang/zig/#20630): move this to `src/c.h`
 pub const ft = @cImport({
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
+});
+
+const vma = @cImport({
+    @cInclude("vk_mem_alloc.h");
 });
 
 window: *c.SDL_Window,
@@ -20,6 +26,7 @@ allocator: std.mem.Allocator,
 ctx: InstanceContext,
 rctx: *RenderContext,
 swapchain: Swapchain,
+vma_allocator: vma.VmaAllocator,
 
 render_pass: zvk.RenderPass,
 pipeline_layout: zvk.PipelineLayout,
@@ -57,6 +64,30 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
 
     rctx.* = try RenderContext.init(allocator, ctx.instance, surface);
     errdefer rctx.deinit(allocator);
+
+    const vma_allocator = blk: {
+        const func_pointers: vma.VmaVulkanFunctions = .{
+            .vkGetInstanceProcAddr = @ptrCast(ctx.base_dispatch.dispatch.vkGetInstanceProcAddr),
+            .vkGetDeviceProcAddr = @ptrCast(ctx.instance.wrapper.dispatch.vkGetDeviceProcAddr),
+        };
+
+        const create_info: vma.VmaAllocatorCreateInfo = .{
+            .vulkanApiVersion = vma.VK_API_VERSION_1_1,
+            .physicalDevice = @ptrFromInt(@intFromEnum(rctx.pdev)),
+            .device = @ptrFromInt(@intFromEnum(rctx.dev.handle)),
+            .instance = @ptrFromInt(@intFromEnum(ctx.instance.handle)),
+            .pVulkanFunctions = &func_pointers,
+        };
+
+        var alloc: vma.VmaAllocator = undefined;
+        const result: zvk.Result = @enumFromInt(vma.vmaCreateAllocator(&create_info, &alloc));
+        if (result != .success) {
+            log.err("failed to create vulkan memory allocator", .{});
+            return error.InitVulkanMemoryAllocator;
+        }
+        break :blk alloc;
+    };
+    errdefer vma.vmaDestroyAllocator(vma_allocator);
 
     var window_width: c_int = undefined;
     var window_height: c_int = undefined;
@@ -106,6 +137,7 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
         .rctx = rctx,
         .ft_library = ft_library,
         .swapchain = swapchain,
+        .vma_allocator = vma_allocator,
 
         .render_pass = render_pass,
         .pipeline_layout = layout,
@@ -129,6 +161,7 @@ pub fn deinit(self: *@This()) void {
     self.rctx.dev.destroyRenderPass(self.render_pass, null);
 
     self.swapchain.destroy(allocator);
+    vma.vmaDestroyAllocator(self.vma_allocator);
     self.rctx.deinit(allocator);
     allocator.destroy(self.rctx);
     self.ctx.deinit(allocator);

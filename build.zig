@@ -38,6 +38,7 @@ pub fn build(b: *std.Build) void {
     exe_zentura.root_module.addImport("c", c_headers.createModule());
 
     const vk_registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
+
     const dep_vkzig = b.dependency("vulkan_zig", .{ .optimize = .ReleaseSafe });
     const vk_gen = dep_vkzig.artifact("vulkan-zig-generator");
     const run_vk_gen = b.addRunArtifact(vk_gen);
@@ -45,6 +46,13 @@ pub fn build(b: *std.Build) void {
     exe_zentura.root_module.addImport("zig-vulkan", b.createModule(.{
         .root_source_file = run_vk_gen.addOutputFileArg("vk.zig"),
     }));
+
+    const vk_vma = b.dependency("vulkan_memory_allocator", .{});
+    exe_zentura.addIncludePath(vk_vma.path("include"));
+    exe_zentura.addCSourceFile(.{
+        .file = b.path("src/vma.cpp"),
+    });
+    exe_zentura.linkLibCpp();
 
     const shaders = vulkan_zig.ShaderCompileStep.create(
         b,
