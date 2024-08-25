@@ -577,7 +577,7 @@ pub const Swapchain = struct {
         old_swapchain: zvk.SwapchainKHR,
     ) !@This() {
         const caps = try instance.getPhysicalDeviceSurfaceCapabilitiesKHR(context.pdev, context.surface);
-        const actual_extent = findActualExtent(caps, extent);
+        const actual_extent = clampExtentToSurfaceCaps(caps, extent);
 
         if (actual_extent.width == 0 or actual_extent.height == 0) return error.InvalidSurfaceDimentions;
 
@@ -758,7 +758,7 @@ pub const Swapchain = struct {
         return swap_images;
     }
 
-    fn findActualExtent(caps: zvk.SurfaceCapabilitiesKHR, extent: zvk.Extent2D) zvk.Extent2D {
+    fn clampExtentToSurfaceCaps(caps: zvk.SurfaceCapabilitiesKHR, extent: zvk.Extent2D) zvk.Extent2D {
         if (caps.current_extent.width != std.math.maxInt(u32)) {
             return caps.current_extent;
         } else {
