@@ -34,13 +34,59 @@ pipeline: zvk.Pipeline,
 cmdpool: zvk.CommandPool,
 framebuffers: []zvk.Framebuffer,
 cmdbufs: []zvk.CommandBuffer,
+frames: []FrameData,
+current_frame: usize = 0,
 
 should_resize: bool = false,
-frame_count: u64 = 0,
 ft_library: ft.FT_Library,
 ft_face: ft.FT_Face = null,
 
 const shaders = @import("shaders");
+const MAX_FRAMES_IN_FLIGHT: usize = 3;
+
+const FrameData = struct {
+    cmdpool: zvk.CommandPool,
+    cmdbuf: zvk.CommandBuffer,
+    image_acquired_semaphore: zvk.Semaphore,
+    render_semaphore: zvk.Semaphore,
+    render_fence: zvk.Fence,
+
+    fn init(dev: Device, cmdpool: zvk.CommandPool) !@This() {
+        var cmdbuf: zvk.CommandBuffer = .null_handle;
+        try dev.allocateCommandBuffers(&zvk.CommandBufferAllocateInfo{
+            .command_pool = cmdpool,
+            .command_buffer_count = 1,
+            .level = .primary,
+        }, @ptrCast(&cmdbuf));
+        errdefer dev.freeCommandBuffers(cmdpool, 1, @ptrCast(&cmdbuf));
+
+        const image_acquired = try dev.createSemaphore(&.{}, null);
+        errdefer dev.destroySemaphore(image_acquired, null);
+
+        const render_semaphore = try dev.createSemaphore(&.{}, null);
+        errdefer dev.destroySemaphore(render_semaphore, null);
+
+        const render_fence = try dev.createFence(&zvk.FenceCreateInfo{
+            .flags = .{ .signaled_bit = true },
+        }, null);
+        errdefer dev.destroyFence(render_fence, null);
+
+        return .{
+            .cmdpool = cmdpool,
+            .cmdbuf = cmdbuf,
+            .image_acquired_semaphore = image_acquired,
+            .render_semaphore = render_semaphore,
+            .render_fence = render_fence,
+        };
+    }
+
+    fn deinit(self: *@This(), dev: Device) void {
+        dev.freeCommandBuffers(self.cmdpool, 1, @ptrCast(&self.cmdbuf));
+        dev.destroySemaphore(self.image_acquired_semaphore, null);
+        dev.destroySemaphore(self.render_semaphore, null);
+        dev.destroyFence(self.render_fence, null);
+    }
+};
 
 extern fn SDL_Vulkan_CreateSurface(
     window: *c.SDL_Window,
@@ -130,6 +176,17 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
     );
     errdefer destroyCommandBuffers(allocator, rctx.dev, cmdpool, cmdbufs);
 
+    const frames = try allocator.alloc(FrameData, MAX_FRAMES_IN_FLIGHT);
+    errdefer allocator.free(frames);
+    {
+        var idx: usize = 0;
+        errdefer for (0..idx) |k| frames[k].deinit(rctx.dev);
+
+        while (idx < frames.len) : (idx += 1) {
+            frames[idx] = try FrameData.init(rctx.dev, cmdpool);
+        }
+    }
+
     return .{
         .window = window,
         .allocator = allocator,
@@ -145,6 +202,8 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
         .cmdpool = cmdpool,
         .cmdbufs = cmdbufs,
         .framebuffers = framebuffers,
+
+        .frames = frames,
     };
 }
 
@@ -152,6 +211,10 @@ pub fn deinit(self: *@This()) void {
     const allocator = self.allocator;
     self.rctx.dev.deviceWaitIdle() catch std.time.sleep(std.time.ns_per_ms * 20);
 
+    for (self.frames) |*frame| {
+        frame.deinit(self.rctx.dev);
+    }
+    self.allocator.free(self.frames);
     destroyFramebuffers(allocator, self.rctx.dev, self.framebuffers);
     destroyCommandBuffers(allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
     self.rctx.dev.destroyCommandPool(self.cmdpool, null);
@@ -170,11 +233,11 @@ pub fn deinit(self: *@This()) void {
 pub fn present(self: *@This()) !void {
     const dev = self.rctx.dev;
     const extent = self.swapchain.extent;
-    const cmdbuf = self.cmdbufs[self.swapchain.image_index];
-    const framebuffer = self.framebuffers[self.swapchain.image_index];
+    const frame = self.frames[self.current_frame];
+
     switch (try dev.waitForFences(
         1,
-        &.{self.swapchain.currentSwapImage().render_fence},
+        &.{frame.render_fence},
         zvk.TRUE,
         std.time.ns_per_s,
     )) {
@@ -182,16 +245,30 @@ pub fn present(self: *@This()) !void {
         zvk.Result.timeout => return error.Timeout,
         else => return error.Unknown,
     }
-    try dev.resetFences(1, &.{self.swapchain.currentSwapImage().render_fence});
+    const cmdbuf = frame.cmdbuf;
+    try dev.resetFences(1, &.{frame.render_fence});
     try dev.resetCommandBuffer(cmdbuf, .{});
 
-    const clear = zvk.ClearValue{ .color = .{
-        .float_32 = .{
-            0,
-            @abs(std.math.sin(@as(f32, @floatFromInt(self.frame_count)) / 120.0)),
-            0,
-            1,
+    const acquired = dev.acquireNextImageKHR(
+        self.swapchain.handle,
+        std.math.maxInt(u64),
+        frame.image_acquired_semaphore,
+        .null_handle,
+    ) catch |err| switch (err) {
+        error.OutOfDateKHR => {
+            try self.doResize();
+            return;
         },
+        else => return err,
+    };
+    if (acquired.result != .success and acquired.result != .suboptimal_khr) {
+        std.debug.panic("failed to acquire next image for rendering: {}", .{acquired.result});
+    }
+
+    const framebuffer = self.framebuffers[acquired.image_index];
+
+    const clear = zvk.ClearValue{ .color = .{
+        .float_32 = .{ 0, 1, 0, 1 },
     } };
     const viewport = zvk.Viewport{
         .x = 0,
@@ -220,7 +297,7 @@ pub fn present(self: *@This()) !void {
         1,
         &[_]zvk.ImageMemoryBarrier{
             zvk.ImageMemoryBarrier{
-                .image = self.swapchain.swap_images[self.swapchain.image_index].handle,
+                .image = self.swapchain.swap_images[acquired.image_index].handle,
                 .src_access_mask = .{ .memory_write_bit = true },
                 .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
                 .old_layout = .undefined,
@@ -270,7 +347,7 @@ pub fn present(self: *@This()) !void {
         1,
         &[_]zvk.ImageMemoryBarrier{
             zvk.ImageMemoryBarrier{
-                .image = self.swapchain.swap_images[self.swapchain.image_index].handle,
+                .image = self.swapchain.swap_images[acquired.image_index].handle,
                 .src_access_mask = .{ .memory_write_bit = true },
                 .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
                 .old_layout = .color_attachment_optimal,
@@ -289,39 +366,53 @@ pub fn present(self: *@This()) !void {
     );
     try dev.endCommandBuffer(cmdbuf);
 
-    const result = self.swapchain.present(cmdbuf) catch |err| switch (err) {
-        error.OutOfDateKHR => .suboptimal,
-        else => return err,
-    };
-    self.frame_count += 1;
+    try self.rctx.dev.queueSubmit(
+        self.rctx.graphics_queue.handle,
+        1,
+        @ptrCast(&zvk.SubmitInfo{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = @ptrCast(&frame.image_acquired_semaphore),
+            .p_wait_dst_stage_mask = @ptrCast(&zvk.PipelineStageFlags{ .top_of_pipe_bit = true }),
 
-    if (result == .suboptimal or self.should_resize) {
-        self.should_resize = false;
-        var window_width: c_int = undefined;
-        var window_height: c_int = undefined;
-        c.SDL_Vulkan_GetDrawableSize(self.window, &window_width, &window_height);
+            .command_buffer_count = 1,
+            .p_command_buffers = @ptrCast(&frame.cmdbuf),
 
-        try self.swapchain.recreate(
-            self.allocator,
-            .{ .width = @intCast(window_width), .height = @intCast(window_height) },
-        );
+            .signal_semaphore_count = 1,
+            .p_signal_semaphores = @ptrCast(&frame.render_semaphore),
+        }),
+        frame.render_fence,
+    );
 
-        destroyFramebuffers(self.allocator, self.rctx.dev, self.framebuffers);
-        self.framebuffers = try createFramebuffers(
-            self.allocator,
-            self.rctx.dev,
-            self.render_pass,
-            self.swapchain,
-        );
+    _ = try self.rctx.dev.queuePresentKHR(self.rctx.present_queue.handle, &.{
+        .wait_semaphore_count = 1,
+        .p_wait_semaphores = @ptrCast(&frame.render_semaphore),
+        .swapchain_count = 1,
+        .p_swapchains = @ptrCast(&self.swapchain.handle),
+        .p_image_indices = @ptrCast(&acquired.image_index),
+    });
 
-        destroyCommandBuffers(self.allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
-        self.cmdbufs = try allocateCommandBuffers(
-            self.allocator,
-            self.rctx.dev,
-            self.cmdpool,
-            self.framebuffers,
-        );
-    }
+    self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+    if (acquired.result == .suboptimal_khr or self.should_resize) try self.doResize();
+}
+
+fn doResize(self: *@This()) !void {
+    self.should_resize = false;
+    var window_width: c_int = undefined;
+    var window_height: c_int = undefined;
+    c.SDL_Vulkan_GetDrawableSize(self.window, &window_width, &window_height);
+
+    try self.swapchain.recreate(
+        self.allocator,
+        .{ .width = @intCast(window_width), .height = @intCast(window_height) },
+    );
+
+    destroyFramebuffers(self.allocator, self.rctx.dev, self.framebuffers);
+    self.framebuffers = try createFramebuffers(
+        self.allocator,
+        self.rctx.dev,
+        self.render_pass,
+        self.swapchain,
+    );
 }
 
 fn destroyCommandBuffers(
@@ -548,8 +639,6 @@ pub const Swapchain = struct {
     present_mode: zvk.PresentModeKHR,
 
     swap_images: []SwapImage,
-    image_index: u32,
-    next_image_acquired: zvk.Semaphore,
 
     pub fn create(
         allocator: std.mem.Allocator,
@@ -627,14 +716,6 @@ pub const Swapchain = struct {
             allocator.free(swap_images);
         }
 
-        var next_image_acquired = try context.dev.createSemaphore(&.{}, null);
-        errdefer context.dev.destroySemaphore(next_image_acquired, null);
-
-        const result = try context.dev.acquireNextImageKHR(swapchain, std.math.maxInt(u64), next_image_acquired, .null_handle);
-        if (result.result != .success) return error.ImageAcquireFailed;
-
-        std.mem.swap(zvk.Semaphore, &swap_images[result.image_index].image_acquired, &next_image_acquired);
-
         return .{
             .instance = instance,
             .context = context,
@@ -643,78 +724,7 @@ pub const Swapchain = struct {
             .surface_format = surface_format,
             .present_mode = presentation_mode,
             .swap_images = swap_images,
-            .next_image_acquired = next_image_acquired,
-            .image_index = result.image_index,
         };
-    }
-
-    /// Enqueue cmdbuf for the current frame and acquire the next swap-image
-    /// Asserts that the current frame has finished rendering
-    pub fn present(self: *@This(), cmdbuf: zvk.CommandBuffer) !enum { optimal, suboptimal } {
-        const current_img = self.currentSwapImage();
-        if (try self.context.dev.getFenceStatus(current_img.render_fence) != .not_ready) {
-            std.debug.panic("assertion failed: current frame has not finished rendering", .{});
-        }
-
-        // Sumbit the command buffer
-        // This queues up the work for the next frame, but doesn't start it yet
-        const wait_stage = [_]zvk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
-        try self.context.dev.queueSubmit(
-            self.context.graphics_queue.handle,
-            1,
-            &[_]zvk.SubmitInfo{.{
-                .wait_semaphore_count = 1,
-                // Wait till the next image is acquired
-                .p_wait_semaphores = @ptrCast(&current_img.image_acquired),
-                .p_wait_dst_stage_mask = &wait_stage,
-                .command_buffer_count = 1,
-                .p_command_buffers = @ptrCast(&cmdbuf),
-                .signal_semaphore_count = 1,
-                // Signal that rendering finished on GPU
-                .p_signal_semaphores = @ptrCast(&current_img.render_semaphore),
-            }},
-            // Trip render_fence once work has completed
-            current_img.render_fence,
-        );
-
-        // Present current_img when rendering has finished
-        _ = try self.context.dev.queuePresentKHR(self.context.present_queue.handle, &.{
-            .wait_semaphore_count = 1,
-            .p_wait_semaphores = @ptrCast(&current_img.render_semaphore),
-            .swapchain_count = 1,
-            .p_swapchains = @ptrCast(&self.handle),
-            .p_image_indices = @ptrCast(&self.image_index),
-        });
-
-        // Acquire next image
-        // This will start the rendering of the next image
-        const result = try self.context.dev.acquireNextImageKHR(
-            self.handle,
-            std.math.maxInt(u64),
-            // Since we don't know the index of the next image to be acquired
-            // We have to reference a semaphore outside of self.swap_images
-            self.next_image_acquired,
-            // Optional fence to signal
-            .null_handle,
-        );
-
-        // Make the next image as the present image
-        std.mem.swap(
-            zvk.Semaphore,
-            &self.swap_images[result.image_index].image_acquired,
-            &self.next_image_acquired,
-        );
-        self.image_index = result.image_index;
-
-        return switch (result.result) {
-            .success => .optimal,
-            .suboptimal_khr => .suboptimal,
-            else => unreachable,
-        };
-    }
-
-    pub fn currentSwapImage(self: *const @This()) *const SwapImage {
-        return &self.swap_images[self.image_index];
     }
 
     pub fn destroyWithoutHandle(self: *@This(), allocator: std.mem.Allocator) void {
@@ -722,7 +732,6 @@ pub const Swapchain = struct {
             swapimage.deinit();
         }
         allocator.free(self.swap_images);
-        self.context.dev.destroySemaphore(self.next_image_acquired, null);
     }
 
     pub fn destroy(self: *@This(), allocator: std.mem.Allocator) void {
@@ -822,17 +831,6 @@ pub const Swapchain = struct {
         handle: zvk.Image,
         view: zvk.ImageView,
 
-        /// Signaled whenever this SwapImage has been released by the OS
-        /// and is ready to be rendered to
-        image_acquired: zvk.Semaphore,
-
-        /// Signaled whenever a framebuffer has finished rendering
-        /// GPU-side only, CPU doesn't know the state of the semaphore
-        render_semaphore: zvk.Semaphore,
-
-        /// Same as render_semaphore but this fence the CPU is signaled
-        render_fence: zvk.Fence,
-
         pub fn init(context: *const RenderContext, handle: zvk.Image, format: zvk.Format) !@This() {
             const view = try context.dev.createImageView(&zvk.ImageViewCreateInfo{
                 .image = handle,
@@ -854,39 +852,15 @@ pub const Swapchain = struct {
             }, null);
             errdefer context.dev.destroyImageView(view, null);
 
-            const image_acquired = try context.dev.createSemaphore(&.{}, null);
-            errdefer context.dev.destroySemaphore(image_acquired, null);
-
-            const render_semaphore = try context.dev.createSemaphore(&.{}, null);
-            errdefer context.dev.destroySemaphore(render_semaphore, null);
-
-            const render_fence = try context.dev.createFence(&.{
-                // create it in signaled state so present() doesn't deadlock
-                .flags = .{ .signaled_bit = true },
-            }, null);
-            errdefer context.dev.destroyFence(render_fence, null);
-
             return .{
                 .context = context,
                 .handle = handle,
                 .view = view,
-                .image_acquired = image_acquired,
-                .render_semaphore = render_semaphore,
-                .render_fence = render_fence,
             };
         }
 
         pub fn deinit(self: *@This()) void {
-            _ = self.context.dev.waitForFences(
-                1,
-                &.{self.render_fence},
-                zvk.TRUE,
-                std.time.ns_per_ms * 500,
-            ) catch {};
             self.context.dev.destroyImageView(self.view, null);
-            self.context.dev.destroySemaphore(self.image_acquired, null);
-            self.context.dev.destroySemaphore(self.render_semaphore, null);
-            self.context.dev.destroyFence(self.render_fence, null);
         }
     };
 };
