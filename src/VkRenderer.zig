@@ -46,6 +46,35 @@ ft_face: ft.FT_Face = null,
 const shaders = @import("shaders");
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
+const RectVert = extern struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+
+    const binding_description = zvk.VertexInputBindingDescription{
+        .binding = 0,
+        .stride = @sizeOf(RectVert),
+        .input_rate = .vertex,
+    };
+    const attribute_descriptions = [_]zvk.VertexInputAttributeDescription{
+        .{
+            .binding = 0,
+            .location = 0,
+            .format = zvk.Format.r32g32b32_sfloat,
+            .offset = @offsetOf(RectVert, "x"),
+        },
+        .{
+            .binding = 0,
+            .location = 1,
+            .format = zvk.Format.r32g32b32_sfloat,
+            .offset = @offsetOf(RectVert, "r"),
+        },
+    };
+};
+
 const FrameData = struct {
     cmdpool: zvk.CommandPool,
     cmdbuf: zvk.CommandBuffer,
@@ -106,7 +135,7 @@ const FrameData = struct {
             vma_alloc,
             zvk.BufferCreateInfo{
                 .size = 200 * @sizeOf(u32),
-                .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
+                .usage = .{ .transfer_dst_bit = true, .index_buffer_bit = true },
                 .sharing_mode = .exclusive,
             },
             .{
@@ -355,7 +384,7 @@ pub fn present(self: *@This()) !void {
         .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 0, .b = 1 },
         .{ .x = -1, .y = -1, .z = 0, .r = 1, .g = 1, .b = 0 },
     };
-    const indicies = [_]u32{ 0, 1, 3, 1, 2, 3 };
+    const indicies = [_]u32{ 0, 1, 2, 2, 3, 0 };
 
     const framebuffer = self.framebuffers[acquired.image_index];
 
@@ -383,7 +412,11 @@ pub fn present(self: *@This()) !void {
         const vert_buffer: [*]RectVert = @ptrCast(@alignCast(buffer));
         @memcpy(vert_buffer, &verticies);
 
-        const ibo_address: usize = std.mem.alignForward(usize, buffer_address, @alignOf(u32));
+        const ibo_address: usize = std.mem.alignForward(
+            usize,
+            buffer_address + @sizeOf(RectVert) * verticies.len,
+            @alignOf(u32),
+        );
         const ibo_buffer: [*]u32 = @ptrFromInt(ibo_address);
         @memcpy(ibo_buffer, &indicies);
 
@@ -401,6 +434,7 @@ pub fn present(self: *@This()) !void {
         std.debug.panic("the staging buffer is unmapped", .{});
     }
     try dev.endCommandBuffer(frame.transfer_cmdbuf);
+
     try dev.beginCommandBuffer(cmdbuf, &zvk.CommandBufferBeginInfo{
         .flags = .{ .one_time_submit_bit = true },
     });
@@ -451,7 +485,10 @@ pub fn present(self: *@This()) !void {
     }, .@"inline");
 
     dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
-    dev.cmdDraw(cmdbuf, 3, 1, 0, 0);
+    dev.cmdBindVertexBuffers(cmdbuf, 0, 1, &.{frame.gpu_vbo}, &.{0});
+    dev.cmdBindIndexBuffer(cmdbuf, frame.gpu_ibo, 0, .uint32);
+    dev.cmdDrawIndexed(cmdbuf, 4, 2, 0, 0, 0);
+    // dev.cmdDraw(cmdbuf, 3, 1, 0, 0);
     dev.cmdEndRenderPass(cmdbuf);
 
     dev.cmdPipelineBarrier(
@@ -667,8 +704,10 @@ fn createVulkanPipeline(
     };
 
     const vertex_input_info = zvk.PipelineVertexInputStateCreateInfo{
-        .vertex_binding_description_count = 0,
-        .vertex_attribute_description_count = 0,
+        .vertex_binding_description_count = 1,
+        .p_vertex_binding_descriptions = @ptrCast(&RectVert.binding_description),
+        .vertex_attribute_description_count = 2,
+        .p_vertex_attribute_descriptions = &RectVert.attribute_descriptions,
     };
 
     const input_assembly_info = zvk.PipelineInputAssemblyStateCreateInfo{
