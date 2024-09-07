@@ -1,6 +1,7 @@
 const std = @import("std");
 const zvk = @import("zig-vulkan");
 const vk = @import("./vk.zig");
+const vma = @import("./vma.zig");
 const InstanceContext = vk.InstanceContext;
 const RenderContext = vk.RenderContext;
 const Instance = vk.Instance;
@@ -16,17 +17,13 @@ pub const ft = @cImport({
     @cInclude("freetype/freetype.h");
 });
 
-const vma = @cImport({
-    @cInclude("vk_mem_alloc.h");
-});
-
 window: *c.SDL_Window,
 allocator: std.mem.Allocator,
 
 ctx: InstanceContext,
 rctx: *RenderContext,
 swapchain: Swapchain,
-vma_allocator: vma.VmaAllocator,
+vma_allocator: vma.Allocator,
 
 render_pass: zvk.RenderPass,
 pipeline_layout: zvk.PipelineLayout,
@@ -38,8 +35,8 @@ frames: []FrameData,
 current_frame: usize = 0,
 
 staging_buffer: zvk.Buffer,
-staging_buffer_memalloc: vma.VmaAllocation,
-staging_buffer_info: vma.VmaAllocationInfo,
+staging_buffer_memalloc: vma.Allocation,
+staging_buffer_info: vma.AllocationInfo,
 staging_buffer_offset: usize = 0,
 
 should_resize: bool = false,
@@ -57,11 +54,11 @@ const FrameData = struct {
     render_fence: zvk.Fence,
 
     gpu_vbo: zvk.Buffer,
-    gpu_vbo_memalloc: vma.VmaAllocation,
+    gpu_vbo_memalloc: vma.Allocation,
 
     transfer_cmdbuf: zvk.CommandBuffer,
 
-    fn init(dev: Device, cmdpool: zvk.CommandPool, vma_alloc: vma.VmaAllocator) !@This() {
+    fn init(dev: Device, cmdpool: zvk.CommandPool, vma_alloc: vma.Allocator) !@This() {
         var cmdbufs = [1]zvk.CommandBuffer{.null_handle} ** 2;
         try dev.allocateCommandBuffers(&zvk.CommandBufferAllocateInfo{
             .command_pool = cmdpool,
@@ -81,35 +78,24 @@ const FrameData = struct {
         }, null);
         errdefer dev.destroyFence(render_fence, null);
 
-        var gpu_vbo: zvk.Buffer = .null_handle;
-        var gpu_vbo_memalloc: vma.VmaAllocation = undefined;
-        {
-            const result = try std.meta.intToEnum(
-                zvk.Result,
-                vma.vmaCreateBuffer(
-                    vma_alloc,
-                    &@as(vma.VkBufferCreateInfo, @bitCast(zvk.BufferCreateInfo{
-                        // 8 KiB
-                        .size = 8 * 1024,
-                        .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
-                        .sharing_mode = .exclusive,
-                    })),
-                    &vma.VmaAllocationCreateInfo{
-                        .flags = 0,
-                        // Prefer for this buffer to be allocated on GPU
-                        .preferredFlags = @bitCast(zvk.MemoryPropertyFlags{ .device_local_bit = true }),
-                        .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
-                    },
-                    @ptrCast(&gpu_vbo),
-                    @ptrCast(&gpu_vbo_memalloc),
-                    null,
-                ),
-            );
-            if (result != .success) {
-                log.err("failed to allocate a GPU vertex buffer: {}", .{result});
-                try vmaError(result);
-            }
-        }
+        var gpu_vbo_memalloc: vma.Allocation = undefined;
+        const gpu_vbo = try vma.createBuffer(
+            vma_alloc,
+            zvk.BufferCreateInfo{
+                // 8 KiB
+                .size = 8 * 1024,
+                .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
+                .sharing_mode = .exclusive,
+            },
+            .{
+                .flags = .{},
+                // Prefer for this buffer to be allocated on GPU
+                .preferred_flags = @bitCast(zvk.MemoryPropertyFlags{ .device_local_bit = true }),
+                .usage = .gpu_only,
+            },
+            &gpu_vbo_memalloc,
+            null,
+        );
 
         return FrameData{
             .cmdpool = cmdpool,
@@ -124,25 +110,14 @@ const FrameData = struct {
         };
     }
 
-    fn deinit(self: *@This(), dev: Device, vma_alloc: vma.VmaAllocator) void {
-        vma.vmaDestroyBuffer(vma_alloc, @ptrFromInt(@intFromEnum(self.gpu_vbo)), self.gpu_vbo_memalloc);
+    fn deinit(self: *@This(), dev: Device, vma_alloc: vma.Allocator) void {
+        vma.destroyBuffer(vma_alloc, self.gpu_vbo, self.gpu_vbo_memalloc);
         dev.freeCommandBuffers(self.cmdpool, 2, &[2]zvk.CommandBuffer{ self.cmdbuf, self.transfer_cmdbuf });
         dev.destroySemaphore(self.image_acquired_semaphore, null);
         dev.destroySemaphore(self.render_semaphore, null);
         dev.destroyFence(self.render_fence, null);
     }
 };
-
-fn vmaError(result: zvk.Result) !void {
-    if (result == .success) return;
-    switch (result) {
-        zvk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
-        zvk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
-        zvk.Result.error_device_lost => return error.DeviceLost,
-        zvk.Result.error_too_many_objects => return error.TooManyObjects,
-        else => return error.Unknown,
-    }
-}
 
 extern fn SDL_Vulkan_CreateSurface(
     window: *c.SDL_Window,
@@ -168,7 +143,7 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
     errdefer rctx.deinit(allocator);
 
     const vma_allocator = try initVmaAllocator(&ctx, rctx);
-    errdefer vma.vmaDestroyAllocator(vma_allocator);
+    errdefer vma.destroyAllocator(vma_allocator);
 
     var window_width: c_int = undefined;
     var window_height: c_int = undefined;
@@ -222,35 +197,36 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
         }
     }
 
-    var staging_buffer: zvk.Buffer = .null_handle;
-    var staging_buffer_allocation: vma.VmaAllocation = undefined;
-    var staging_buffer_info: vma.VmaAllocationInfo = undefined;
-    {
-        const result = try std.meta.intToEnum(
-            zvk.Result,
-            vma.vmaCreateBuffer(
-                vma_allocator,
-                &@as(vma.VkBufferCreateInfo, @bitCast(zvk.BufferCreateInfo{
-                    .flags = .{},
-                    // 16 MiB
-                    .size = 16 * 1024 * 1024,
-                    .usage = .{ .transfer_src_bit = true },
-                    .sharing_mode = .exclusive,
-                })),
-                &vma.VmaAllocationCreateInfo{
-                    .flags = vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                        vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                    .usage = vma.VMA_MEMORY_USAGE_AUTO,
-                },
-                @ptrCast(&staging_buffer),
-                &staging_buffer_allocation,
-                &staging_buffer_info,
-            ),
-        );
-        if (result != .success) {
-            log.err("failed to allocate a transfer staging buffer: {}", .{result});
-            try vmaError(result);
-        }
+    var staging_buffer_allocation: vma.Allocation = undefined;
+    var staging_buffer_info: vma.AllocationInfo = undefined;
+    const staging_buffer = try vma.createBuffer(
+        vma_allocator,
+        zvk.BufferCreateInfo{
+            .flags = .{},
+            // 16 MiB
+            .size = 16 * 1024 * 1024,
+            .usage = .{ .transfer_src_bit = true },
+            .sharing_mode = .exclusive,
+        },
+        .{
+            .flags = .{ .host_access_sequential_bit = true, .mapped_bit = true },
+            .usage = .auto,
+        },
+        &staging_buffer_allocation,
+        &staging_buffer_info,
+    );
+    const verticies = [_]RectVert{
+        .{ .x = -1, .y = 1, .z = 0, .r = 1, .g = 0, .b = 0 },
+        .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 1, .b = 1 },
+        .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 0, .b = 1 },
+        .{ .x = -1, .y = -1, .z = 0, .r = 1, .g = 1, .b = 0 },
+    };
+    // const indicies = [_]u32{ 0, 1, 3, 1, 2, 3 };
+    if (staging_buffer_info.pMappedData) |buffer| {
+        const vert_buffer: [*]RectVert = @ptrCast(@alignCast(buffer));
+        @memcpy(vert_buffer, &verticies);
+    } else {
+        std.debug.panic("the staging buffer is unmapped", .{});
     }
 
     return .{
@@ -285,7 +261,7 @@ pub fn deinit(self: *@This()) void {
         frame.deinit(self.rctx.dev, self.vma_allocator);
     }
     self.allocator.free(self.frames);
-    vma.vmaDestroyBuffer(self.vma_allocator, @ptrFromInt(@intFromEnum(self.staging_buffer)), self.staging_buffer_memalloc);
+    vma.destroyBuffer(self.vma_allocator, self.staging_buffer, self.staging_buffer_memalloc);
     destroyFramebuffers(allocator, self.rctx.dev, self.framebuffers);
     destroyCommandBuffers(allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
     self.rctx.dev.destroyCommandPool(self.cmdpool, null);
@@ -295,28 +271,24 @@ pub fn deinit(self: *@This()) void {
     self.rctx.dev.destroyRenderPass(self.render_pass, null);
 
     self.swapchain.destroy(allocator);
-    vma.vmaDestroyAllocator(self.vma_allocator);
+    vma.destroyAllocator(self.vma_allocator);
     self.rctx.deinit(allocator);
     allocator.destroy(self.rctx);
     self.ctx.deinit(allocator);
 }
 
-fn initVmaAllocator(instancectx: *const InstanceContext, renderctx: *const RenderContext) !vma.VmaAllocator {
-    const func_pointers: vma.VmaVulkanFunctions = .{
-        .vkGetInstanceProcAddr = @ptrCast(instancectx.base_dispatch.dispatch.vkGetInstanceProcAddr),
-        .vkGetDeviceProcAddr = @ptrCast(instancectx.instance.wrapper.dispatch.vkGetDeviceProcAddr),
-    };
-
-    const create_info: vma.VmaAllocatorCreateInfo = .{
+fn initVmaAllocator(instancectx: *const InstanceContext, renderctx: *const RenderContext) !vma.Allocator {
+    var alloc: vma.Allocator = undefined;
+    const result: zvk.Result = @enumFromInt(vma.createAllocator(&vma.AllocatorCreateInfo{
         .vulkanApiVersion = vma.VK_API_VERSION_1_1,
         .physicalDevice = @ptrFromInt(@intFromEnum(renderctx.pdev)),
         .device = @ptrFromInt(@intFromEnum(renderctx.dev.handle)),
         .instance = @ptrFromInt(@intFromEnum(instancectx.instance.handle)),
-        .pVulkanFunctions = &func_pointers,
-    };
-
-    var alloc: vma.VmaAllocator = undefined;
-    const result: zvk.Result = @enumFromInt(vma.vmaCreateAllocator(&create_info, &alloc));
+        .pVulkanFunctions = &vma.VulkanFunctions{
+            .vkGetInstanceProcAddr = @ptrCast(instancectx.base_dispatch.dispatch.vkGetInstanceProcAddr),
+            .vkGetDeviceProcAddr = @ptrCast(instancectx.instance.wrapper.dispatch.vkGetDeviceProcAddr),
+        },
+    }, &alloc));
     if (result != .success) {
         log.err("failed to create vulkan memory allocator", .{});
         return error.InitVulkanMemoryAllocator;
