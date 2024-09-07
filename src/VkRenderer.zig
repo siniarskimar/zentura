@@ -379,12 +379,12 @@ pub fn present(self: *@This()) !void {
     }
 
     const verticies = [_]RectVert{
-        .{ .x = -1, .y = 1, .z = 0, .r = 1, .g = 0, .b = 0 },
-        .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 1, .b = 1 },
-        .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 0, .b = 1 },
-        .{ .x = -1, .y = -1, .z = 0, .r = 1, .g = 1, .b = 0 },
+        .{ .x = 0, .y = 0, .z = 0, .r = 1, .g = 0, .b = 0 },
+        .{ .x = 1, .y = 0, .z = 0, .r = 0, .g = 1, .b = 1 },
+        .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 0, .b = 1 },
+        .{ .x = 0, .y = 1, .z = 0, .r = 1, .g = 1, .b = 0 },
     };
-    const indicies = [_]u32{ 0, 1, 2, 2, 3, 0 };
+    const indicies = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
     const framebuffer = self.framebuffers[acquired.image_index];
 
@@ -487,8 +487,7 @@ pub fn present(self: *@This()) !void {
     dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
     dev.cmdBindVertexBuffers(cmdbuf, 0, 1, &.{frame.gpu_vbo}, &.{0});
     dev.cmdBindIndexBuffer(cmdbuf, frame.gpu_ibo, 0, .uint32);
-    dev.cmdDrawIndexed(cmdbuf, 4, 2, 0, 0, 0);
-    // dev.cmdDraw(cmdbuf, 3, 1, 0, 0);
+    dev.cmdDrawIndexed(cmdbuf, indicies.len, 1, 0, 0, 0);
     dev.cmdEndRenderPass(cmdbuf);
 
     dev.cmdPipelineBarrier(
