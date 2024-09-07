@@ -111,28 +111,7 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
     rctx.* = try RenderContext.init(allocator, ctx.instance, surface);
     errdefer rctx.deinit(allocator);
 
-    const vma_allocator = blk: {
-        const func_pointers: vma.VmaVulkanFunctions = .{
-            .vkGetInstanceProcAddr = @ptrCast(ctx.base_dispatch.dispatch.vkGetInstanceProcAddr),
-            .vkGetDeviceProcAddr = @ptrCast(ctx.instance.wrapper.dispatch.vkGetDeviceProcAddr),
-        };
-
-        const create_info: vma.VmaAllocatorCreateInfo = .{
-            .vulkanApiVersion = vma.VK_API_VERSION_1_1,
-            .physicalDevice = @ptrFromInt(@intFromEnum(rctx.pdev)),
-            .device = @ptrFromInt(@intFromEnum(rctx.dev.handle)),
-            .instance = @ptrFromInt(@intFromEnum(ctx.instance.handle)),
-            .pVulkanFunctions = &func_pointers,
-        };
-
-        var alloc: vma.VmaAllocator = undefined;
-        const result: zvk.Result = @enumFromInt(vma.vmaCreateAllocator(&create_info, &alloc));
-        if (result != .success) {
-            log.err("failed to create vulkan memory allocator", .{});
-            return error.InitVulkanMemoryAllocator;
-        }
-        break :blk alloc;
-    };
+    const vma_allocator = try initVmaAllocator(&ctx, &rctx);
     errdefer vma.vmaDestroyAllocator(vma_allocator);
 
     var window_width: c_int = undefined;
@@ -228,6 +207,29 @@ pub fn deinit(self: *@This()) void {
     self.rctx.deinit(allocator);
     allocator.destroy(self.rctx);
     self.ctx.deinit(allocator);
+}
+
+fn initVmaAllocator(instancectx: *const InstanceContext, renderctx: *const RenderContext) !vma.VmaAllocator {
+    const func_pointers: vma.VmaVulkanFunctions = .{
+        .vkGetInstanceProcAddr = @ptrCast(instancectx.base_dispatch.dispatch.vkGetInstanceProcAddr),
+        .vkGetDeviceProcAddr = @ptrCast(instancectx.instance.wrapper.dispatch.vkGetDeviceProcAddr),
+    };
+
+    const create_info: vma.VmaAllocatorCreateInfo = .{
+        .vulkanApiVersion = vma.VK_API_VERSION_1_1,
+        .physicalDevice = @ptrFromInt(@intFromEnum(renderctx.pdev)),
+        .device = @ptrFromInt(@intFromEnum(renderctx.dev.handle)),
+        .instance = @ptrFromInt(@intFromEnum(instancectx.instance.handle)),
+        .pVulkanFunctions = &func_pointers,
+    };
+
+    var alloc: vma.VmaAllocator = undefined;
+    const result: zvk.Result = @enumFromInt(vma.vmaCreateAllocator(&create_info, &alloc));
+    if (result != .success) {
+        log.err("failed to create vulkan memory allocator", .{});
+        return error.InitVulkanMemoryAllocator;
+    }
+    return alloc;
 }
 
 pub fn present(self: *@This()) !void {
