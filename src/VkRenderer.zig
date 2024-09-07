@@ -56,16 +56,20 @@ const FrameData = struct {
     gpu_vbo: zvk.Buffer,
     gpu_vbo_memalloc: vma.Allocation,
 
+    gpu_ibo: zvk.Buffer,
+    gpu_ibo_memalloc: vma.Allocation,
+
     transfer_cmdbuf: zvk.CommandBuffer,
+    transfer_semaphore: zvk.Semaphore,
 
     fn init(dev: Device, cmdpool: zvk.CommandPool, vma_alloc: vma.Allocator) !@This() {
         var cmdbufs = [1]zvk.CommandBuffer{.null_handle} ** 2;
         try dev.allocateCommandBuffers(&zvk.CommandBufferAllocateInfo{
             .command_pool = cmdpool,
-            .command_buffer_count = 1,
+            .command_buffer_count = 2,
             .level = .primary,
         }, &cmdbufs);
-        errdefer dev.freeCommandBuffers(cmdpool, 1, &cmdbufs);
+        errdefer dev.freeCommandBuffers(cmdpool, 2, &cmdbufs);
 
         const image_acquired = try dev.createSemaphore(&.{}, null);
         errdefer dev.destroySemaphore(image_acquired, null);
@@ -97,22 +101,49 @@ const FrameData = struct {
             null,
         );
 
+        var gpu_ibo_memalloc: vma.Allocation = undefined;
+        const gpu_ibo = try vma.createBuffer(
+            vma_alloc,
+            zvk.BufferCreateInfo{
+                .size = 200 * @sizeOf(u32),
+                .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
+                .sharing_mode = .exclusive,
+            },
+            .{
+                .flags = .{},
+                // Prefer for this buffer to be allocated on GPU
+                .preferred_flags = @bitCast(zvk.MemoryPropertyFlags{ .device_local_bit = true }),
+                .usage = .gpu_only,
+            },
+            &gpu_ibo_memalloc,
+            null,
+        );
+
+        const transfer_semaphore = try dev.createSemaphore(&.{}, null);
+        errdefer dev.destroySemaphore(transfer_semaphore, null);
+
         return FrameData{
             .cmdpool = cmdpool,
             .cmdbuf = cmdbufs[0],
-            .transfer_cmdbuf = cmdbufs[1],
             .image_acquired_semaphore = image_acquired,
             .render_semaphore = render_semaphore,
             .render_fence = render_fence,
 
             .gpu_vbo = gpu_vbo,
             .gpu_vbo_memalloc = gpu_vbo_memalloc,
+            .gpu_ibo = gpu_ibo,
+            .gpu_ibo_memalloc = gpu_ibo_memalloc,
+
+            .transfer_cmdbuf = cmdbufs[1],
+            .transfer_semaphore = transfer_semaphore,
         };
     }
 
     fn deinit(self: *@This(), dev: Device, vma_alloc: vma.Allocator) void {
         vma.destroyBuffer(vma_alloc, self.gpu_vbo, self.gpu_vbo_memalloc);
+        vma.destroyBuffer(vma_alloc, self.gpu_ibo, self.gpu_ibo_memalloc);
         dev.freeCommandBuffers(self.cmdpool, 2, &[2]zvk.CommandBuffer{ self.cmdbuf, self.transfer_cmdbuf });
+        dev.destroySemaphore(self.transfer_semaphore, null);
         dev.destroySemaphore(self.image_acquired_semaphore, null);
         dev.destroySemaphore(self.render_semaphore, null);
         dev.destroyFence(self.render_fence, null);
@@ -215,19 +246,6 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
         &staging_buffer_allocation,
         &staging_buffer_info,
     );
-    const verticies = [_]RectVert{
-        .{ .x = -1, .y = 1, .z = 0, .r = 1, .g = 0, .b = 0 },
-        .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 1, .b = 1 },
-        .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 0, .b = 1 },
-        .{ .x = -1, .y = -1, .z = 0, .r = 1, .g = 1, .b = 0 },
-    };
-    // const indicies = [_]u32{ 0, 1, 3, 1, 2, 3 };
-    if (staging_buffer_info.pMappedData) |buffer| {
-        const vert_buffer: [*]RectVert = @ptrCast(@alignCast(buffer));
-        @memcpy(vert_buffer, &verticies);
-    } else {
-        std.debug.panic("the staging buffer is unmapped", .{});
-    }
 
     return .{
         .window = window,
@@ -331,6 +349,14 @@ pub fn present(self: *@This()) !void {
         std.debug.panic("failed to acquire next image for rendering: {}", .{acquired.result});
     }
 
+    const verticies = [_]RectVert{
+        .{ .x = -1, .y = 1, .z = 0, .r = 1, .g = 0, .b = 0 },
+        .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 1, .b = 1 },
+        .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 0, .b = 1 },
+        .{ .x = -1, .y = -1, .z = 0, .r = 1, .g = 1, .b = 0 },
+    };
+    const indicies = [_]u32{ 0, 1, 3, 1, 2, 3 };
+
     const framebuffer = self.framebuffers[acquired.image_index];
 
     const clear = zvk.ClearValue{ .color = .{
@@ -348,6 +374,33 @@ pub fn present(self: *@This()) !void {
         .offset = .{ .x = 0, .y = 0 },
         .extent = self.swapchain.extent,
     };
+    try dev.resetCommandBuffer(frame.transfer_cmdbuf, .{});
+    try dev.beginCommandBuffer(frame.transfer_cmdbuf, &zvk.CommandBufferBeginInfo{
+        .flags = .{ .one_time_submit_bit = true },
+    });
+    if (self.staging_buffer_info.pMappedData) |buffer| {
+        const buffer_address: usize = @intFromPtr(buffer);
+        const vert_buffer: [*]RectVert = @ptrCast(@alignCast(buffer));
+        @memcpy(vert_buffer, &verticies);
+
+        const ibo_address: usize = std.mem.alignForward(usize, buffer_address, @alignOf(u32));
+        const ibo_buffer: [*]u32 = @ptrFromInt(ibo_address);
+        @memcpy(ibo_buffer, &indicies);
+
+        dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.staging_buffer, frame.gpu_vbo, 1, @ptrCast(&zvk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = @sizeOf(RectVert) * verticies.len,
+        }));
+        dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.staging_buffer, frame.gpu_ibo, 1, @ptrCast(&zvk.BufferCopy{
+            .src_offset = ibo_address - buffer_address,
+            .dst_offset = 0,
+            .size = @sizeOf(u32) * indicies.len,
+        }));
+    } else {
+        std.debug.panic("the staging buffer is unmapped", .{});
+    }
+    try dev.endCommandBuffer(frame.transfer_cmdbuf);
     try dev.beginCommandBuffer(cmdbuf, &zvk.CommandBufferBeginInfo{
         .flags = .{ .one_time_submit_bit = true },
     });
@@ -434,18 +487,29 @@ pub fn present(self: *@This()) !void {
 
     try self.rctx.dev.queueSubmit(
         self.rctx.graphics_queue.handle,
-        1,
-        @ptrCast(&zvk.SubmitInfo{
-            .wait_semaphore_count = 1,
-            .p_wait_semaphores = @ptrCast(&frame.image_acquired_semaphore),
-            .p_wait_dst_stage_mask = @ptrCast(&zvk.PipelineStageFlags{ .top_of_pipe_bit = true }),
-
-            .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast(&frame.cmdbuf),
-
-            .signal_semaphore_count = 1,
-            .p_signal_semaphores = @ptrCast(&frame.render_semaphore),
-        }),
+        2,
+        &[_]zvk.SubmitInfo{
+            // Transfer
+            zvk.SubmitInfo{
+                .wait_semaphore_count = 1,
+                .p_wait_semaphores = @ptrCast(&frame.image_acquired_semaphore),
+                .p_wait_dst_stage_mask = @ptrCast(&zvk.PipelineStageFlags{ .top_of_pipe_bit = true }),
+                .command_buffer_count = 1,
+                .p_command_buffers = @ptrCast(&frame.transfer_cmdbuf),
+                .signal_semaphore_count = 1,
+                .p_signal_semaphores = @ptrCast(&frame.transfer_semaphore),
+            },
+            // Render
+            zvk.SubmitInfo{
+                .wait_semaphore_count = 1,
+                .p_wait_semaphores = &.{frame.transfer_semaphore},
+                .p_wait_dst_stage_mask = &.{.{ .top_of_pipe_bit = true }},
+                .command_buffer_count = 1,
+                .p_command_buffers = @ptrCast(&frame.cmdbuf),
+                .signal_semaphore_count = 1,
+                .p_signal_semaphores = @ptrCast(&frame.render_semaphore),
+            },
+        },
         frame.render_fence,
     );
 
