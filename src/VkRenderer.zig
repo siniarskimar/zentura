@@ -37,6 +37,11 @@ cmdbufs: []zvk.CommandBuffer,
 frames: []FrameData,
 current_frame: usize = 0,
 
+staging_buffer: zvk.Buffer,
+staging_buffer_memalloc: vma.VmaAllocation,
+staging_buffer_info: vma.VmaAllocationInfo,
+staging_buffer_offset: usize = 0,
+
 should_resize: bool = false,
 ft_library: ft.FT_Library,
 ft_face: ft.FT_Face = null,
@@ -51,14 +56,19 @@ const FrameData = struct {
     render_semaphore: zvk.Semaphore,
     render_fence: zvk.Fence,
 
-    fn init(dev: Device, cmdpool: zvk.CommandPool) !@This() {
-        var cmdbuf: zvk.CommandBuffer = .null_handle;
+    gpu_vbo: zvk.Buffer,
+    gpu_vbo_memalloc: vma.VmaAllocation,
+
+    transfer_cmdbuf: zvk.CommandBuffer,
+
+    fn init(dev: Device, cmdpool: zvk.CommandPool, vma_alloc: vma.VmaAllocator) !@This() {
+        var cmdbufs = [1]zvk.CommandBuffer{.null_handle} ** 2;
         try dev.allocateCommandBuffers(&zvk.CommandBufferAllocateInfo{
             .command_pool = cmdpool,
             .command_buffer_count = 1,
             .level = .primary,
-        }, @ptrCast(&cmdbuf));
-        errdefer dev.freeCommandBuffers(cmdpool, 1, @ptrCast(&cmdbuf));
+        }, &cmdbufs);
+        errdefer dev.freeCommandBuffers(cmdpool, 1, &cmdbufs);
 
         const image_acquired = try dev.createSemaphore(&.{}, null);
         errdefer dev.destroySemaphore(image_acquired, null);
@@ -71,22 +81,68 @@ const FrameData = struct {
         }, null);
         errdefer dev.destroyFence(render_fence, null);
 
-        return .{
+        var gpu_vbo: zvk.Buffer = .null_handle;
+        var gpu_vbo_memalloc: vma.VmaAllocation = undefined;
+        {
+            const result = try std.meta.intToEnum(
+                zvk.Result,
+                vma.vmaCreateBuffer(
+                    vma_alloc,
+                    &@as(vma.VkBufferCreateInfo, @bitCast(zvk.BufferCreateInfo{
+                        // 8 KiB
+                        .size = 8 * 1024,
+                        .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
+                        .sharing_mode = .exclusive,
+                    })),
+                    &vma.VmaAllocationCreateInfo{
+                        .flags = 0,
+                        // Prefer for this buffer to be allocated on GPU
+                        .preferredFlags = @bitCast(zvk.MemoryPropertyFlags{ .device_local_bit = true }),
+                        .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
+                    },
+                    @ptrCast(&gpu_vbo),
+                    @ptrCast(&gpu_vbo_memalloc),
+                    null,
+                ),
+            );
+            if (result != .success) {
+                log.err("failed to allocate a GPU vertex buffer: {}", .{result});
+                try vmaError(result);
+            }
+        }
+
+        return FrameData{
             .cmdpool = cmdpool,
-            .cmdbuf = cmdbuf,
+            .cmdbuf = cmdbufs[0],
+            .transfer_cmdbuf = cmdbufs[1],
             .image_acquired_semaphore = image_acquired,
             .render_semaphore = render_semaphore,
             .render_fence = render_fence,
+
+            .gpu_vbo = gpu_vbo,
+            .gpu_vbo_memalloc = gpu_vbo_memalloc,
         };
     }
 
-    fn deinit(self: *@This(), dev: Device) void {
-        dev.freeCommandBuffers(self.cmdpool, 1, @ptrCast(&self.cmdbuf));
+    fn deinit(self: *@This(), dev: Device, vma_alloc: vma.VmaAllocator) void {
+        vma.vmaDestroyBuffer(vma_alloc, @ptrFromInt(@intFromEnum(self.gpu_vbo)), self.gpu_vbo_memalloc);
+        dev.freeCommandBuffers(self.cmdpool, 2, &[2]zvk.CommandBuffer{ self.cmdbuf, self.transfer_cmdbuf });
         dev.destroySemaphore(self.image_acquired_semaphore, null);
         dev.destroySemaphore(self.render_semaphore, null);
         dev.destroyFence(self.render_fence, null);
     }
 };
+
+fn vmaError(result: zvk.Result) !void {
+    if (result == .success) return;
+    switch (result) {
+        zvk.Result.error_out_of_host_memory => return error.OutOfHostMemory,
+        zvk.Result.error_out_of_device_memory => return error.OutOfDeviceMemory,
+        zvk.Result.error_device_lost => return error.DeviceLost,
+        zvk.Result.error_too_many_objects => return error.TooManyObjects,
+        else => return error.Unknown,
+    }
+}
 
 extern fn SDL_Vulkan_CreateSurface(
     window: *c.SDL_Window,
@@ -111,7 +167,7 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
     rctx.* = try RenderContext.init(allocator, ctx.instance, surface);
     errdefer rctx.deinit(allocator);
 
-    const vma_allocator = try initVmaAllocator(&ctx, &rctx);
+    const vma_allocator = try initVmaAllocator(&ctx, rctx);
     errdefer vma.vmaDestroyAllocator(vma_allocator);
 
     var window_width: c_int = undefined;
@@ -159,10 +215,41 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
     errdefer allocator.free(frames);
     {
         var idx: usize = 0;
-        errdefer for (0..idx) |k| frames[k].deinit(rctx.dev);
+        errdefer for (0..idx) |k| frames[k].deinit(rctx.dev, vma_allocator);
 
         while (idx < frames.len) : (idx += 1) {
-            frames[idx] = try FrameData.init(rctx.dev, cmdpool);
+            frames[idx] = try FrameData.init(rctx.dev, cmdpool, vma_allocator);
+        }
+    }
+
+    var staging_buffer: zvk.Buffer = .null_handle;
+    var staging_buffer_allocation: vma.VmaAllocation = undefined;
+    var staging_buffer_info: vma.VmaAllocationInfo = undefined;
+    {
+        const result = try std.meta.intToEnum(
+            zvk.Result,
+            vma.vmaCreateBuffer(
+                vma_allocator,
+                &@as(vma.VkBufferCreateInfo, @bitCast(zvk.BufferCreateInfo{
+                    .flags = .{},
+                    // 16 MiB
+                    .size = 16 * 1024 * 1024,
+                    .usage = .{ .transfer_src_bit = true },
+                    .sharing_mode = .exclusive,
+                })),
+                &vma.VmaAllocationCreateInfo{
+                    .flags = vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                        vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                    .usage = vma.VMA_MEMORY_USAGE_AUTO,
+                },
+                @ptrCast(&staging_buffer),
+                &staging_buffer_allocation,
+                &staging_buffer_info,
+            ),
+        );
+        if (result != .success) {
+            log.err("failed to allocate a transfer staging buffer: {}", .{result});
+            try vmaError(result);
         }
     }
 
@@ -183,6 +270,10 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
         .framebuffers = framebuffers,
 
         .frames = frames,
+
+        .staging_buffer = staging_buffer,
+        .staging_buffer_memalloc = staging_buffer_allocation,
+        .staging_buffer_info = staging_buffer_info,
     };
 }
 
@@ -191,9 +282,10 @@ pub fn deinit(self: *@This()) void {
     self.rctx.dev.deviceWaitIdle() catch std.time.sleep(std.time.ns_per_ms * 20);
 
     for (self.frames) |*frame| {
-        frame.deinit(self.rctx.dev);
+        frame.deinit(self.rctx.dev, self.vma_allocator);
     }
     self.allocator.free(self.frames);
+    vma.vmaDestroyBuffer(self.vma_allocator, @ptrFromInt(@intFromEnum(self.staging_buffer)), self.staging_buffer_memalloc);
     destroyFramebuffers(allocator, self.rctx.dev, self.framebuffers);
     destroyCommandBuffers(allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
     self.rctx.dev.destroyCommandPool(self.cmdpool, null);
@@ -270,7 +362,7 @@ pub fn present(self: *@This()) !void {
     const framebuffer = self.framebuffers[acquired.image_index];
 
     const clear = zvk.ClearValue{ .color = .{
-        .float_32 = .{ 0, 1, 0, 1 },
+        .float_32 = .{ 0, 0, 0, 1 },
     } };
     const viewport = zvk.Viewport{
         .x = 0,
