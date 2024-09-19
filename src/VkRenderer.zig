@@ -2,6 +2,7 @@ const std = @import("std");
 const zvk = @import("zig-vulkan");
 const vk = @import("./vk.zig");
 const vma = @import("./vma.zig");
+const math = @import("./math.zig");
 const InstanceContext = vk.InstanceContext;
 const RenderContext = vk.RenderContext;
 const Instance = vk.Instance;
@@ -1009,8 +1010,8 @@ const TextPipeline = struct {
     render_pass: zvk.RenderPass,
 
     const GlyphVert = extern struct {
-        pos: [3]f32,
-        color: [3]f32,
+        pos: math.Vec(3, f32),
+        color: math.Vec(3, f32),
 
         const binding_description = zvk.VertexInputBindingDescription{
             .binding = 0,
