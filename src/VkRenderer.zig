@@ -683,7 +683,7 @@ pub const Swapchain = struct {
         if (actual_extent.width == 0 or actual_extent.height == 0) return error.InvalidSurfaceDimentions;
 
         const surface_format = try findSurfaceFormat(allocator, instance, context);
-        const presentation_mode = try findPresentationMode(allocator, instance, context);
+        const presentation_mode: zvk.PresentModeKHR = .fifo_khr;
 
         var image_count = caps.min_image_count + 1;
         if (caps.max_image_count > 0 and image_count > caps.max_image_count) {
@@ -788,32 +788,6 @@ pub const Swapchain = struct {
                 .height = std.math.clamp(extent.height, caps.min_image_extent.height, caps.max_image_extent.height),
             };
         }
-    }
-
-    /// Tries to find V-sync enabled mode `mailbox_khr`, else fallback to `fifo_khr`.
-    ///
-    /// `mailbox_khr` maintains a single-entry queue. Whenever a new image is pushed
-    /// it gets replaced with new one.
-    ///
-    /// [p] - [1]
-    ///
-    /// `fifo_khr` maintains a mutiple-entry queue. Each entry is appened to the end of the queue
-    ///
-    /// [p] - [1] - [2] - ...
-    // TODO: When using mailbox_khr, manually limit frame rate to display's refresh rate
-    fn findPresentationMode(
-        _: std.mem.Allocator,
-        _: Instance,
-        _: *const RenderContext,
-    ) !zvk.PresentModeKHR {
-        // const modes = try instance.getPhysicalDeviceSurfacePresentModesAllocKHR(context.pdev, context.surface, allocator);
-        // defer allocator.free(modes);
-
-        // for (modes) |mode| {
-        //     if (mode == .mailbox_khr) return mode;
-        // }
-
-        return .fifo_khr;
     }
 
     /// Tries to find RGB8 srgb surface format.
