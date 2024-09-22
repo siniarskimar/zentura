@@ -26,17 +26,10 @@ rctx: *RenderContext,
 swapchain: Swapchain,
 vma_allocator: vma.Allocator,
 
-render_pass: zvk.RenderPass,
-text_pipeline: TextPipeline,
+text_renderpass: TextRenderpass,
 cmdpool: zvk.CommandPool,
-framebuffers: []zvk.Framebuffer,
 frames: []FrameData,
 current_frame: usize = 0,
-
-staging_buffer: zvk.Buffer,
-staging_buffer_memalloc: vma.Allocation,
-staging_buffer_info: vma.AllocationInfo,
-staging_buffer_offset: usize = 0,
 
 should_resize: bool = false,
 ft_library: ft.FT_Library,
@@ -46,22 +39,36 @@ const shaders = @import("shaders");
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 const FrameData = struct {
+    allocator: std.mem.Allocator,
     cmdpool: zvk.CommandPool,
     cmdbuf: zvk.CommandBuffer,
+
     image_acquired_semaphore: zvk.Semaphore,
+    acquired_idx: u32 = 0,
     render_semaphore: zvk.Semaphore,
     render_fence: zvk.Fence,
 
     gpu_vbo: zvk.Buffer,
     gpu_vbo_memalloc: vma.Allocation,
+    gpu_vbo_info: vma.AllocationInfo,
+    gpu_vbo_offset: zvk.DeviceSize,
 
     gpu_ibo: zvk.Buffer,
     gpu_ibo_memalloc: vma.Allocation,
+    gpu_ibo_info: vma.AllocationInfo,
+    gpu_ibo_offset: zvk.DeviceSize,
 
     transfer_cmdbuf: zvk.CommandBuffer,
     transfer_semaphore: zvk.Semaphore,
+    text_transfer_info: std.ArrayListUnmanaged(TextRenderpass.FlushInfo) = .{},
+    text_transfer_count: usize = 0,
 
-    fn init(dev: Device, cmdpool: zvk.CommandPool, vma_alloc: vma.Allocator) !@This() {
+    fn init(
+        allocator: std.mem.Allocator,
+        dev: Device,
+        cmdpool: zvk.CommandPool,
+        vma_alloc: vma.Allocator,
+    ) !@This() {
         var cmdbufs = [1]zvk.CommandBuffer{.null_handle} ** 2;
         try dev.allocateCommandBuffers(&zvk.CommandBufferAllocateInfo{
             .command_pool = cmdpool,
@@ -81,12 +88,13 @@ const FrameData = struct {
         }, null);
         errdefer dev.destroyFence(render_fence, null);
 
+        var gpu_vbo_info: vma.AllocationInfo = undefined;
         var gpu_vbo_memalloc: vma.Allocation = undefined;
         const gpu_vbo = try vma.createBuffer(
             vma_alloc,
             zvk.BufferCreateInfo{
-                // 8 KiB
-                .size = 8 * 1024,
+                // 1 MiB
+                .size = 1 * 1024 * 1024,
                 .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
                 .sharing_mode = .exclusive,
             },
@@ -97,14 +105,15 @@ const FrameData = struct {
                 .usage = .gpu_only,
             },
             &gpu_vbo_memalloc,
-            null,
+            &gpu_vbo_info,
         );
 
+        var gpu_ibo_info: vma.AllocationInfo = undefined;
         var gpu_ibo_memalloc: vma.Allocation = undefined;
         const gpu_ibo = try vma.createBuffer(
             vma_alloc,
             zvk.BufferCreateInfo{
-                .size = 200 * @sizeOf(u32),
+                .size = 1 * 1024 * 1024,
                 .usage = .{ .transfer_dst_bit = true, .index_buffer_bit = true },
                 .sharing_mode = .exclusive,
             },
@@ -115,13 +124,14 @@ const FrameData = struct {
                 .usage = .gpu_only,
             },
             &gpu_ibo_memalloc,
-            null,
+            &gpu_ibo_info,
         );
 
         const transfer_semaphore = try dev.createSemaphore(&.{}, null);
         errdefer dev.destroySemaphore(transfer_semaphore, null);
 
         return FrameData{
+            .allocator = allocator,
             .cmdpool = cmdpool,
             .cmdbuf = cmdbufs[0],
             .image_acquired_semaphore = image_acquired,
@@ -130,8 +140,13 @@ const FrameData = struct {
 
             .gpu_vbo = gpu_vbo,
             .gpu_vbo_memalloc = gpu_vbo_memalloc,
+            .gpu_vbo_info = gpu_vbo_info,
+            .gpu_vbo_offset = 0,
+
             .gpu_ibo = gpu_ibo,
             .gpu_ibo_memalloc = gpu_ibo_memalloc,
+            .gpu_ibo_info = gpu_ibo_info,
+            .gpu_ibo_offset = 0,
 
             .transfer_cmdbuf = cmdbufs[1],
             .transfer_semaphore = transfer_semaphore,
@@ -146,6 +161,19 @@ const FrameData = struct {
         dev.destroySemaphore(self.image_acquired_semaphore, null);
         dev.destroySemaphore(self.render_semaphore, null);
         dev.destroyFence(self.render_fence, null);
+        self.text_transfer_info.deinit(self.allocator);
+    }
+
+    fn clearFlushes(self: *@This(), vma_alloc: vma.Allocator) void {
+        const text_flushes: []TextRenderpass.FlushInfo = self.text_transfer_info.items[0..self.text_transfer_count];
+        for (text_flushes, 0..) |flush_info, idx| {
+            vma.destroyBuffer(vma_alloc, flush_info.buffers.vbo, flush_info.buffers.vbo_allocation);
+            vma.destroyBuffer(vma_alloc, flush_info.buffers.ibo, flush_info.buffers.ibo_allocation);
+            _ = self.text_transfer_info.swapRemove(idx);
+        }
+        self.text_transfer_count = 0;
+        self.gpu_vbo_offset = 0;
+        self.gpu_ibo_offset = 0;
     }
 };
 
@@ -187,12 +215,6 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
     );
     errdefer swapchain.destroy(allocator);
 
-    const render_pass = try createRenderPass(rctx.dev, swapchain);
-    errdefer rctx.dev.destroyRenderPass(render_pass, null);
-
-    // const layout = try rctx.dev.createPipelineLayout(&zvk.PipelineLayoutCreateInfo{}, null);
-    // errdefer rctx.dev.destroyPipelineLayout(layout, null);
-
     const cmdpool = try rctx.dev.createCommandPool(
         &zvk.CommandPoolCreateInfo{
             .queue_family_index = rctx.graphics_queue.family,
@@ -202,9 +224,6 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
     );
     errdefer rctx.dev.destroyCommandPool(cmdpool, null);
 
-    const framebuffers = try createFramebuffers(allocator, rctx.dev, render_pass, swapchain);
-    errdefer destroyFramebuffers(allocator, rctx.dev, framebuffers);
-
     const frames = try allocator.alloc(FrameData, MAX_FRAMES_IN_FLIGHT);
     errdefer allocator.free(frames);
     {
@@ -212,33 +231,17 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
         errdefer for (0..idx) |k| frames[k].deinit(rctx.dev, vma_allocator);
 
         while (idx < frames.len) : (idx += 1) {
-            frames[idx] = try FrameData.init(rctx.dev, cmdpool, vma_allocator);
+            frames[idx] = try FrameData.init(allocator, rctx.dev, cmdpool, vma_allocator);
         }
     }
 
-    var staging_buffer_memalloc: vma.Allocation = undefined;
-    var staging_buffer_info: vma.AllocationInfo = undefined;
-    const staging_buffer = try vma.createBuffer(vma_allocator, .{
-        .size = 64 * 1024 * 1024,
-        .usage = .{ .transfer_src_bit = true },
-        .sharing_mode = .exclusive,
-    }, .{
-        .usage = .auto_prefer_device,
-        .flags = .{
-            .mapped_bit = true,
-            .host_access_sequential_bit = true,
-        },
-    }, &staging_buffer_memalloc, &staging_buffer_info);
-
-    const text_pipeline = try TextPipeline.init(
+    const text_renderpass = try TextRenderpass.init(
         rctx.dev,
         swapchain.surface_format.format,
-        .clear,
-        .null_handle,
-        .null_handle,
-        .null_handle,
+        vma_allocator,
+        swapchain.render_pass,
     );
-    errdefer text_pipeline.deinit(rctx.dev);
+    errdefer text_renderpass.deinit(rctx.dev);
 
     return .{
         .window = window,
@@ -249,17 +252,10 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window, ft_library: ft.
         .swapchain = swapchain,
         .vma_allocator = vma_allocator,
 
-        .render_pass = render_pass,
         .cmdpool = cmdpool,
-        .framebuffers = framebuffers,
-
         .frames = frames,
 
-        .staging_buffer = staging_buffer,
-        .staging_buffer_memalloc = staging_buffer_memalloc,
-        .staging_buffer_info = staging_buffer_info,
-
-        .text_pipeline = text_pipeline,
+        .text_renderpass = text_renderpass,
     };
 }
 
@@ -268,19 +264,14 @@ pub fn deinit(self: *@This()) void {
     self.rctx.dev.deviceWaitIdle() catch std.time.sleep(std.time.ns_per_ms * 20);
 
     for (self.frames) |*frame| {
+        frame.text_transfer_count = frame.text_transfer_info.items.len;
+        frame.clearFlushes(self.vma_allocator);
         frame.deinit(self.rctx.dev, self.vma_allocator);
     }
     self.allocator.free(self.frames);
-    vma.destroyBuffer(self.vma_allocator, self.staging_buffer, self.staging_buffer_memalloc);
-    destroyFramebuffers(allocator, self.rctx.dev, self.framebuffers);
-    // destroyCommandBuffers(allocator, self.rctx.dev, self.cmdpool, self.cmdbufs);
     self.rctx.dev.destroyCommandPool(self.cmdpool, null);
 
-    self.text_pipeline.deinit(self.rctx.dev);
-    self.rctx.dev.destroyShaderModule(self.text_pipeline.vert_module, null);
-    self.rctx.dev.destroyShaderModule(self.text_pipeline.frag_module, null);
-
-    self.rctx.dev.destroyRenderPass(self.render_pass, null);
+    self.text_renderpass.deinit(self.rctx.dev, self.vma_allocator);
 
     self.swapchain.destroy(allocator);
     vma.destroyAllocator(self.vma_allocator);
@@ -314,48 +305,28 @@ fn getCurrentFrame(self: *@This()) *FrameData {
 
 pub fn present(self: *@This()) !void {
     const dev = self.rctx.dev;
-    const extent = self.swapchain.extent;
     const frame = self.getCurrentFrame();
+    const extent = self.swapchain.extent;
 
-    switch (try dev.waitForFences(
-        1,
-        &.{frame.render_fence},
-        zvk.TRUE,
-        std.time.ns_per_s,
-    )) {
-        zvk.Result.success => {},
-        zvk.Result.timeout => return error.Timeout,
-        else => return error.Unknown,
-    }
-    const cmdbuf = frame.cmdbuf;
-    try dev.resetFences(1, &.{frame.render_fence});
-    try dev.resetCommandBuffer(cmdbuf, .{});
+    // switch (try dev.waitForFences(
+    //     1,
+    //     &.{frame.secondary_fence},
+    //     zvk.TRUE,
+    //     std.time.ns_per_s,
+    // )) {
+    //     zvk.Result.success => {},
+    //     zvk.Result.timeout => return error.Timeout,
+    //     else => return error.Unknown,
+    // }
+    // try dev.resetFences(1, &.{frame.secondary_fence});
+    try dev.resetCommandBuffer(frame.cmdbuf, .{});
+    try dev.resetCommandBuffer(frame.transfer_cmdbuf, .{});
+    frame.clearFlushes(self.vma_allocator);
 
-    const acquired = dev.acquireNextImageKHR(
-        self.swapchain.handle,
-        std.math.maxInt(u64),
-        frame.image_acquired_semaphore,
-        .null_handle,
-    ) catch |err| switch (err) {
-        error.OutOfDateKHR => {
-            try self.doResize();
-            return;
-        },
-        else => return err,
-    };
-    if (acquired.result != .success and acquired.result != .suboptimal_khr) {
-        std.debug.panic("failed to acquire next image for rendering: {}", .{acquired.result});
-    }
-
-    const verticies = [_]TextPipeline.GlyphVert{
-        .{ .pos = .{ -1, -1, 0 }, .color = .{ 1, 0, 0 } },
-        .{ .pos = .{ 1, -1, 0 }, .color = .{ 0, 1, 1 } },
-        .{ .pos = .{ 1, 1, 0 }, .color = .{ 0, 0, 1 } },
-        .{ .pos = .{ -1, 1, 0 }, .color = .{ 1, 1, 0 } },
-    };
-    const indicies = [_]u32{ 0, 1, 2, 0, 2, 3 };
-
-    const framebuffer = self.framebuffers[acquired.image_index];
+    self.text_renderpass.pushGlyph(0, 0);
+    self.text_renderpass.pushGlyph(0.5, 0.5);
+    try frame.text_transfer_info.append(self.allocator, try self.text_renderpass.flush(false));
+    frame.text_transfer_count += 1;
 
     const clear = zvk.ClearValue{ .color = .{
         .float_32 = .{ 0, 0, 0, 1 },
@@ -372,162 +343,171 @@ pub fn present(self: *@This()) !void {
         .offset = .{ .x = 0, .y = 0 },
         .extent = self.swapchain.extent,
     };
-    try dev.resetCommandBuffer(frame.transfer_cmdbuf, .{});
+    try dev.beginCommandBuffer(frame.cmdbuf, &zvk.CommandBufferBeginInfo{
+        .flags = .{ .one_time_submit_bit = true },
+    });
     try dev.beginCommandBuffer(frame.transfer_cmdbuf, &zvk.CommandBufferBeginInfo{
         .flags = .{ .one_time_submit_bit = true },
     });
-    if (self.staging_buffer_info.pMappedData) |buffer| {
-        const buffer_address: usize = @intFromPtr(buffer);
-        const vert_buffer: [*]TextPipeline.GlyphVert = @ptrCast(@alignCast(buffer));
-        @memcpy(vert_buffer, &verticies);
 
-        const ibo_address: usize = std.mem.alignForward(
-            usize,
-            buffer_address + @sizeOf(TextPipeline.GlyphVert) * verticies.len,
-            @alignOf(u32),
-        );
-        const ibo_buffer: [*]u32 = @ptrFromInt(ibo_address);
-        @memcpy(ibo_buffer, &indicies);
-
-        dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.staging_buffer, frame.gpu_vbo, 1, @ptrCast(&zvk.BufferCopy{
-            .src_offset = 0,
-            .dst_offset = 0,
-            .size = @sizeOf(TextPipeline.GlyphVert) * verticies.len,
-        }));
-        dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.staging_buffer, frame.gpu_ibo, 1, @ptrCast(&zvk.BufferCopy{
-            .src_offset = ibo_address - buffer_address,
-            .dst_offset = 0,
-            .size = @sizeOf(u32) * indicies.len,
-        }));
-    } else {
-        std.debug.panic("the staging buffer is unmapped", .{});
-    }
-    try dev.endCommandBuffer(frame.transfer_cmdbuf);
-
-    try dev.beginCommandBuffer(cmdbuf, &zvk.CommandBufferBeginInfo{
-        .flags = .{ .one_time_submit_bit = true },
-    });
-    dev.cmdPipelineBarrier(
-        cmdbuf,
-        .{ .all_graphics_bit = true },
-        .{ .all_graphics_bit = true },
-        .{ .by_region_bit = true },
-        0,
-        null,
-        0,
-        null,
-        1,
-        &[_]zvk.ImageMemoryBarrier{
-            zvk.ImageMemoryBarrier{
-                .image = self.swapchain.swap_images[acquired.image_index].handle,
-                .src_access_mask = .{ .memory_write_bit = true },
-                .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
-                .old_layout = .undefined,
-                .new_layout = .color_attachment_optimal,
-                .src_queue_family_index = self.rctx.graphics_queue.family,
-                .dst_queue_family_index = self.rctx.graphics_queue.family,
-                .subresource_range = zvk.ImageSubresourceRange{
-                    .aspect_mask = .{ .color_bit = true },
-                    .base_mip_level = 0,
-                    .level_count = zvk.REMAINING_MIP_LEVELS,
-                    .base_array_layer = 0,
-                    .layer_count = zvk.REMAINING_ARRAY_LAYERS,
-                },
-            },
-        },
-    );
-
-    dev.cmdSetViewport(cmdbuf, 0, 1, @ptrCast(&viewport));
-    dev.cmdSetScissor(cmdbuf, 0, 1, @ptrCast(&scissor));
+    dev.cmdSetViewport(frame.cmdbuf, 0, 1, @ptrCast(&viewport));
+    dev.cmdSetScissor(frame.cmdbuf, 0, 1, @ptrCast(&scissor));
 
     const render_area = zvk.Rect2D{
         .offset = .{ .x = 0, .y = 0 },
         .extent = extent,
     };
 
-    dev.cmdBeginRenderPass(cmdbuf, &.{
-        .render_pass = self.render_pass,
-        .framebuffer = framebuffer,
+    dev.cmdBeginRenderPass(frame.cmdbuf, &.{
+        .render_pass = self.swapchain.render_pass,
+        .framebuffer = self.swapchain.swap_images[frame.acquired_idx].framebuffer,
         .render_area = render_area,
         .clear_value_count = 1,
         .p_clear_values = @ptrCast(&clear),
     }, .@"inline");
 
-    dev.cmdBindPipeline(cmdbuf, .graphics, self.text_pipeline.pipeline);
-    dev.cmdBindVertexBuffers(cmdbuf, 0, 1, &.{frame.gpu_vbo}, &.{0});
-    dev.cmdBindIndexBuffer(cmdbuf, frame.gpu_ibo, 0, .uint32);
-    dev.cmdDrawIndexed(cmdbuf, indicies.len, 1, 0, 0, 0);
-    dev.cmdEndRenderPass(cmdbuf);
+    // dev.cmdPipelineBarrier(
+    //     frame.cmdbuf,
+    //     .{ .all_graphics_bit = true },
+    //     .{ .all_graphics_bit = true },
+    //     .{ .by_region_bit = true },
+    //     0,
+    //     null,
+    //     0,
+    //     null,
+    //     1,
+    //     &[_]zvk.ImageMemoryBarrier{
+    //         zvk.ImageMemoryBarrier{
+    //             .image = self.swapchain.swap_images[frame.acquired_idx].color_image,
+    //             .src_access_mask = .{ .memory_write_bit = true },
+    //             .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+    //             .old_layout = .undefined,
+    //             .new_layout = .color_attachment_optimal,
+    //             .src_queue_family_index = self.rctx.graphics_queue.family,
+    //             .dst_queue_family_index = self.rctx.graphics_queue.family,
+    //             .subresource_range = zvk.ImageSubresourceRange{
+    //                 .aspect_mask = .{ .color_bit = true },
+    //                 .base_mip_level = 0,
+    //                 .level_count = zvk.REMAINING_MIP_LEVELS,
+    //                 .base_array_layer = 0,
+    //                 .layer_count = zvk.REMAINING_ARRAY_LAYERS,
+    //             },
+    //         },
+    //     },
+    // );
 
-    dev.cmdPipelineBarrier(
-        cmdbuf,
-        .{ .all_graphics_bit = true },
-        .{ .all_graphics_bit = true },
-        .{ .by_region_bit = true },
-        0,
-        null,
-        0,
-        null,
-        1,
-        &[_]zvk.ImageMemoryBarrier{
-            zvk.ImageMemoryBarrier{
-                .image = self.swapchain.swap_images[acquired.image_index].handle,
-                .src_access_mask = .{ .memory_write_bit = true },
-                .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
-                .old_layout = .color_attachment_optimal,
-                .new_layout = .present_src_khr,
-                .src_queue_family_index = self.rctx.graphics_queue.family,
-                .dst_queue_family_index = self.rctx.graphics_queue.family,
-                .subresource_range = zvk.ImageSubresourceRange{
-                    .aspect_mask = .{ .color_bit = true },
-                    .base_mip_level = 0,
-                    .level_count = zvk.REMAINING_MIP_LEVELS,
-                    .base_array_layer = 0,
-                    .layer_count = zvk.REMAINING_ARRAY_LAYERS,
-                },
-            },
-        },
-    );
-    try dev.endCommandBuffer(cmdbuf);
+    for (frame.text_transfer_info.items[0..frame.text_transfer_count]) |flush_info| {
+        flush_info.recordCommandBuffers(dev, frame);
+    }
 
-    try self.rctx.dev.queueSubmit(
-        self.rctx.graphics_queue.handle,
-        2,
-        &[_]zvk.SubmitInfo{
-            // Transfer
-            zvk.SubmitInfo{
-                .wait_semaphore_count = 1,
-                .p_wait_semaphores = @ptrCast(&frame.image_acquired_semaphore),
-                .p_wait_dst_stage_mask = @ptrCast(&zvk.PipelineStageFlags{ .top_of_pipe_bit = true }),
-                .command_buffer_count = 1,
-                .p_command_buffers = @ptrCast(&frame.transfer_cmdbuf),
-                .signal_semaphore_count = 1,
-                .p_signal_semaphores = @ptrCast(&frame.transfer_semaphore),
-            },
-            // Render
-            zvk.SubmitInfo{
-                .wait_semaphore_count = 1,
-                .p_wait_semaphores = &.{frame.transfer_semaphore},
-                .p_wait_dst_stage_mask = &.{.{ .top_of_pipe_bit = true }},
-                .command_buffer_count = 1,
-                .p_command_buffers = @ptrCast(&frame.cmdbuf),
-                .signal_semaphore_count = 1,
-                .p_signal_semaphores = @ptrCast(&frame.render_semaphore),
-            },
+    // dev.cmdPipelineBarrier(
+    //     frame.cmdbuf,
+    //     .{ .all_graphics_bit = true },
+    //     .{ .all_graphics_bit = true },
+    //     .{ .by_region_bit = true },
+    //     0,
+    //     null,
+    //     0,
+    //     null,
+    //     1,
+    //     &[_]zvk.ImageMemoryBarrier{
+    //         zvk.ImageMemoryBarrier{
+    //             .image = self.swapchain.swap_images[frame.acquired_idx].color_image,
+    //             .src_access_mask = .{ .memory_write_bit = true },
+    //             .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+    //             .old_layout = .color_attachment_optimal,
+    //             .new_layout = .present_src_khr,
+    //             .src_queue_family_index = self.rctx.graphics_queue.family,
+    //             .dst_queue_family_index = self.rctx.graphics_queue.family,
+    //             .subresource_range = zvk.ImageSubresourceRange{
+    //                 .aspect_mask = .{ .color_bit = true },
+    //                 .base_mip_level = 0,
+    //                 .level_count = zvk.REMAINING_MIP_LEVELS,
+    //                 .base_array_layer = 0,
+    //                 .layer_count = zvk.REMAINING_ARRAY_LAYERS,
+    //             },
+    //         },
+    //     },
+    // );
+    try dev.endCommandBuffer(frame.transfer_cmdbuf);
+    dev.cmdEndRenderPass(frame.cmdbuf);
+    try dev.endCommandBuffer(frame.cmdbuf);
+
+    try dev.queueSubmit(self.rctx.graphics_queue.handle, 2, &.{
+        zvk.SubmitInfo{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = &.{frame.image_acquired_semaphore},
+            .p_wait_dst_stage_mask = &.{.{ .top_of_pipe_bit = true }},
+            .command_buffer_count = 1,
+            .p_command_buffers = @ptrCast(&frame.transfer_cmdbuf),
+            .signal_semaphore_count = 1,
+            .p_signal_semaphores = &.{frame.transfer_semaphore},
         },
-        frame.render_fence,
-    );
+        zvk.SubmitInfo{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = &.{frame.transfer_semaphore},
+            .p_wait_dst_stage_mask = &.{.{ .top_of_pipe_bit = true }},
+            .command_buffer_count = 1,
+            .p_command_buffers = &.{frame.cmdbuf},
+            .signal_semaphore_count = 1,
+            .p_signal_semaphores = &.{frame.render_semaphore},
+        },
+    }, frame.render_fence);
 
     _ = try self.rctx.dev.queuePresentKHR(self.rctx.present_queue.handle, &.{
         .wait_semaphore_count = 1,
         .p_wait_semaphores = @ptrCast(&frame.render_semaphore),
         .swapchain_count = 1,
         .p_swapchains = @ptrCast(&self.swapchain.handle),
-        .p_image_indices = @ptrCast(&acquired.image_index),
+        .p_image_indices = @ptrCast(&frame.acquired_idx),
     });
 
     self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
-    if (acquired.result == .suboptimal_khr or self.should_resize) try self.doResize();
+
+    if (self.should_resize) {
+        try self.doResize();
+    }
+}
+
+pub fn beginFrame(self: *@This()) !void {
+    const dev = self.rctx.dev;
+    const frame = self.getCurrentFrame();
+
+    switch (try dev.waitForFences(
+        1,
+        &.{frame.render_fence},
+        zvk.TRUE,
+        std.time.ns_per_s,
+    )) {
+        zvk.Result.success => {},
+        zvk.Result.timeout => return error.Timeout,
+        else => return error.Unknown,
+    }
+    try dev.resetFences(1, &.{frame.render_fence});
+    try dev.resetCommandBuffer(frame.cmdbuf, .{});
+    try dev.resetCommandBuffer(frame.transfer_cmdbuf, .{});
+
+    const acquired = dev.acquireNextImageKHR(
+        self.swapchain.handle,
+        std.math.maxInt(u64),
+        frame.image_acquired_semaphore,
+        .null_handle,
+    ) catch |err| switch (err) {
+        error.OutOfDateKHR => {
+            try self.doResize();
+            return;
+        },
+        else => return err,
+    };
+    if (acquired.result != .success and acquired.result != .suboptimal_khr) {
+        std.debug.panic("failed to acquire next image for rendering: {}", .{acquired.result});
+    }
+    frame.acquired_idx = acquired.image_index;
+
+    // RESEARCH: Does recreating the swapchain invalidate acquired images?
+    if (acquired.result == .suboptimal_khr) {
+        self.should_resize = true;
+    }
 }
 
 fn doResize(self: *@This()) !void {
@@ -540,14 +520,6 @@ fn doResize(self: *@This()) !void {
         self.allocator,
         .{ .width = @intCast(window_width), .height = @intCast(window_height) },
     );
-
-    destroyFramebuffers(self.allocator, self.rctx.dev, self.framebuffers);
-    self.framebuffers = try createFramebuffers(
-        self.allocator,
-        self.rctx.dev,
-        self.render_pass,
-        self.swapchain,
-    );
 }
 
 fn destroyCommandBuffers(
@@ -558,11 +530,6 @@ fn destroyCommandBuffers(
 ) void {
     dev.freeCommandBuffers(cmdpool, @intCast(cmdbufs.len), cmdbufs.ptr);
     allocator.free(cmdbufs);
-}
-
-fn destroyFramebuffers(allocator: std.mem.Allocator, dev: Device, framebuffers: []zvk.Framebuffer) void {
-    for (framebuffers) |fb| dev.destroyFramebuffer(fb, null);
-    allocator.free(framebuffers);
 }
 
 fn allocateCommandBuffers(
@@ -583,64 +550,6 @@ fn allocateCommandBuffers(
     return cmdbufs;
 }
 
-fn createFramebuffers(
-    allocator: std.mem.Allocator,
-    dev: Device,
-    render_pass: zvk.RenderPass,
-    swapchain: Swapchain,
-) ![]zvk.Framebuffer {
-    var framebuffers = try allocator.alloc(zvk.Framebuffer, swapchain.swap_images.len);
-    errdefer allocator.free(framebuffers);
-
-    var idx: usize = 0;
-    errdefer for (framebuffers[0..idx]) |fb| dev.destroyFramebuffer(fb, null);
-
-    while (idx < framebuffers.len) {
-        framebuffers[idx] = try dev.createFramebuffer(&zvk.FramebufferCreateInfo{
-            .render_pass = render_pass,
-            .attachment_count = 1,
-            .p_attachments = @ptrCast(&swapchain.swap_images[idx].view),
-            .width = swapchain.extent.width,
-            .height = swapchain.extent.height,
-            .layers = 1,
-        }, null);
-        idx += 1;
-    }
-
-    return framebuffers;
-}
-
-fn createRenderPass(dev: Device, swapchain: Swapchain) !zvk.RenderPass {
-    const color_attachment = zvk.AttachmentDescription{
-        .format = swapchain.surface_format.format,
-        .samples = .{ .@"1_bit" = true },
-        .load_op = .clear,
-        .store_op = .store,
-        .stencil_load_op = .dont_care,
-        .stencil_store_op = .dont_care,
-        .initial_layout = .color_attachment_optimal,
-        .final_layout = .color_attachment_optimal,
-    };
-
-    const color_attachment_ref = zvk.AttachmentReference{
-        .attachment = 0,
-        .layout = .color_attachment_optimal,
-    };
-
-    const subpass = zvk.SubpassDescription{
-        .pipeline_bind_point = .graphics,
-        .color_attachment_count = 1,
-        .p_color_attachments = @ptrCast(&color_attachment_ref),
-    };
-
-    return try dev.createRenderPass(&zvk.RenderPassCreateInfo{
-        .attachment_count = 1,
-        .p_attachments = @ptrCast(&color_attachment),
-        .subpass_count = 1,
-        .p_subpasses = @ptrCast(&subpass),
-    }, null);
-}
-
 pub const Swapchain = struct {
     instance: Instance,
     context: *const RenderContext,
@@ -650,6 +559,7 @@ pub const Swapchain = struct {
     surface_format: zvk.SurfaceFormatKHR,
     present_mode: zvk.PresentModeKHR,
 
+    render_pass: zvk.RenderPass,
     swap_images: []SwapImage,
 
     pub fn create(
@@ -720,7 +630,8 @@ pub const Swapchain = struct {
             context.dev.destroySwapchainKHR(old_swapchain, null);
         }
 
-        const swap_images = try initSwapchainImages(allocator, context, swapchain, surface_format.format);
+        const render_pass = try createRenderPass(context.dev, surface_format.format);
+        const swap_images = try initSwapchainImages(allocator, context.dev, swapchain, surface_format.format, render_pass, extent);
         errdefer {
             for (swap_images) |*image| {
                 image.deinit();
@@ -730,6 +641,7 @@ pub const Swapchain = struct {
 
         return .{
             .instance = instance,
+            .render_pass = render_pass,
             .context = context,
             .handle = swapchain,
             .extent = actual_extent,
@@ -741,7 +653,7 @@ pub const Swapchain = struct {
 
     pub fn destroyWithoutHandle(self: *@This(), allocator: std.mem.Allocator) void {
         for (self.swap_images) |*swapimage| {
-            swapimage.deinit();
+            swapimage.deinit(self.context.dev);
         }
         allocator.free(self.swap_images);
     }
@@ -754,27 +666,57 @@ pub const Swapchain = struct {
             std.time.sleep(std.time.ns_per_ms * 20);
         };
         self.destroyWithoutHandle(allocator);
+        self.context.dev.destroyRenderPass(self.render_pass, null);
         self.context.dev.destroySwapchainKHR(self.handle, null);
+    }
+
+    fn createRenderPass(dev: Device, color_format: zvk.Format) !zvk.RenderPass {
+        return try dev.createRenderPass(&zvk.RenderPassCreateInfo{
+            .attachment_count = 1,
+            .p_attachments = &.{
+                zvk.AttachmentDescription{
+                    .format = color_format,
+                    .samples = .{ .@"1_bit" = true },
+                    .load_op = .clear,
+                    .store_op = .store,
+                    .stencil_load_op = .load,
+                    .stencil_store_op = .store,
+                    .initial_layout = .undefined,
+                    .final_layout = .present_src_khr,
+                },
+            },
+            .subpass_count = 1,
+            .p_subpasses = &.{
+                zvk.SubpassDescription{
+                    .pipeline_bind_point = .graphics,
+                    .color_attachment_count = 1,
+                    .p_color_attachments = &.{
+                        zvk.AttachmentReference{ .attachment = 0, .layout = .color_attachment_optimal },
+                    },
+                },
+            },
+        }, null);
     }
 
     fn initSwapchainImages(
         allocator: std.mem.Allocator,
-        context: *const RenderContext,
+        dev: Device,
         swapchain: zvk.SwapchainKHR,
         format: zvk.Format,
+        render_pass: zvk.RenderPass,
+        extent: zvk.Extent2D,
     ) ![]SwapImage {
-        const images = try context.dev.getSwapchainImagesAllocKHR(swapchain, allocator);
+        const images = try dev.getSwapchainImagesAllocKHR(swapchain, allocator);
         defer allocator.free(images);
 
         const swap_images = try allocator.alloc(SwapImage, images.len);
         errdefer allocator.free(swap_images);
 
         var last_idx: usize = 0;
-        errdefer for (0..last_idx) |i| swap_images[i].deinit();
+        errdefer for (0..last_idx) |i| swap_images[i].deinit(dev);
 
-        while (last_idx < images.len) {
-            swap_images[last_idx] = try SwapImage.init(context, images[last_idx], format);
-            last_idx += 1;
+        while (last_idx < images.len) : (last_idx += 1) {
+            swap_images[last_idx] = try SwapImage.init(dev, render_pass, images[last_idx], format, extent);
         }
         return swap_images;
     }
@@ -813,15 +755,21 @@ pub const Swapchain = struct {
     }
 
     const SwapImage = struct {
-        context: *const RenderContext,
-        handle: zvk.Image,
-        view: zvk.ImageView,
+        color_image: zvk.Image, // non-owning handle
+        color_view: zvk.ImageView,
+        framebuffer: zvk.Framebuffer,
 
-        pub fn init(context: *const RenderContext, handle: zvk.Image, format: zvk.Format) !@This() {
-            const view = try context.dev.createImageView(&zvk.ImageViewCreateInfo{
-                .image = handle,
+        pub fn init(
+            dev: vk.Device,
+            render_pass: zvk.RenderPass,
+            color_image: zvk.Image,
+            color_format: zvk.Format,
+            extent: zvk.Extent2D,
+        ) !@This() {
+            const color_view = try dev.createImageView(&zvk.ImageViewCreateInfo{
+                .image = color_image,
                 .view_type = .@"2d",
-                .format = format,
+                .format = color_format,
                 .components = .{
                     .r = .identity,
                     .g = .identity,
@@ -836,27 +784,40 @@ pub const Swapchain = struct {
                     .layer_count = 1,
                 },
             }, null);
-            errdefer context.dev.destroyImageView(view, null);
+            errdefer dev.destroyImageView(color_view, null);
+
+            const framebuffer = try dev.createFramebuffer(&zvk.FramebufferCreateInfo{
+                .render_pass = render_pass,
+                .attachment_count = 1,
+                .p_attachments = &.{color_view},
+                .width = extent.width,
+                .height = extent.height,
+                .layers = 1,
+            }, null);
+            errdefer dev.destroyFramebuffer(framebuffer, null);
 
             return .{
-                .context = context,
-                .handle = handle,
-                .view = view,
+                .color_image = color_image,
+                .color_view = color_view,
+                .framebuffer = framebuffer,
             };
         }
 
-        pub fn deinit(self: *@This()) void {
-            self.context.dev.destroyImageView(self.view, null);
+        pub fn deinit(self: *@This(), dev: vk.Device) void {
+            dev.destroyImageView(self.color_view, null);
+            dev.destroyFramebuffer(self.framebuffer, null);
         }
     };
 };
 
-const TextPipeline = struct {
+const TextRenderpass = struct {
+    vma_alloc: vma.Allocator,
     pipeline: zvk.Pipeline,
     pipeline_layout: zvk.PipelineLayout,
     vert_module: zvk.ShaderModule,
     frag_module: zvk.ShaderModule,
-    render_pass: zvk.RenderPass,
+
+    buffers: StagingBuffers,
 
     const GlyphVert = extern struct {
         pos: math.Vec(3, f32),
@@ -883,67 +844,94 @@ const TextPipeline = struct {
         };
     };
 
+    const default_vertex_input_state: zvk.PipelineVertexInputStateCreateInfo = .{
+        .vertex_binding_description_count = 1,
+        .p_vertex_binding_descriptions = @ptrCast(&GlyphVert.binding_description),
+        .vertex_attribute_description_count = 2,
+        .p_vertex_attribute_descriptions = &GlyphVert.attribute_descriptions,
+    };
+    const default_input_assembly_state: zvk.PipelineInputAssemblyStateCreateInfo = .{
+        .topology = .triangle_list,
+        .primitive_restart_enable = 0,
+    };
+    const default_dynamic_state: zvk.PipelineDynamicStateCreateInfo = .{
+        .dynamic_state_count = 2,
+        .p_dynamic_states = &[_]zvk.DynamicState{ .viewport, .scissor },
+    };
+    const default_color_blend_state: zvk.PipelineColorBlendStateCreateInfo = .{
+        .logic_op_enable = zvk.FALSE,
+        .logic_op = .copy,
+        .attachment_count = 1,
+        .p_attachments = &.{
+            zvk.PipelineColorBlendAttachmentState{
+                .blend_enable = zvk.FALSE,
+                .src_color_blend_factor = .one,
+                .dst_color_blend_factor = .zero,
+                .color_blend_op = .add,
+                .src_alpha_blend_factor = .one,
+                .dst_alpha_blend_factor = .zero,
+                .alpha_blend_op = .add,
+                .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = false },
+            },
+        },
+        .blend_constants = .{ 0, 0, 0, 0 },
+    };
+
+    const default_viewport_state: zvk.PipelineViewportStateCreateInfo = .{
+        .viewport_count = 1,
+        .p_viewports = null, // dynamic
+        .scissor_count = 1,
+        .p_scissors = null, // dynamic
+    };
+
+    const renderpass_attachments = [_]zvk.AttachmentDescription{
+        .{
+            .format = undefined, // set in `init`
+            .samples = .{ .@"1_bit" = true },
+            .load_op = .load,
+            .store_op = .store,
+            .stencil_load_op = .dont_care,
+            .stencil_store_op = .dont_care,
+            .initial_layout = .color_attachment_optimal,
+            .final_layout = .color_attachment_optimal,
+        },
+    };
+    const renderpass_subpasses = [_]zvk.SubpassDescription{
+        .{
+            .pipeline_bind_point = .graphics,
+            .color_attachment_count = 1,
+            .p_color_attachments = &[_]zvk.AttachmentReference{
+                .{
+                    .attachment = 0,
+                    .layout = .color_attachment_optimal,
+                },
+            },
+        },
+    };
+
     fn init(
         dev: Device,
         surface_format: zvk.Format,
-        load_op: zvk.AttachmentLoadOp,
-        opt_layout: zvk.PipelineLayout,
-        opt_vert_module: zvk.ShaderModule,
-        opt_frag_module: zvk.ShaderModule,
+        vma_alloc: vma.Allocator,
+        render_pass: zvk.RenderPass,
     ) !@This() {
-        const render_pass = try dev.createRenderPass(&zvk.RenderPassCreateInfo{
-            .attachment_count = 1,
-            .p_attachments = &[_]zvk.AttachmentDescription{
-                .{
-                    .format = surface_format,
-                    .samples = .{ .@"1_bit" = true },
-                    .load_op = load_op,
-                    .store_op = .store,
-                    .stencil_load_op = .dont_care,
-                    .stencil_store_op = .dont_care,
-                    .initial_layout = .color_attachment_optimal,
-                    .final_layout = .color_attachment_optimal,
-                },
-            },
-            .subpass_count = 1,
-            .p_subpasses = &[_]zvk.SubpassDescription{
-                .{
-                    .pipeline_bind_point = .graphics,
-                    .color_attachment_count = 1,
-                    .p_color_attachments = &[_]zvk.AttachmentReference{
-                        .{
-                            .attachment = 0,
-                            .layout = .color_attachment_optimal,
-                        },
-                    },
-                },
-            },
+        var attachments = renderpass_attachments;
+        attachments[0].format = surface_format;
+
+        const layout = try dev.createPipelineLayout(&.{}, null);
+        errdefer dev.destroyPipelineLayout(layout, null);
+
+        const vert_module = try dev.createShaderModule(&.{
+            .code_size = shaders.triangle_vert.len,
+            .p_code = @ptrCast(&shaders.triangle_vert),
         }, null);
-        errdefer dev.destroyRenderPass(render_pass, null);
+        errdefer dev.destroyShaderModule(vert_module, null);
 
-        const layout = if (opt_layout != .null_handle)
-            opt_layout
-        else
-            try dev.createPipelineLayout(&.{}, null);
-        errdefer if (opt_layout == .null_handle) dev.destroyPipelineLayout(layout, null);
-
-        const vert_module = if (opt_vert_module != .null_handle)
-            opt_vert_module
-        else
-            try dev.createShaderModule(&.{
-                .code_size = shaders.triangle_vert.len,
-                .p_code = @ptrCast(&shaders.triangle_vert),
-            }, null);
-        errdefer if (opt_vert_module == .null_handle) dev.destroyShaderModule(vert_module, null);
-
-        const frag_module = if (opt_frag_module != .null_handle)
-            opt_frag_module
-        else
-            try dev.createShaderModule(&.{
-                .code_size = shaders.triangle_frag.len,
-                .p_code = @ptrCast(&shaders.triangle_frag),
-            }, null);
-        errdefer if (opt_frag_module == .null_handle) dev.destroyShaderModule(frag_module, null);
+        const frag_module = try dev.createShaderModule(&.{
+            .code_size = shaders.triangle_frag.len,
+            .p_code = @ptrCast(&shaders.triangle_frag),
+        }, null);
+        errdefer dev.destroyShaderModule(frag_module, null);
 
         var pipeline: zvk.Pipeline = .null_handle;
         _ = try dev.createGraphicsPipelines(
@@ -970,23 +958,10 @@ const TextPipeline = struct {
                             .p_name = "main",
                         },
                     },
-                    .p_vertex_input_state = &zvk.PipelineVertexInputStateCreateInfo{
-                        .vertex_binding_description_count = 1,
-                        .p_vertex_binding_descriptions = @ptrCast(&GlyphVert.binding_description),
-                        .vertex_attribute_description_count = 2,
-                        .p_vertex_attribute_descriptions = &GlyphVert.attribute_descriptions,
-                    },
-                    .p_input_assembly_state = &zvk.PipelineInputAssemblyStateCreateInfo{
-                        .topology = .triangle_list,
-                        .primitive_restart_enable = 0,
-                    },
+                    .p_vertex_input_state = &default_vertex_input_state,
+                    .p_input_assembly_state = &default_input_assembly_state,
                     .p_tessellation_state = null,
-                    .p_viewport_state = &zvk.PipelineViewportStateCreateInfo{
-                        .viewport_count = 1,
-                        .p_viewports = null, // dynamic
-                        .scissor_count = 1,
-                        .p_scissors = null, // dynamic
-                    },
+                    .p_viewport_state = &default_viewport_state,
                     .p_rasterization_state = &zvk.PipelineRasterizationStateCreateInfo{
                         .flags = .{},
                         .depth_clamp_enable = zvk.FALSE,
@@ -1008,48 +983,167 @@ const TextPipeline = struct {
                         .sample_shading_enable = zvk.FALSE,
                     },
                     .p_depth_stencil_state = null,
-                    .p_color_blend_state = &zvk.PipelineColorBlendStateCreateInfo{
-                        .logic_op_enable = zvk.FALSE,
-                        .logic_op = .copy,
-                        .attachment_count = 1,
-                        .p_attachments = &.{
-                            zvk.PipelineColorBlendAttachmentState{
-                                .blend_enable = zvk.FALSE,
-                                .src_color_blend_factor = .one,
-                                .dst_color_blend_factor = .zero,
-                                .color_blend_op = .add,
-                                .src_alpha_blend_factor = .one,
-                                .dst_alpha_blend_factor = .zero,
-                                .alpha_blend_op = .add,
-                                .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = false },
-                            },
-                        },
-                        .blend_constants = .{ 0, 0, 0, 0 },
-                    },
-                    .p_dynamic_state = &zvk.PipelineDynamicStateCreateInfo{
-                        .dynamic_state_count = 2,
-                        .p_dynamic_states = &[_]zvk.DynamicState{ .viewport, .scissor },
-                    },
+                    .p_color_blend_state = &default_color_blend_state,
+                    .p_dynamic_state = &default_dynamic_state,
                 },
             },
             null,
             @ptrCast(&pipeline),
         );
+
         return .{
+            .vma_alloc = vma_alloc,
             .pipeline = pipeline,
             .pipeline_layout = layout,
             .vert_module = vert_module,
             .frag_module = frag_module,
-            .render_pass = render_pass,
+
+            .buffers = try allocateStagingBuffers(vma_alloc, 1),
         };
     }
 
-    fn deinit(self: *@This(), dev: Device) void {
-        if (self.pipeline_layout != .null_handle)
-            dev.destroyPipelineLayout(self.pipeline_layout, null);
-        if (self.pipeline != .null_handle)
-            dev.destroyPipeline(self.pipeline, null);
+    fn deinit(self: *@This(), dev: Device, vma_alloc: vma.Allocator) void {
+        dev.destroyPipelineLayout(self.pipeline_layout, null);
+        dev.destroyPipeline(self.pipeline, null);
+        dev.destroyShaderModule(self.vert_module, null);
+        dev.destroyShaderModule(self.frag_module, null);
 
-        dev.destroyRenderPass(self.render_pass, null);
+        vma.destroyBuffer(vma_alloc, self.buffers.vbo, self.buffers.vbo_allocation);
+        vma.destroyBuffer(vma_alloc, self.buffers.ibo, self.buffers.ibo_allocation);
+    }
+
+    const StagingBuffers = struct {
+        size_factor: u32 = 1,
+
+        vbo: zvk.Buffer,
+        vbo_allocation: vma.Allocation,
+        vbo_info: vma.AllocationInfo,
+        vertex_count: u32 = 0,
+
+        ibo: zvk.Buffer,
+        ibo_allocation: vma.Allocation,
+        ibo_info: vma.AllocationInfo,
+        indices_count: u32 = 0,
+    };
+
+    fn allocateStagingBuffers(vma_alloc: vma.Allocator, size_factor: u32) !StagingBuffers {
+        std.debug.assert(size_factor != 0);
+
+        var vbo_info: vma.AllocationInfo = undefined;
+        var vbo_allocation: vma.Allocation = undefined;
+        const vbo_buffer = try vma.createBuffer(vma_alloc, .{
+            .size = 16 * 1024 * size_factor,
+            .usage = .{ .transfer_src_bit = true },
+            .sharing_mode = .exclusive,
+        }, .{
+            .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
+            .usage = .cpu_to_gpu,
+            .required_flags = .{ .host_visible_bit = true, .host_coherent_bit = true },
+        }, &vbo_allocation, &vbo_info);
+
+        var ibo_info: vma.AllocationInfo = undefined;
+        var ibo_allocation: vma.Allocation = undefined;
+        const ibo_buffer = try vma.createBuffer(vma_alloc, .{
+            .size = 1000 * 6 * @sizeOf(u32) * size_factor,
+            .usage = .{ .transfer_src_bit = true },
+            .sharing_mode = .exclusive,
+        }, .{
+            .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
+            .usage = .cpu_to_gpu,
+            .required_flags = .{ .host_visible_bit = true, .host_coherent_bit = true },
+        }, &ibo_allocation, &ibo_info);
+
+        return StagingBuffers{
+            .vbo = vbo_buffer,
+            .vbo_allocation = vbo_allocation,
+            .vbo_info = vbo_info,
+
+            .ibo = ibo_buffer,
+            .ibo_allocation = ibo_allocation,
+            .ibo_info = ibo_info,
+        };
+    }
+
+    const FlushInfo = struct {
+        pipeline: zvk.Pipeline,
+        buffers: StagingBuffers,
+
+        completion_sem: zvk.Semaphore = .null_handle,
+
+        fn recordCommandBuffers(self: @This(), dev: Device, frame: *FrameData) void {
+            dev.cmdBindPipeline(frame.cmdbuf, .graphics, self.pipeline);
+            dev.cmdBindVertexBuffers(frame.cmdbuf, 0, 1, &.{frame.gpu_vbo}, &.{frame.gpu_vbo_offset});
+            dev.cmdBindIndexBuffer(frame.cmdbuf, frame.gpu_ibo, frame.gpu_ibo_offset, .uint32);
+            dev.cmdDrawIndexed(frame.cmdbuf, self.buffers.indices_count, self.buffers.indices_count / 6, 0, 0, 0);
+
+            const vbo_size = self.buffers.vertex_count * @sizeOf(GlyphVert);
+            const ibo_size = self.buffers.indices_count * @sizeOf(u32);
+
+            dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.buffers.vbo, frame.gpu_vbo, 1, &.{
+                zvk.BufferCopy{
+                    .src_offset = 0,
+                    .dst_offset = frame.gpu_vbo_offset,
+                    .size = vbo_size,
+                },
+            });
+            dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.buffers.ibo, frame.gpu_ibo, 1, &.{
+                zvk.BufferCopy{
+                    .src_offset = 0,
+                    .dst_offset = frame.gpu_ibo_offset,
+                    .size = ibo_size,
+                },
+            });
+
+            frame.gpu_vbo_offset += vbo_size;
+            frame.gpu_ibo_offset += ibo_size;
+        }
+    };
+
+    fn flush(self: *@This(), reason_full: bool) !FlushInfo {
+        const flush_info = FlushInfo{
+            .pipeline = self.pipeline,
+            .buffers = self.buffers,
+        };
+        if (reason_full) {
+            self.buffers.size_factor += 1;
+        }
+
+        self.buffers = try allocateStagingBuffers(self.vma_alloc, self.buffers.size_factor);
+        return flush_info;
+    }
+
+    fn buffersFull(self: *const @This()) bool {
+        const vbo = (self.buffers.vertex_count + 4) * @sizeOf(GlyphVert) >= self.buffers.vbo_info.size;
+        const ibo = (self.buffers.indices_count + 6) * @sizeOf(u32) >= self.buffers.ibo_info.size;
+
+        return vbo or ibo;
+    }
+
+    fn pushGlyph(self: *@This(), x: f32, y: f32) void {
+        std.debug.assert(self.buffersFull() == false);
+        std.debug.assert(self.buffers.vbo_info.pMappedData != null);
+
+        const vbo_data: [*]GlyphVert = @alignCast(@ptrCast(self.buffers.vbo_info.pMappedData orelse
+            std.debug.panic("vertex buffer not mapped", .{})));
+
+        const ibo_data: [*]u32 = @alignCast(@ptrCast(self.buffers.ibo_info.pMappedData orelse
+            std.debug.panic("index buffer not mapped", .{})));
+
+        const vbo_slice = vbo_data[self.buffers.vertex_count .. self.buffers.vertex_count + 4];
+        vbo_slice[0] = GlyphVert{ .pos = .{ x, y, 0 }, .color = .{ 1, 1, 1 } };
+        vbo_slice[1] = GlyphVert{ .pos = .{ x + 0.1, y, 0 }, .color = .{ 1, 1, 1 } };
+        vbo_slice[2] = GlyphVert{ .pos = .{ x + 0.1, y + 0.1, 0 }, .color = .{ 1, 1, 1 } };
+        vbo_slice[3] = GlyphVert{ .pos = .{ x, y + 0.1, 0 }, .color = .{ 1, 1, 1 } };
+
+        const ibo_slice = ibo_data[self.buffers.indices_count .. self.buffers.indices_count + 6];
+        ibo_slice[0] = self.buffers.vertex_count + 0;
+        ibo_slice[1] = self.buffers.vertex_count + 1;
+        ibo_slice[2] = self.buffers.vertex_count + 2;
+        ibo_slice[3] = self.buffers.vertex_count + 2;
+        ibo_slice[4] = self.buffers.vertex_count + 3;
+        ibo_slice[5] = self.buffers.vertex_count + 0;
+
+        self.buffers.vertex_count += @intCast(vbo_slice.len);
+        self.buffers.indices_count += @intCast(ibo_slice.len);
     }
 };

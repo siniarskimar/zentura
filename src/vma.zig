@@ -98,7 +98,7 @@ pub fn createBuffer(
     buffer_create_info: zvk.BufferCreateInfo,
     allocation_create_info: AllocationCreateInfo,
     allocation: *Allocation,
-    allocation_info: ?*vma.VmaAllocationInfo,
+    allocation_info: ?*AllocationInfo,
 ) !zvk.Buffer {
     var buffer: zvk.Buffer = .null_handle;
     const result: zvk.Result = @enumFromInt(vma.vmaCreateBuffer(

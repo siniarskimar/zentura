@@ -84,6 +84,7 @@ pub fn main() !void {
                 else => {},
             }
         }
+        try vkrenderer.beginFrame();
         try vkrenderer.present();
     }
 }
