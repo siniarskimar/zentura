@@ -18,7 +18,8 @@ jobs:
       - uses: mlugg/setup-zig@v1
         with:
           version: 0.13.0
-      - run: sudo apt-get update -y && sudo apt-get install -y wayland mesa
+      - run: sudo apt-get update -y
+      - run: sudo apt-get install -y libsdl2-dev
       - run: zig build check
   fmt:
     runs-on: ubuntu-latest
