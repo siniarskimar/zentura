@@ -36,7 +36,7 @@ ft_library: ft.FT_Library,
 ft_face: ft.FT_Face = null,
 
 const shaders = @import("shaders");
-const MAX_FRAMES_IN_FLIGHT: usize = 3;
+const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 const FrameData = struct {
     allocator: std.mem.Allocator,
@@ -463,10 +463,6 @@ pub fn present(self: *@This()) !void {
     });
 
     self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-    if (self.should_resize) {
-        try self.doResize();
-    }
 }
 
 pub fn beginFrame(self: *@This()) !void {
@@ -482,6 +478,9 @@ pub fn beginFrame(self: *@This()) !void {
         zvk.Result.success => {},
         zvk.Result.timeout => return error.Timeout,
         else => return error.Unknown,
+    }
+    if (self.should_resize) {
+        try self.doResize();
     }
     try dev.resetFences(1, &.{frame.render_fence});
     try dev.resetCommandBuffer(frame.cmdbuf, .{});
@@ -656,6 +655,7 @@ pub const Swapchain = struct {
             swapimage.deinit(self.context.dev);
         }
         allocator.free(self.swap_images);
+        self.context.dev.destroyRenderPass(self.render_pass, null);
     }
 
     pub fn destroy(self: *@This(), allocator: std.mem.Allocator) void {
@@ -666,7 +666,6 @@ pub const Swapchain = struct {
             std.time.sleep(std.time.ns_per_ms * 20);
         };
         self.destroyWithoutHandle(allocator);
-        self.context.dev.destroyRenderPass(self.render_pass, null);
         self.context.dev.destroySwapchainKHR(self.handle, null);
     }
 
