@@ -26,7 +26,6 @@ pub fn build(b: *std.Build) void {
         exe_zentura.linkLibrary(lib_freetype);
     }
     exe_zentura.linkSystemLibrary("sdl2");
-    exe_zentura.linkSystemLibrary("fontconfig");
     b.installArtifact(exe_zentura);
 
     const c_headers = b.addTranslateC(.{
