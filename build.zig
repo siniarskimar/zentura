@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) void {
 
     const shaders = vulkan_zig.ShaderCompileStep.create(
         b,
-        &.{ "glslang", "--target-env=vulkan1.0" },
+        &.{ "glslang", "--target-env", "vulkan1.0" },
         "-o",
     );
     shaders.add("triangle_vert", "src/shader/triangle.vert", .{});
