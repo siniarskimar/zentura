@@ -3,8 +3,7 @@ const builtin = @import("builtin");
 
 const log = std.log;
 const vk = @import("./vk.zig");
-const VkRenderer = @import("./VkRenderer.zig");
-const shaders = @import("shaders");
+const VkRenderer = @import("./vk/VkRenderer.zig");
 const c = @import("c");
 
 const ft = VkRenderer.ft;

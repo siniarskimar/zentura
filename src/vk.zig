@@ -35,6 +35,7 @@ pub const DeviceDispatch = zvk.DeviceWrapper(apis);
 
 pub const Instance = zvk.InstanceProxy(apis);
 pub const Device = zvk.DeviceProxy(apis);
+pub const CommandBuffer = zvk.CommandBufferProxy(apis);
 
 pub const vkGetInstanceProcAddressFn = *const fn (
     instance: zvk.Instance,
@@ -51,8 +52,6 @@ pub const InstanceContext = struct {
         .engine_version = 0,
         .api_version = zvk.API_VERSION_1_1,
     };
-
-    pub const CommandBuffer = zvk.CommandBufferProxy(apis);
 
     pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
         const getInstanceProcAddress = @as(

@@ -58,9 +58,9 @@ pub fn build(b: *std.Build) void {
         &.{ "glslang", "--target-env", "vulkan1.0" },
         "-o",
     );
-    shaders.add("triangle_vert", "src/shader/triangle.vert", .{});
-    shaders.add("triangle_frag", "src/shader/triangle.frag", .{});
-    exe_zentura.root_module.addImport("shaders", shaders.getModule());
+    shaders.add("triangle_vert", "src/vk/shader/triangle.vert", .{});
+    shaders.add("triangle_frag", "src/vk/shader/triangle.frag", .{});
+    exe_zentura.root_module.addImport("vk-shaders", shaders.getModule());
 
     const run_zentura = b.addRunArtifact(exe_zentura);
     if (b.args) |args| {
