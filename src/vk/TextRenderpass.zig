@@ -264,8 +264,6 @@ pub const FlushInfo = struct {
     pipeline: zvk.Pipeline,
     buffers: StagingBuffers,
 
-    completion_sem: zvk.Semaphore = .null_handle,
-
     pub fn recordCommandBuffers(self: @This(), dev: vk.Device, frame: *FrameData) void {
         dev.cmdBindPipeline(frame.cmdbuf, .graphics, self.pipeline);
         dev.cmdBindVertexBuffers(frame.cmdbuf, 0, 1, &.{frame.gpu_vbo}, &.{frame.gpu_vbo_offset});
