@@ -26,7 +26,6 @@ ctx: GraphicsContext,
 swapchain: Swapchain,
 vma_allocator: vma.Allocator,
 
-text_renderpass: TextRenderpass,
 cmdpool: zvk.CommandPool,
 frames: []FrameData,
 current_frame: usize = 0,
@@ -48,34 +47,23 @@ pub const FrameData = struct {
     render_semaphore: zvk.Semaphore,
     render_fence: zvk.Fence,
 
-    gpu_vbo: zvk.Buffer,
-    gpu_vbo_memalloc: vma.Allocation,
-    gpu_vbo_info: vma.AllocationInfo,
-    gpu_vbo_offset: zvk.DeviceSize,
-
-    gpu_ibo: zvk.Buffer,
-    gpu_ibo_memalloc: vma.Allocation,
-    gpu_ibo_info: vma.AllocationInfo,
-    gpu_ibo_offset: zvk.DeviceSize,
-
-    transfer_cmdbuf: zvk.CommandBuffer,
-    transfer_semaphore: zvk.Semaphore,
-    text_transfer_info: std.ArrayListUnmanaged(TextRenderpass.FlushInfo) = .{},
-    text_transfer_count: usize = 0,
+    text_renderpass: TextRenderpass,
 
     fn init(
         allocator: std.mem.Allocator,
         dev: Device,
+        surface_format: zvk.Format,
+        surface_renderpass: zvk.RenderPass,
         cmdpool: zvk.CommandPool,
         vma_alloc: vma.Allocator,
     ) !@This() {
-        var cmdbufs = [1]zvk.CommandBuffer{.null_handle} ** 2;
+        var cmdbufs = [1]zvk.CommandBuffer{.null_handle};
         try dev.allocateCommandBuffers(&zvk.CommandBufferAllocateInfo{
             .command_pool = cmdpool,
-            .command_buffer_count = 2,
+            .command_buffer_count = 1,
             .level = .primary,
         }, &cmdbufs);
-        errdefer dev.freeCommandBuffers(cmdpool, 2, &cmdbufs);
+        errdefer dev.freeCommandBuffers(cmdpool, 1, &cmdbufs);
 
         const image_acquired = try dev.createSemaphore(&.{}, null);
         errdefer dev.destroySemaphore(image_acquired, null);
@@ -88,48 +76,6 @@ pub const FrameData = struct {
         }, null);
         errdefer dev.destroyFence(render_fence, null);
 
-        var gpu_vbo_info: vma.AllocationInfo = undefined;
-        var gpu_vbo_memalloc: vma.Allocation = undefined;
-        const gpu_vbo = try vma.createBuffer(
-            vma_alloc,
-            zvk.BufferCreateInfo{
-                // 1 MiB
-                .size = 1 * 1024 * 1024,
-                .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
-                .sharing_mode = .exclusive,
-            },
-            .{
-                .flags = .{},
-                // Prefer for this buffer to be allocated on GPU
-                .preferred_flags = @bitCast(zvk.MemoryPropertyFlags{ .device_local_bit = true }),
-                .usage = .gpu_only,
-            },
-            &gpu_vbo_memalloc,
-            &gpu_vbo_info,
-        );
-
-        var gpu_ibo_info: vma.AllocationInfo = undefined;
-        var gpu_ibo_memalloc: vma.Allocation = undefined;
-        const gpu_ibo = try vma.createBuffer(
-            vma_alloc,
-            zvk.BufferCreateInfo{
-                .size = 1 * 1024 * 1024,
-                .usage = .{ .transfer_dst_bit = true, .index_buffer_bit = true },
-                .sharing_mode = .exclusive,
-            },
-            .{
-                .flags = .{},
-                // Prefer for this buffer to be allocated on GPU
-                .preferred_flags = @bitCast(zvk.MemoryPropertyFlags{ .device_local_bit = true }),
-                .usage = .gpu_only,
-            },
-            &gpu_ibo_memalloc,
-            &gpu_ibo_info,
-        );
-
-        const transfer_semaphore = try dev.createSemaphore(&.{}, null);
-        errdefer dev.destroySemaphore(transfer_semaphore, null);
-
         return FrameData{
             .allocator = allocator,
             .cmdpool = cmdpool,
@@ -137,43 +83,25 @@ pub const FrameData = struct {
             .image_acquired_semaphore = image_acquired,
             .render_semaphore = render_semaphore,
             .render_fence = render_fence,
-
-            .gpu_vbo = gpu_vbo,
-            .gpu_vbo_memalloc = gpu_vbo_memalloc,
-            .gpu_vbo_info = gpu_vbo_info,
-            .gpu_vbo_offset = 0,
-
-            .gpu_ibo = gpu_ibo,
-            .gpu_ibo_memalloc = gpu_ibo_memalloc,
-            .gpu_ibo_info = gpu_ibo_info,
-            .gpu_ibo_offset = 0,
-
-            .transfer_cmdbuf = cmdbufs[1],
-            .transfer_semaphore = transfer_semaphore,
+            .text_renderpass = try TextRenderpass.init(allocator, dev, surface_format, vma_alloc, surface_renderpass),
         };
     }
 
     fn deinit(self: *@This(), dev: Device, vma_alloc: vma.Allocator) void {
-        vma.destroyBuffer(vma_alloc, self.gpu_vbo, self.gpu_vbo_memalloc);
-        vma.destroyBuffer(vma_alloc, self.gpu_ibo, self.gpu_ibo_memalloc);
-        dev.freeCommandBuffers(self.cmdpool, 2, &[2]zvk.CommandBuffer{ self.cmdbuf, self.transfer_cmdbuf });
-        dev.destroySemaphore(self.transfer_semaphore, null);
+        dev.freeCommandBuffers(self.cmdpool, 1, &[1]zvk.CommandBuffer{self.cmdbuf});
         dev.destroySemaphore(self.image_acquired_semaphore, null);
         dev.destroySemaphore(self.render_semaphore, null);
         dev.destroyFence(self.render_fence, null);
-        self.text_transfer_info.deinit(self.allocator);
+        self.text_renderpass.deinit(dev, vma_alloc);
     }
 
-    fn clearFlushes(self: *@This(), vma_alloc: vma.Allocator) void {
-        const text_flushes: []TextRenderpass.FlushInfo = self.text_transfer_info.items[0..self.text_transfer_count];
-        for (text_flushes, 0..) |flush_info, idx| {
-            vma.destroyBuffer(vma_alloc, flush_info.buffers.vbo, flush_info.buffers.vbo_allocation);
-            vma.destroyBuffer(vma_alloc, flush_info.buffers.ibo, flush_info.buffers.ibo_allocation);
-            _ = self.text_transfer_info.swapRemove(idx);
-        }
-        self.text_transfer_count = 0;
-        self.gpu_vbo_offset = 0;
-        self.gpu_ibo_offset = 0;
+    fn record(self: *@This(), dev: Device) !void {
+        try self.text_renderpass.pushGlyph(10, 10);
+        self.text_renderpass.record(dev, self.cmdbuf);
+    }
+
+    fn clear(self: *@This()) void {
+        self.text_renderpass.clear();
     }
 };
 
@@ -226,17 +154,9 @@ pub fn init(
         errdefer for (0..idx) |k| frames[k].deinit(ctx.dev, vma_allocator);
 
         while (idx < frames.len) : (idx += 1) {
-            frames[idx] = try FrameData.init(allocator, ctx.dev, cmdpool, vma_allocator);
+            frames[idx] = try FrameData.init(allocator, ctx.dev, swapchain.surface_format.format, swapchain.render_pass, cmdpool, vma_allocator);
         }
     }
-
-    const text_renderpass = try TextRenderpass.init(
-        ctx.dev,
-        swapchain.surface_format.format,
-        vma_allocator,
-        swapchain.render_pass,
-    );
-    errdefer text_renderpass.deinit(ctx.dev);
 
     return .{
         .window = window,
@@ -248,8 +168,6 @@ pub fn init(
 
         .cmdpool = cmdpool,
         .frames = frames,
-
-        .text_renderpass = text_renderpass,
     };
 }
 
@@ -258,14 +176,10 @@ pub fn deinit(self: *@This()) void {
     self.ctx.dev.deviceWaitIdle() catch std.time.sleep(std.time.ns_per_ms * 20);
 
     for (self.frames) |*frame| {
-        frame.text_transfer_count = frame.text_transfer_info.items.len;
-        frame.clearFlushes(self.vma_allocator);
         frame.deinit(self.ctx.dev, self.vma_allocator);
     }
     self.allocator.free(self.frames);
     self.ctx.dev.destroyCommandPool(self.cmdpool, null);
-
-    self.text_renderpass.deinit(self.ctx.dev, self.vma_allocator);
 
     self.swapchain.destroy(allocator);
     vma.destroyAllocator(self.vma_allocator);
@@ -305,25 +219,7 @@ pub fn present(self: *@This()) !void {
     const frame = self.getCurrentFrame();
     const extent = self.swapchain.extent;
 
-    // switch (try dev.waitForFences(
-    //     1,
-    //     &.{frame.secondary_fence},
-    //     zvk.TRUE,
-    //     std.time.ns_per_s,
-    // )) {
-    //     zvk.Result.success => {},
-    //     zvk.Result.timeout => return error.Timeout,
-    //     else => return error.Unknown,
-    // }
-    // try dev.resetFences(1, &.{frame.secondary_fence});
-    try dev.resetCommandBuffer(frame.cmdbuf, .{});
-    try dev.resetCommandBuffer(frame.transfer_cmdbuf, .{});
-    frame.clearFlushes(self.vma_allocator);
-
-    self.text_renderpass.pushGlyph(0, 0);
-    self.text_renderpass.pushGlyph(0.5, 0.5);
-    try frame.text_transfer_info.append(self.allocator, try self.text_renderpass.flush(false));
-    frame.text_transfer_count += 1;
+    frame.clear();
 
     const clear = zvk.ClearValue{ .color = .{
         .float_32 = .{ 0, 0, 0, 1 },
@@ -343,9 +239,6 @@ pub fn present(self: *@This()) !void {
     try dev.beginCommandBuffer(frame.cmdbuf, &zvk.CommandBufferBeginInfo{
         .flags = .{ .one_time_submit_bit = true },
     });
-    try dev.beginCommandBuffer(frame.transfer_cmdbuf, &zvk.CommandBufferBeginInfo{
-        .flags = .{ .one_time_submit_bit = true },
-    });
 
     dev.cmdSetViewport(frame.cmdbuf, 0, 1, @ptrCast(&viewport));
     dev.cmdSetScissor(frame.cmdbuf, 0, 1, @ptrCast(&scissor));
@@ -363,27 +256,15 @@ pub fn present(self: *@This()) !void {
         .p_clear_values = @ptrCast(&clear),
     }, .@"inline");
 
-    for (frame.text_transfer_info.items[0..frame.text_transfer_count]) |flush_info| {
-        flush_info.recordCommandBuffers(dev, frame);
-    }
+    try frame.record(dev);
 
-    try dev.endCommandBuffer(frame.transfer_cmdbuf);
     dev.cmdEndRenderPass(frame.cmdbuf);
     try dev.endCommandBuffer(frame.cmdbuf);
 
-    try dev.queueSubmit(self.ctx.graphics_queue.handle, 2, &.{
+    try dev.queueSubmit(self.ctx.graphics_queue.handle, 1, &.{
         zvk.SubmitInfo{
             .wait_semaphore_count = 1,
             .p_wait_semaphores = &.{frame.image_acquired_semaphore},
-            .p_wait_dst_stage_mask = &.{.{ .top_of_pipe_bit = true }},
-            .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast(&frame.transfer_cmdbuf),
-            .signal_semaphore_count = 1,
-            .p_signal_semaphores = &.{frame.transfer_semaphore},
-        },
-        zvk.SubmitInfo{
-            .wait_semaphore_count = 1,
-            .p_wait_semaphores = &.{frame.transfer_semaphore},
             .p_wait_dst_stage_mask = &.{.{ .top_of_pipe_bit = true }},
             .command_buffer_count = 1,
             .p_command_buffers = &.{frame.cmdbuf},
@@ -422,7 +303,6 @@ pub fn beginFrame(self: *@This()) !void {
     }
     try dev.resetFences(1, &.{frame.render_fence});
     try dev.resetCommandBuffer(frame.cmdbuf, .{});
-    try dev.resetCommandBuffer(frame.transfer_cmdbuf, .{});
 
     const acquired = dev.acquireNextImageKHR(
         self.swapchain.handle,

@@ -13,17 +13,19 @@ pipeline_layout: zvk.PipelineLayout,
 vert_module: zvk.ShaderModule,
 frag_module: zvk.ShaderModule,
 
-buffers: StagingBuffers,
+buffers: std.ArrayList(StagingBuffers),
 
 const GlyphVert = extern struct {
     pos: math.Vec(3, f32),
+    width: math.Vec(2, f32),
     color: math.Vec(3, f32),
 
     const binding_description = zvk.VertexInputBindingDescription{
         .binding = 0,
         .stride = @sizeOf(GlyphVert),
-        .input_rate = .vertex,
+        .input_rate = .instance,
     };
+
     const attribute_descriptions = [_]zvk.VertexInputAttributeDescription{
         .{
             .binding = 0,
@@ -37,13 +39,19 @@ const GlyphVert = extern struct {
             .format = zvk.Format.r32g32b32_sfloat,
             .offset = @offsetOf(GlyphVert, "color"),
         },
+        .{
+            .binding = 0,
+            .location = 2,
+            .format = zvk.Format.r32g32_sfloat,
+            .offset = @offsetOf(GlyphVert, "width"),
+        },
     };
 };
 
 const default_vertex_input_state: zvk.PipelineVertexInputStateCreateInfo = .{
     .vertex_binding_description_count = 1,
     .p_vertex_binding_descriptions = @ptrCast(&GlyphVert.binding_description),
-    .vertex_attribute_description_count = 2,
+    .vertex_attribute_description_count = 3,
     .p_vertex_attribute_descriptions = &GlyphVert.attribute_descriptions,
 };
 const default_input_assembly_state: zvk.PipelineInputAssemblyStateCreateInfo = .{
@@ -106,26 +114,24 @@ const renderpass_subpasses = [_]zvk.SubpassDescription{
 };
 
 pub fn init(
+    allocator: std.mem.Allocator,
     dev: vk.Device,
-    surface_format: zvk.Format,
+    _: zvk.Format,
     vma_alloc: vma.Allocator,
     render_pass: zvk.RenderPass,
 ) !@This() {
-    var attachments = renderpass_attachments;
-    attachments[0].format = surface_format;
-
     const layout = try dev.createPipelineLayout(&.{}, null);
     errdefer dev.destroyPipelineLayout(layout, null);
 
     const vert_module = try dev.createShaderModule(&.{
-        .code_size = shaders.triangle_vert.len,
-        .p_code = @ptrCast(&shaders.triangle_vert),
+        .code_size = shaders.glyph_vert.len,
+        .p_code = @ptrCast(&shaders.glyph_vert),
     }, null);
     errdefer dev.destroyShaderModule(vert_module, null);
 
     const frag_module = try dev.createShaderModule(&.{
-        .code_size = shaders.triangle_frag.len,
-        .p_code = @ptrCast(&shaders.triangle_frag),
+        .code_size = shaders.glyph_frag.len,
+        .p_code = @ptrCast(&shaders.glyph_frag),
     }, null);
     errdefer dev.destroyShaderModule(frag_module, null);
 
@@ -187,6 +193,11 @@ pub fn init(
         @ptrCast(&pipeline),
     );
 
+    var buffers = std.ArrayList(StagingBuffers).init(allocator);
+    errdefer buffers.deinit();
+
+    try buffers.append(try StagingBuffers.init(vma_alloc, 512));
+
     return .{
         .vma_alloc = vma_alloc,
         .pipeline = pipeline,
@@ -194,7 +205,7 @@ pub fn init(
         .vert_module = vert_module,
         .frag_module = frag_module,
 
-        .buffers = try allocateStagingBuffers(vma_alloc, 1),
+        .buffers = buffers,
     };
 }
 
@@ -204,12 +215,14 @@ pub fn deinit(self: *@This(), dev: vk.Device, vma_alloc: vma.Allocator) void {
     dev.destroyShaderModule(self.vert_module, null);
     dev.destroyShaderModule(self.frag_module, null);
 
-    vma.destroyBuffer(vma_alloc, self.buffers.vbo, self.buffers.vbo_allocation);
-    vma.destroyBuffer(vma_alloc, self.buffers.ibo, self.buffers.ibo_allocation);
+    for (self.buffers.items) |*buf| {
+        buf.deinit(vma_alloc);
+    }
+    self.buffers.deinit();
 }
 
 const StagingBuffers = struct {
-    size_factor: u32 = 1,
+    glyph_count: u32 = 1,
 
     vbo: zvk.Buffer,
     vbo_allocation: vma.Allocation,
@@ -220,123 +233,101 @@ const StagingBuffers = struct {
     ibo_allocation: vma.Allocation,
     ibo_info: vma.AllocationInfo,
     indices_count: u32 = 0,
-};
 
-fn allocateStagingBuffers(vma_alloc: vma.Allocator, size_factor: u32) !StagingBuffers {
-    std.debug.assert(size_factor != 0);
+    fn init(vma_alloc: vma.Allocator, glyph_count: u32) !@This() {
+        std.debug.assert(glyph_count != 0);
 
-    var vbo_info: vma.AllocationInfo = undefined;
-    var vbo_allocation: vma.Allocation = undefined;
-    const vbo_buffer = try vma.createBuffer(vma_alloc, .{
-        .size = 16 * 1024 * size_factor,
-        .usage = .{ .transfer_src_bit = true },
-        .sharing_mode = .exclusive,
-    }, .{
-        .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
-        .usage = .cpu_to_gpu,
-        .required_flags = .{ .host_visible_bit = true, .host_coherent_bit = true },
-    }, &vbo_allocation, &vbo_info);
+        var vbo_info: vma.AllocationInfo = undefined;
+        var vbo_allocation: vma.Allocation = undefined;
+        const vbo_buffer = try vma.createBuffer(vma_alloc, .{
+            .size = 4 * @sizeOf(f32) * glyph_count,
+            .usage = .{ .transfer_src_bit = true },
+            .sharing_mode = .exclusive,
+        }, .{
+            .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
+            .usage = .cpu_to_gpu,
+            .required_flags = .{ .host_visible_bit = true, .host_coherent_bit = true },
+        }, &vbo_allocation, &vbo_info);
+        errdefer vma.destroyBuffer(vma_alloc, vbo_buffer, vbo_allocation);
 
-    var ibo_info: vma.AllocationInfo = undefined;
-    var ibo_allocation: vma.Allocation = undefined;
-    const ibo_buffer = try vma.createBuffer(vma_alloc, .{
-        .size = 1000 * 6 * @sizeOf(u32) * size_factor,
-        .usage = .{ .transfer_src_bit = true },
-        .sharing_mode = .exclusive,
-    }, .{
-        .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
-        .usage = .cpu_to_gpu,
-        .required_flags = .{ .host_visible_bit = true, .host_coherent_bit = true },
-    }, &ibo_allocation, &ibo_info);
+        var ibo_info: vma.AllocationInfo = undefined;
+        var ibo_allocation: vma.Allocation = undefined;
+        const ibo_buffer = try vma.createBuffer(vma_alloc, .{
+            .size = 6 * @sizeOf(u32) * glyph_count,
+            .usage = .{ .transfer_src_bit = true },
+            .sharing_mode = .exclusive,
+        }, .{
+            .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
+            .usage = .cpu_to_gpu,
+            .required_flags = .{ .host_visible_bit = true, .host_coherent_bit = true },
+        }, &ibo_allocation, &ibo_info);
 
-    return StagingBuffers{
-        .vbo = vbo_buffer,
-        .vbo_allocation = vbo_allocation,
-        .vbo_info = vbo_info,
+        return StagingBuffers{
+            .glyph_count = glyph_count,
 
-        .ibo = ibo_buffer,
-        .ibo_allocation = ibo_allocation,
-        .ibo_info = ibo_info,
-    };
-}
+            .vbo = vbo_buffer,
+            .vbo_allocation = vbo_allocation,
+            .vbo_info = vbo_info,
 
-pub const FlushInfo = struct {
-    pipeline: zvk.Pipeline,
-    buffers: StagingBuffers,
+            .ibo = ibo_buffer,
+            .ibo_allocation = ibo_allocation,
+            .ibo_info = ibo_info,
+        };
+    }
 
-    pub fn recordCommandBuffers(self: @This(), dev: vk.Device, frame: *FrameData) void {
-        dev.cmdBindPipeline(frame.cmdbuf, .graphics, self.pipeline);
-        dev.cmdBindVertexBuffers(frame.cmdbuf, 0, 1, &.{frame.gpu_vbo}, &.{frame.gpu_vbo_offset});
-        dev.cmdBindIndexBuffer(frame.cmdbuf, frame.gpu_ibo, frame.gpu_ibo_offset, .uint32);
-        dev.cmdDrawIndexed(frame.cmdbuf, self.buffers.indices_count, self.buffers.indices_count / 6, 0, 0, 0);
+    fn deinit(self: *@This(), vma_alloc: vma.Allocator) void {
+        vma.destroyBuffer(vma_alloc, self.vbo, self.vbo_allocation);
+        vma.destroyBuffer(vma_alloc, self.ibo, self.ibo_allocation);
+    }
 
-        const vbo_size = self.buffers.vertex_count * @sizeOf(GlyphVert);
-        const ibo_size = self.buffers.indices_count * @sizeOf(u32);
-
-        dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.buffers.vbo, frame.gpu_vbo, 1, &.{
-            zvk.BufferCopy{
-                .src_offset = 0,
-                .dst_offset = frame.gpu_vbo_offset,
-                .size = vbo_size,
-            },
-        });
-        dev.cmdCopyBuffer(frame.transfer_cmdbuf, self.buffers.ibo, frame.gpu_ibo, 1, &.{
-            zvk.BufferCopy{
-                .src_offset = 0,
-                .dst_offset = frame.gpu_ibo_offset,
-                .size = ibo_size,
-            },
-        });
-
-        frame.gpu_vbo_offset += vbo_size;
-        frame.gpu_ibo_offset += ibo_size;
+    fn record(self: @This(), dev: vk.Device, cmdbuf: vk.CommandBuffer) void {
+        dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
+        dev.cmdBindVertexBuffers(cmdbuf, 0, 1, &.{self.vbo}, &.{0});
+        dev.cmdBindIndexBuffer(cmdbuf, self.ibo, 0, .uint32);
+        dev.cmdDrawIndexed(cmdbuf, self.buffers.indices_count, self.buffers.vertex_count, 0, 0, 0);
     }
 };
 
-pub fn flush(self: *@This(), reason_full: bool) !FlushInfo {
-    const flush_info = FlushInfo{
-        .pipeline = self.pipeline,
-        .buffers = self.buffers,
-    };
-    if (reason_full) {
-        self.buffers.size_factor += 1;
+pub fn pushGlyph(self: *@This(), x: f32, y: f32) !void {
+    var buffers = &self.buffers.items[self.buffers.items.len - 1];
+    if (buffers.glyph_count == buffers.vertex_count) {
+        try self.buffers.append(try StagingBuffers.init(self.vma_alloc, buffers.glyph_count * 2));
+        buffers = &self.buffers.items[self.buffers.items.len - 1];
     }
 
-    self.buffers = try allocateStagingBuffers(self.vma_alloc, self.buffers.size_factor);
-    return flush_info;
-}
-
-pub fn buffersFull(self: *const @This()) bool {
-    const vbo = (self.buffers.vertex_count + 4) * @sizeOf(GlyphVert) >= self.buffers.vbo_info.size;
-    const ibo = (self.buffers.indices_count + 6) * @sizeOf(u32) >= self.buffers.ibo_info.size;
-
-    return vbo or ibo;
-}
-
-pub fn pushGlyph(self: *@This(), x: f32, y: f32) void {
-    std.debug.assert(self.buffersFull() == false);
-    std.debug.assert(self.buffers.vbo_info.pMappedData != null);
-
-    const vbo_data: [*]GlyphVert = @alignCast(@ptrCast(self.buffers.vbo_info.pMappedData orelse
+    const vbo_data: [*]GlyphVert = @alignCast(@ptrCast(buffers.vbo_info.pMappedData orelse
         std.debug.panic("vertex buffer not mapped", .{})));
 
-    const ibo_data: [*]u32 = @alignCast(@ptrCast(self.buffers.ibo_info.pMappedData orelse
+    const ibo_data: [*]u32 = @alignCast(@ptrCast(buffers.ibo_info.pMappedData orelse
         std.debug.panic("index buffer not mapped", .{})));
 
-    const vbo_slice = vbo_data[self.buffers.vertex_count .. self.buffers.vertex_count + 4];
-    vbo_slice[0] = GlyphVert{ .pos = .{ x, y, 0 }, .color = .{ 1, 1, 1 } };
-    vbo_slice[1] = GlyphVert{ .pos = .{ x + 0.1, y, 0 }, .color = .{ 1, 1, 1 } };
-    vbo_slice[2] = GlyphVert{ .pos = .{ x + 0.1, y + 0.1, 0 }, .color = .{ 1, 1, 1 } };
-    vbo_slice[3] = GlyphVert{ .pos = .{ x, y + 0.1, 0 }, .color = .{ 1, 1, 1 } };
+    const vbo_slice = vbo_data[buffers.vertex_count .. buffers.vertex_count + 1];
+    vbo_slice[0] = GlyphVert{ .pos = .{ x, y, 0 }, .color = .{ 1, 1, 1 }, .width = .{ 20, 20 } };
 
-    const ibo_slice = ibo_data[self.buffers.indices_count .. self.buffers.indices_count + 6];
-    ibo_slice[0] = self.buffers.vertex_count + 0;
-    ibo_slice[1] = self.buffers.vertex_count + 1;
-    ibo_slice[2] = self.buffers.vertex_count + 2;
-    ibo_slice[3] = self.buffers.vertex_count + 2;
-    ibo_slice[4] = self.buffers.vertex_count + 3;
-    ibo_slice[5] = self.buffers.vertex_count + 0;
+    const ibo_slice = ibo_data[buffers.indices_count .. buffers.indices_count + 6];
+    ibo_slice[0] = buffers.vertex_count + 0;
+    ibo_slice[1] = buffers.vertex_count + 1;
+    ibo_slice[2] = buffers.vertex_count + 2;
+    ibo_slice[3] = buffers.vertex_count + 2;
+    ibo_slice[4] = buffers.vertex_count + 3;
+    ibo_slice[5] = buffers.vertex_count + 0;
 
-    self.buffers.vertex_count += @intCast(vbo_slice.len);
-    self.buffers.indices_count += @intCast(ibo_slice.len);
+    buffers.vertex_count += @intCast(vbo_slice.len);
+    buffers.indices_count += @intCast(ibo_slice.len);
+}
+
+pub fn record(self: *@This(), dev: vk.Device, cmdbuf: zvk.CommandBuffer) void {
+    dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
+}
+
+pub fn clear(self: *@This()) void {
+    for (0..self.buffers.items.len - 1) |_| {
+        const idx = self.buffers.items.len - 2;
+
+        self.buffers.items[idx].deinit(self.vma_alloc);
+        _ = self.buffers.swapRemove(idx);
+    }
+    var buffers = &self.buffers.items[0];
+    buffers.vertex_count = 0;
+    buffers.indices_count = 0;
 }

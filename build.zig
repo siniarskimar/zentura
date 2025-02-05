@@ -55,11 +55,13 @@ pub fn build(b: *std.Build) void {
 
     const shaders = vulkan_zig.ShaderCompileStep.create(
         b,
-        &.{ "glslang", "--target-env", "vulkan1.0" },
+        &.{ "glslang", "--target-env", "vulkan1.1" },
         "-o",
     );
     shaders.add("triangle_vert", "src/vk/shader/triangle.vert", .{});
     shaders.add("triangle_frag", "src/vk/shader/triangle.frag", .{});
+    shaders.add("glyph_frag", "src/vk/shader/glyph.frag.glsl", .{});
+    shaders.add("glyph_vert", "src/vk/shader/glyph.vert.glsl", .{});
     exe_zentura.root_module.addImport("vk-shaders", shaders.getModule());
 
     const run_zentura = b.addRunArtifact(exe_zentura);
