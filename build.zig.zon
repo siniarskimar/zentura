@@ -1,5 +1,6 @@
 .{
-    .name = "zentura",
+    .name = .zentura,
+    .fingerprint = 0x3a94d01418f074a9,
     .version = "0.1.0",
     .paths = .{
         "src",
@@ -9,16 +10,16 @@
     },
     .dependencies = .{
         .freetype2 = .{
-            .url = "https://github.com/hexops/freetype/archive/e8c5b37f320db03acba410d993441815bc809606.tar.gz",
-            .hash = "1220babb7939707ca390b934657dfd3c8c3a6a78cc9442e4cbd43e3f9ffd49daec9e",
+            .url = "https://github.com/hexops/freetype/archive/972cd37bccecae2cc9f54cf0b562263a13209d02.tar.gz",
+            .hash = "freetype-0.0.0-AAAAAA5JcwBMujojfNLEq5g_WijZtU56mRLYx8bjjiMU",
         },
         .vulkan_headers = .{
             .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/190d2cb24e90e5bf2bec0a75604a9b3586485b6d.tar.gz",
             .hash = "1220e70b9e0d124b04778cebdecabda4cdc5caab4bbaa9a1bbb9bba5ee51245b73a1",
         },
         .vulkan_zig = .{
-            .url = "https://github.com/Snektron/vulkan-zig/archive/66b7b773bb61e2102025f2d5ff0ae8c5f53e19cc.tar.gz",
-            .hash = "12208958f173b8b81bfac797955f0416ab38b21d1f69d4ebf6c7ca460a828a41cd45",
+            .url = "https://github.com/Snektron/vulkan-zig/archive/dcd538828c513919c3abf0bd55afacdce0576c61.tar.gz",
+            .hash = "vulkan-0.0.0-r7Ytxy5bAwASnqFlLMD4V42z3LolS8n7xv3RlbXhAhv0",
         },
         .vulkan_memory_allocator = .{
             .url = "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/archive/b8e57472fffa3bd6e0a0b675f4615bf0a823ec4d.tar.gz",

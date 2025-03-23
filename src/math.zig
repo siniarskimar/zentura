@@ -9,7 +9,7 @@ pub const degreesToRadians = std.math.degreesToRadians;
 /// Comptime constraint of mathematical vector
 pub fn Vec(N: comptime_int, T: type) type {
     const typeinfo = @typeInfo(T);
-    if (typeinfo != .Float and typeinfo != .Int)
+    if (typeinfo != .float and typeinfo != .int)
         @compileError("vector type must be either a float or integer");
 
     if (N < 1) @compileError("number of vector components cannot be smaller than 1");
@@ -19,7 +19,7 @@ pub fn Vec(N: comptime_int, T: type) type {
 /// Comptime constraint of mathematical matrix NxM
 pub fn Mat(N: comptime_int, M: comptime_int, T: type) type {
     const typeinfo = @typeInfo(T);
-    if (typeinfo != .Float and typeinfo != .Int)
+    if (typeinfo != .float and typeinfo != .int)
         @compileError("matrix type must be either a float or integer");
 
     if (N < 1) @compileError("matrix dimention N must be bigger than 0");
@@ -38,7 +38,7 @@ pub fn vecDot(
     a: Vec(N, T),
     b: Vec(N, T),
 ) T {
-    if (@typeInfo(T) == .Float) {
+    if (@typeInfo(T) == .float) {
         return @reduce(.Add, @as(@Vector(N, T), a) * @as(@Vector(N, T), b));
     }
     // TODO: change this to @Vector but check for overflow
@@ -73,7 +73,7 @@ pub fn vecMulScalar(
     vec: Vec(N, T),
     scalar: T,
 ) Vec(N, T) {
-    if (@typeInfo(T) == .Float) {
+    if (@typeInfo(T) == .float) {
         return @as(@Vector(N, T), vec) * @as(@Vector(N, T), @splat(scalar));
     }
     var result: Vec(N, T) = undefined;

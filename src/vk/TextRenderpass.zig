@@ -3,7 +3,8 @@ const zvk = @import("zig-vulkan");
 const vk = @import("../vk.zig");
 const vma = @import("../vma.zig");
 const math = @import("../math.zig");
-const shaders = @import("vk-shaders");
+const shader_glyph_vert align(@alignOf(u32)) = @embedFile("shader_glyph_vert").*;
+const shader_glyph_frag align(@alignOf(u32)) = @embedFile("shader_glyph_frag").*;
 
 const FrameData = @import("./VkRenderer.zig").FrameData;
 
@@ -124,14 +125,14 @@ pub fn init(
     errdefer dev.destroyPipelineLayout(layout, null);
 
     const vert_module = try dev.createShaderModule(&.{
-        .code_size = shaders.glyph_vert.len,
-        .p_code = @ptrCast(&shaders.glyph_vert),
+        .code_size = shader_glyph_vert.len,
+        .p_code = @ptrCast(&shader_glyph_vert),
     }, null);
     errdefer dev.destroyShaderModule(vert_module, null);
 
     const frag_module = try dev.createShaderModule(&.{
-        .code_size = shaders.glyph_frag.len,
-        .p_code = @ptrCast(&shaders.glyph_frag),
+        .code_size = shader_glyph_frag.len,
+        .p_code = @ptrCast(&shader_glyph_frag),
     }, null);
     errdefer dev.destroyShaderModule(frag_module, null);
 
