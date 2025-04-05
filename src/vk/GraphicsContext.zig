@@ -4,9 +4,7 @@ const vk = @import("../vk.zig");
 const c = @import("c");
 const InstanceContext = @import("./InstanceContext.zig");
 
-pub const required_device_extensions = [_][*:0]const u8{
-    zvk.extensions.khr_swapchain.name,
-};
+pub const required_device_extensions: vk.DeviceExtensions = .{ .VK_KHR_swapchain = true };
 
 const log = std.log.scoped(.vk_graphics_context);
 
@@ -38,6 +36,7 @@ const DeviceCandidate = struct {
     pdev: zvk.PhysicalDevice,
     props: zvk.PhysicalDeviceProperties,
     queues: DeviceQueueFamilies,
+    extensions: vk.DeviceExtensions,
 };
 
 const DeviceQueueFamilies = struct {
@@ -57,13 +56,22 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
     const surface = try SDLCreateVulkanSurface(instance_ctx.instance, window);
     errdefer instance_ctx.instance.destroySurfaceKHR(surface, null);
 
+    var tmp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer tmp_arena.deinit();
+
     const vkGetDeviceProcAddr = instance_ctx.instance.wrapper.dispatch.vkGetDeviceProcAddr;
 
-    const device_candidate = try findDeviceCandidate(allocator, instance_ctx.instance, surface);
+    const device_candidate = try findDeviceCandidate(
+        allocator,
+        instance_ctx.instance,
+        surface,
+        tmp_arena.allocator(),
+    );
+
     const device = try initializeDeviceCandidate(
-        &required_device_extensions,
         instance_ctx.instance,
         device_candidate,
+        tmp_arena.allocator(),
     );
     const vkDestroyDevice: vkDestroyDevicePfn = @ptrCast(vkGetDeviceProcAddr(device, "vkDestroyDevice"));
     errdefer vkDestroyDevice(device, null);
@@ -119,14 +127,20 @@ fn findDeviceCandidate(
     allocator: std.mem.Allocator,
     instance: vk.Instance,
     surface: zvk.SurfaceKHR,
+    tmp_allocator: std.mem.Allocator,
 ) !DeviceCandidate {
-    const physical_devices = try instance.enumeratePhysicalDevicesAlloc(allocator);
-    defer allocator.free(physical_devices);
+    const physical_devices = try instance.enumeratePhysicalDevicesAlloc(tmp_allocator);
 
     if (physical_devices.len == 0) return error.NoPhysicalDevices;
 
     return for (physical_devices) |device| {
-        if (!(try deviceSupportsRequiredExtensions(allocator, instance, device))) {
+        const device_extensions = try vk.DeviceExtensions.enumerate(
+            tmp_allocator,
+            instance.wrapper,
+            device,
+        );
+
+        if (!device_extensions.supportsRequired(required_device_extensions)) {
             continue;
         }
         if (!(try deviceSupportsSurface(instance, device, surface))) {
@@ -140,30 +154,9 @@ fn findDeviceCandidate(
             .pdev = device,
             .props = instance.getPhysicalDeviceProperties(device),
             .queues = queues,
+            .extensions = device_extensions,
         };
     } else error.NoSuitableDevice;
-}
-
-fn deviceSupportsRequiredExtensions(
-    allocator: std.mem.Allocator,
-    instance: vk.Instance,
-    device: zvk.PhysicalDevice,
-) !bool {
-    const ext_properties = try instance.enumerateDeviceExtensionPropertiesAlloc(device, null, allocator);
-    defer allocator.free(ext_properties);
-
-    // Fine for small number of extensions
-    for (required_device_extensions) |ext| {
-        for (ext_properties) |props| {
-            if (std.mem.eql(u8, std.mem.span(ext), std.mem.sliceTo(&props.extension_name, 0))) {
-                break;
-            }
-        } else {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 fn deviceSupportsSurface(instance: vk.Instance, device: zvk.PhysicalDevice, surface: zvk.SurfaceKHR) !bool {
@@ -207,11 +200,12 @@ fn findRequiredQueues(
 }
 
 fn initializeDeviceCandidate(
-    device_extensions: []const [*:0]const u8,
     instance: vk.Instance,
     candidate: DeviceCandidate,
+    tmp_allocator: std.mem.Allocator,
 ) !zvk.Device {
-    const priority = [_]f32{1};
+    const exts = try candidate.extensions.asSlice(tmp_allocator);
+    defer tmp_allocator.free(exts);
 
     return try instance.createDevice(candidate.pdev, &zvk.DeviceCreateInfo{
         .queue_create_info_count = if (candidate.queues.graphics_family == candidate.queues.present_family)
@@ -221,13 +215,13 @@ fn initializeDeviceCandidate(
         .p_queue_create_infos = &[_]zvk.DeviceQueueCreateInfo{ .{
             .queue_family_index = candidate.queues.graphics_family,
             .queue_count = 1,
-            .p_queue_priorities = &priority,
+            .p_queue_priorities = &.{1},
         }, .{
             .queue_family_index = candidate.queues.present_family,
             .queue_count = 1,
-            .p_queue_priorities = &priority,
+            .p_queue_priorities = &.{1},
         } },
-        .enabled_extension_count = @intCast(device_extensions.len),
-        .pp_enabled_extension_names = device_extensions.ptr,
+        .enabled_extension_count = @intCast(exts.len),
+        .pp_enabled_extension_names = exts.ptr,
     }, null);
 }

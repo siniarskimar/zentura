@@ -18,8 +18,8 @@ buffers: std.ArrayList(StagingBuffers),
 
 const GlyphVert = extern struct {
     pos: math.Vec(3, f32),
-    width: math.Vec(2, f32),
     color: math.Vec(3, f32),
+    size: math.Vec(2, f32),
 
     const binding_description = zvk.VertexInputBindingDescription{
         .binding = 0,
@@ -44,7 +44,7 @@ const GlyphVert = extern struct {
             .binding = 0,
             .location = 2,
             .format = zvk.Format.r32g32_sfloat,
-            .offset = @offsetOf(GlyphVert, "width"),
+            .offset = @offsetOf(GlyphVert, "size"),
         },
     };
 };
@@ -242,7 +242,7 @@ const StagingBuffers = struct {
         var vbo_allocation: vma.Allocation = undefined;
         const vbo_buffer = try vma.createBuffer(vma_alloc, .{
             .size = 4 * @sizeOf(f32) * glyph_count,
-            .usage = .{ .transfer_src_bit = true },
+            .usage = .{ .vertex_buffer_bit = true },
             .sharing_mode = .exclusive,
         }, .{
             .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
@@ -255,7 +255,7 @@ const StagingBuffers = struct {
         var ibo_allocation: vma.Allocation = undefined;
         const ibo_buffer = try vma.createBuffer(vma_alloc, .{
             .size = 6 * @sizeOf(u32) * glyph_count,
-            .usage = .{ .transfer_src_bit = true },
+            .usage = .{ .index_buffer_bit = true },
             .sharing_mode = .exclusive,
         }, .{
             .flags = .{ .mapped_bit = true, .host_access_sequential_bit = true },
@@ -280,13 +280,6 @@ const StagingBuffers = struct {
         vma.destroyBuffer(vma_alloc, self.vbo, self.vbo_allocation);
         vma.destroyBuffer(vma_alloc, self.ibo, self.ibo_allocation);
     }
-
-    fn record(self: @This(), dev: vk.Device, cmdbuf: vk.CommandBuffer) void {
-        dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
-        dev.cmdBindVertexBuffers(cmdbuf, 0, 1, &.{self.vbo}, &.{0});
-        dev.cmdBindIndexBuffer(cmdbuf, self.ibo, 0, .uint32);
-        dev.cmdDrawIndexed(cmdbuf, self.buffers.indices_count, self.buffers.vertex_count, 0, 0, 0);
-    }
 };
 
 pub fn pushGlyph(self: *@This(), x: f32, y: f32) !void {
@@ -303,7 +296,7 @@ pub fn pushGlyph(self: *@This(), x: f32, y: f32) !void {
         std.debug.panic("index buffer not mapped", .{})));
 
     const vbo_slice = vbo_data[buffers.vertex_count .. buffers.vertex_count + 1];
-    vbo_slice[0] = GlyphVert{ .pos = .{ x, y, 0 }, .color = .{ 1, 1, 1 }, .width = .{ 20, 20 } };
+    vbo_slice[0] = GlyphVert{ .pos = .{ x, y, 0 }, .color = .{ 1, 1, 1 }, .size = .{ 20, 20 } };
 
     const ibo_slice = ibo_data[buffers.indices_count .. buffers.indices_count + 6];
     ibo_slice[0] = buffers.vertex_count + 0;
@@ -319,6 +312,11 @@ pub fn pushGlyph(self: *@This(), x: f32, y: f32) !void {
 
 pub fn record(self: *@This(), dev: vk.Device, cmdbuf: zvk.CommandBuffer) void {
     dev.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
+    for (self.buffers.items) |buffer| {
+        dev.cmdBindIndexBuffer(cmdbuf, buffer.ibo, 0, .uint32);
+        dev.cmdBindVertexBuffers(cmdbuf, 0, 1, &.{buffer.vbo}, &.{0});
+        dev.cmdDrawIndexed(cmdbuf, buffer.indices_count, buffer.glyph_count, 0, 0, 0);
+    }
 }
 
 pub fn clear(self: *@This()) void {

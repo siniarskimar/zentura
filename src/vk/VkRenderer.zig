@@ -96,7 +96,7 @@ pub const FrameData = struct {
     }
 
     fn record(self: *@This(), dev: Device) !void {
-        try self.text_renderpass.pushGlyph(10, 10);
+        try self.text_renderpass.pushGlyph(0, 0);
         self.text_renderpass.record(dev, self.cmdbuf);
     }
 

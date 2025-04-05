@@ -14,8 +14,8 @@ const vec2 quad[4] = vec2[4](
 );
 
 void main() {
-  gl_Position = vec4((quad[gl_InstanceIndex] + inPos.xy) * inSize, inPos.z, 1);
-  fragColor = inColor;
+    gl_Position = vec4(quad[gl_VertexIndex], inPos.z , 1);
+    fragColor = vec3(1,1,1);
 }
 
 
