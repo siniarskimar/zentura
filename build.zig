@@ -7,11 +7,21 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    const exe_zentura = b.addExecutable(.{
-        .name = "zentura",
+    const mod_zentura = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+    });
+
+    const exe_zentura = b.addExecutable(.{
+        .name = "zentura",
+        .root_module = mod_zentura,
+    });
+    b.installArtifact(exe_zentura);
+
+    const check_zentura = b.addExecutable(.{
+        .name = "zentura",
+        .root_module = mod_zentura,
     });
 
     exe_zentura.linkLibC();
@@ -26,7 +36,6 @@ pub fn build(b: *std.Build) !void {
         exe_zentura.linkLibrary(lib_freetype);
     }
     exe_zentura.linkSystemLibrary("SDL2");
-    b.installArtifact(exe_zentura);
 
     const c_headers = b.addTranslateC(.{
         .root_source_file = b.path("./src/c.h"),
@@ -61,7 +70,7 @@ pub fn build(b: *std.Build) !void {
     step_run.dependOn(&run_zentura.step);
 
     const step_check = b.step("check", "Check if the project compiles");
-    step_check.dependOn(&exe_zentura.step);
+    step_check.dependOn(&check_zentura.step);
 }
 
 const Shader = struct {
