@@ -87,7 +87,6 @@ pub const ValidationLayers = struct {
 };
 
 pub const InstanceExtensions = struct {
-    VK_EXT_debug_utils: bool = false,
     VK_KHR_wayland_surface: bool = false,
     VK_KHR_xlib_surface: bool = false,
     VK_KHR_xcb_surface: bool = false,
@@ -151,7 +150,6 @@ pub const InstanceExtensions = struct {
 
 pub const DeviceExtensions = struct {
     VK_KHR_swapchain: bool = false,
-    VK_KHR_shader_non_semantic_info: bool = false,
 
     const hashset = blk: {
         const field_names = std.meta.fieldNames(@This());
