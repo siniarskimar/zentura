@@ -1,8 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const vulkan_zig = @import("vulkan_zig");
-
 pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
@@ -11,31 +9,9 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
     });
-
-    const exe_zentura = b.addExecutable(.{
-        .name = "zentura",
-        .root_module = mod_zentura,
-    });
-    b.installArtifact(exe_zentura);
-
-    const check_zentura = b.addExecutable(.{
-        .name = "zentura",
-        .root_module = mod_zentura,
-    });
-
-    exe_zentura.linkLibC();
-    if (b.systemIntegrationOption("freetype2", .{})) {
-        exe_zentura.linkSystemLibrary("freetype2");
-    } else {
-        const dep_freetype = b.dependency("freetype2", .{
-            .optimize = .ReleaseSafe,
-            .enable_brotli = false,
-        });
-        const lib_freetype = dep_freetype.artifact("freetype");
-        exe_zentura.linkLibrary(lib_freetype);
-    }
-    exe_zentura.linkSystemLibrary("SDL2");
 
     const c_headers = b.addTranslateC(.{
         .root_source_file = b.path("./src/c.h"),
@@ -43,23 +19,19 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
-    exe_zentura.root_module.addImport("c", c_headers.createModule());
+    mod_zentura.addImport("c", c_headers.createModule());
+    mod_zentura.addImport("zig-vulkan", generateVulkanBindings(b));
+    try compileVulkanShaders(b, mod_zentura);
 
-    exe_zentura.root_module.addImport("zig-vulkan", generateVulkanBindings(b));
+    try linkFreetype(b, mod_zentura);
+    mod_zentura.linkSystemLibrary("SDL2", .{});
+    try compileVulkanMemoryAllocator(b, mod_zentura);
 
-    const vk_vma = b.dependency("vulkan_memory_allocator", .{});
-    exe_zentura.addIncludePath(vk_vma.path("include"));
-    exe_zentura.addCSourceFile(.{
-        .file = b.path("src/vma.cpp"),
+    const exe_zentura = b.addExecutable(.{
+        .name = "zentura",
+        .root_module = mod_zentura,
     });
-    exe_zentura.linkLibCpp();
-
-    const shaders = try buildVulkanShaders(b);
-    for (shaders) |shader| {
-        exe_zentura.root_module.addAnonymousImport(shader.import_name, .{
-            .root_source_file = shader.compiled_path.?,
-        });
-    }
+    b.installArtifact(exe_zentura);
 
     const run_zentura = b.addRunArtifact(exe_zentura);
     if (b.args) |args| {
@@ -69,51 +41,48 @@ pub fn build(b: *std.Build) !void {
     const step_run = b.step("run", "Run zentura");
     step_run.dependOn(&run_zentura.step);
 
+    const check_zentura = b.addExecutable(.{ .name = "zentura", .root_module = mod_zentura });
     const step_check = b.step("check", "Check if the project compiles");
     step_check.dependOn(&check_zentura.step);
 }
 
-const Shader = struct {
-    import_name: []const u8,
-    source_path: []const u8,
-    source_lazypath: ?std.Build.LazyPath = null,
-    compiled_path: ?std.Build.LazyPath = null,
-};
+fn compileVulkanShaders(b: *std.Build, module: *std.Build.Module) !void {
+    const vk_shaders = [_]struct {
+        import_name: []const u8,
+        source_path: []const u8,
+    }{
+        .{
+            .import_name = "shader_triangle_vert",
+            .source_path = "src/vk/shader/triangle.vert",
+        },
+        .{
+            .import_name = "shader_triangle_frag",
+            .source_path = "src/vk/shader/triangle.frag",
+        },
+        .{
+            .import_name = "shader_glyph_vert",
+            .source_path = "src/vk/shader/glyph.vert.glsl",
+        },
+        .{
+            .import_name = "shader_glyph_frag",
+            .source_path = "src/vk/shader/glyph.frag.glsl",
+        },
+    };
 
-var vk_shaders = [_]Shader{
-    .{
-        .import_name = "shader_triangle_vert",
-        .source_path = "src/vk/shader/triangle.vert",
-    },
-    .{
-        .import_name = "shader_triangle_frag",
-        .source_path = "src/vk/shader/triangle.frag",
-    },
-    .{
-        .import_name = "shader_glyph_vert",
-        .source_path = "src/vk/shader/glyph.vert.glsl",
-    },
-    .{
-        .import_name = "shader_glyph_frag",
-        .source_path = "src/vk/shader/glyph.frag.glsl",
-    },
-};
-
-fn buildVulkanShaders(b: *std.Build) ![]Shader {
     const glslang_exe = try b.findProgram(&.{"glslang"}, &.{});
 
-    for (&vk_shaders) |*shader| {
+    inline for (vk_shaders) |shader| {
         const compile_step = b.addSystemCommand(&.{
             glslang_exe,
             "--target-env",
             "vulkan1.1",
             "-o",
         });
-        shader.compiled_path = compile_step.addOutputFileArg(shader.import_name);
-        shader.source_lazypath = b.path(shader.source_path);
-        compile_step.addFileArg(shader.source_lazypath.?);
+        module.addAnonymousImport(shader.import_name, .{
+            .root_source_file = compile_step.addOutputFileArg(shader.import_name),
+        });
+        compile_step.addFileArg(b.path(shader.source_path));
     }
-    return &vk_shaders;
 }
 
 fn generateVulkanBindings(b: *std.Build) *std.Build.Module {
@@ -126,5 +95,26 @@ fn generateVulkanBindings(b: *std.Build) *std.Build.Module {
 
     return b.createModule(.{
         .root_source_file = run_vk_gen.addOutputFileArg("vk.zig"),
+    });
+}
+
+fn linkFreetype(b: *std.Build, module: *std.Build.Module) !void {
+    if (b.systemIntegrationOption("freetype2", .{})) {
+        module.linkSystemLibrary("freetype2", .{});
+        return;
+    }
+    const dep_freetype = b.dependency("freetype2", .{
+        .optimize = .ReleaseSafe,
+        .enable_brotli = false,
+    });
+    const lib_freetype = dep_freetype.artifact("freetype");
+    module.linkLibrary(lib_freetype);
+}
+
+fn compileVulkanMemoryAllocator(b: *std.Build, module: *std.Build.Module) !void {
+    const vk_vma = b.dependency("vulkan_memory_allocator", .{});
+    module.addIncludePath(vk_vma.path("include"));
+    module.addCSourceFile(.{
+        .file = b.path("src/vma.cpp"),
     });
 }
