@@ -23,20 +23,13 @@ pub fn main() !void {
     };
     defer glfw.terminate();
 
-    var ft_library: ft.FT_Library = null;
-    if (ft.FT_Init_FreeType(&ft_library) != 0) {
-        log.err("failed to initialize Freetype", .{});
-        return error.FTInitFailed;
-    }
-    defer _ = ft.FT_Done_FreeType(ft_library);
-
     const window = glfw.Window.create(800, 600, "zentura", null, .{ .client_api = .no_api }) catch |err| {
         log.err("failed to create window: {s}", .{glfw.getError().description.?});
         return err;
     };
     defer window.destroy();
 
-    var vkrenderer = try VkRenderer.init(gpa.allocator(), window, ft_library);
+    var vkrenderer = try VkRenderer.init(gpa.allocator(), window);
     defer vkrenderer.deinit();
 
     var window_userdata: WindowUserData = .{

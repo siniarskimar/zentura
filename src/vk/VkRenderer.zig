@@ -33,8 +33,6 @@ frames: []FrameData,
 current_frame: usize = 0,
 
 should_resize: bool = false,
-ft_library: ft.FT_Library,
-ft_face: ft.FT_Face = null,
 
 const shaders = @import("shaders");
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
@@ -107,11 +105,7 @@ pub const FrameData = struct {
     }
 };
 
-pub fn init(
-    allocator: std.mem.Allocator,
-    window: *glfw.Window,
-    ft_library: ft.FT_Library,
-) !@This() {
+pub fn init(allocator: std.mem.Allocator, window: *glfw.Window) !@This() {
     var ctx = try GraphicsContext.init(allocator, window);
     errdefer ctx.deinit(allocator);
 
@@ -158,7 +152,6 @@ pub fn init(
         .window = window,
         .allocator = allocator,
         .ctx = ctx,
-        .ft_library = ft_library,
         .swapchain = swapchain,
         .vma_allocator = vma_allocator,
 
