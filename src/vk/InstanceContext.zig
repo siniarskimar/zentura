@@ -1,7 +1,7 @@
 const std = @import("std");
 const vk = @import("../vk.zig");
 const zvk = @import("zig-vulkan");
-const c = @import("c");
+const glfw = @import("../bindings/glfw.zig");
 const builtin = @import("builtin");
 
 instance: vk.Instance,
@@ -13,10 +13,12 @@ const app_info: zvk.ApplicationInfo = .{
     .api_version = zvk.API_VERSION_1_1,
 };
 
-pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
+pub fn init(allocator: std.mem.Allocator) !@This() {
+    if (!glfw.vulkanSupported()) return error.VulkanUnsupported;
+
     const getInstanceProcAddress = @as(
         ?vk.vkGetInstanceProcAddressFn,
-        @ptrCast(c.SDL_Vulkan_GetVkGetInstanceProcAddr()),
+        @ptrCast(&glfw.getInstanceProcAddress),
     ) orelse return error.vkGetInstanceProcAddress;
 
     var tmp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -31,10 +33,10 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
 
     var instance_extensions = try vk.InstanceExtensions.enumerate(tmp_arena.allocator(), &base_dispatch);
 
-    // Let SDL decide for surface extensions
+    // Let GLFW decide surface extensions
     instance_extensions.disableSurfaceRelated();
-    const sdl_exts = try getSDLInstanceExtensions(tmp_arena.allocator(), window);
-    for (sdl_exts) |ext| {
+    const req_exts = glfw.getInstanceExtensions();
+    for (req_exts) |ext| {
         instance_extensions.set(ext);
     }
 
@@ -66,21 +68,4 @@ pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
 pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
     self.instance.destroyInstance(null);
     allocator.destroy(self.instance.wrapper);
-}
-
-fn getSDLInstanceExtensions(
-    allocator: std.mem.Allocator,
-    window: *c.SDL_Window,
-) ![][*:0]const u8 {
-    var sdl_ext_count: c_uint = 0;
-    if (c.SDL_Vulkan_GetInstanceExtensions(window, &sdl_ext_count, null) == c.SDL_FALSE) {
-        return error.SDLGetInstanceExtensions;
-    }
-
-    const sdl_exts = try allocator.alloc([*c]const u8, sdl_ext_count);
-
-    if (c.SDL_Vulkan_GetInstanceExtensions(window, &sdl_ext_count, sdl_exts.ptr) == c.SDL_FALSE) {
-        return error.SDLGetInstanceExtensions;
-    }
-    return @ptrCast(sdl_exts);
 }

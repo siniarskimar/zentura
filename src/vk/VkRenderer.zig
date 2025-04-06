@@ -1,8 +1,10 @@
 const std = @import("std");
 const zvk = @import("zig-vulkan");
+const glfw = @import("../bindings/glfw.zig");
 const vk = @import("../vk.zig");
 const vma = @import("../vma.zig");
 const math = @import("../math.zig");
+
 const GraphicsContext = @import("./GraphicsContext.zig");
 const Swapchain = @import("./Swapchain.zig");
 const TextRenderpass = @import("./TextRenderpass.zig");
@@ -19,7 +21,7 @@ pub const ft = @cImport({
     @cInclude("freetype/freetype.h");
 });
 
-window: *c.SDL_Window,
+window: *glfw.Window,
 allocator: std.mem.Allocator,
 
 ctx: GraphicsContext,
@@ -105,15 +107,9 @@ pub const FrameData = struct {
     }
 };
 
-extern fn SDL_Vulkan_CreateSurface(
-    window: *c.SDL_Window,
-    instance: zvk.Instance,
-    surface: *zvk.SurfaceKHR,
-) c.SDL_bool;
-
 pub fn init(
     allocator: std.mem.Allocator,
-    window: *c.SDL_Window,
+    window: *glfw.Window,
     ft_library: ft.FT_Library,
 ) !@This() {
     var ctx = try GraphicsContext.init(allocator, window);
@@ -129,7 +125,7 @@ pub fn init(
 
     var window_width: c_int = undefined;
     var window_height: c_int = undefined;
-    c.SDL_Vulkan_GetDrawableSize(window, &window_width, &window_height);
+    window.getFramebufferSize(&window_width, &window_height);
 
     var swapchain = try Swapchain.create(
         allocator,
@@ -330,7 +326,7 @@ fn doResize(self: *@This()) !void {
     self.should_resize = false;
     var window_width: c_int = undefined;
     var window_height: c_int = undefined;
-    c.SDL_Vulkan_GetDrawableSize(self.window, &window_width, &window_height);
+    self.window.getFramebufferSize(&window_width, &window_height);
 
     try self.swapchain.recreate(
         self.allocator,
