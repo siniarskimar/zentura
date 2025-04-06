@@ -20,6 +20,9 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
     c_headers.addIncludePath(b.dependency("vulkan_headers", .{}).path("include"));
+    // TODO: Replace this with fetching fontconfig
+    c_headers.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+
     mod_zentura.addImport("c", c_headers.createModule());
     mod_zentura.addImport("zig-vulkan", generateVulkanBindings(b));
     try compileVulkanShaders(b, mod_zentura);
