@@ -1,7 +1,7 @@
 const std = @import("std");
 const zvk = @import("zig-vulkan");
 const vk = @import("../vk.zig");
-const c = @import("c");
+const glfw = @import("../bindings/glfw.zig");
 const InstanceContext = @import("./InstanceContext.zig");
 
 pub const required_device_extensions: vk.DeviceExtensions = .{ .VK_KHR_swapchain = true };
@@ -49,11 +49,11 @@ const vkDestroyDevicePfn = *const fn (
     ?*const zvk.AllocationCallbacks,
 ) callconv(.C) void;
 
-pub fn init(allocator: std.mem.Allocator, window: *c.SDL_Window) !@This() {
-    const instance_ctx = try InstanceContext.init(allocator, window);
+pub fn init(allocator: std.mem.Allocator, window: *glfw.Window) !@This() {
+    const instance_ctx = try InstanceContext.init(allocator);
     errdefer instance_ctx.deinit(allocator);
 
-    const surface = try SDLCreateVulkanSurface(instance_ctx.instance, window);
+    const surface = try createVulkanSurface(&instance_ctx.instance, window);
     errdefer instance_ctx.instance.destroySurfaceKHR(surface, null);
 
     var tmp_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -108,17 +108,30 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     allocator.destroy(self.dev.wrapper);
 }
 
-extern fn SDL_Vulkan_CreateSurface(
-    window: *c.SDL_Window,
-    instance: zvk.Instance,
-    surface: *zvk.SurfaceKHR,
-) c.SDL_bool;
+pub const CreateVulkanSurfaceError = error{
+    InitializationFailed,
+    ExtensionNotPresent,
+    NativeWindowInUse,
+    Unknown,
+};
 
-fn SDLCreateVulkanSurface(instance: vk.Instance, window: *c.SDL_Window) !zvk.SurfaceKHR {
+pub fn createVulkanSurface(
+    instance: *const vk.Instance,
+    window: *glfw.Window,
+) CreateVulkanSurfaceError!zvk.SurfaceKHR {
     var surface: zvk.SurfaceKHR = .null_handle;
-    if (SDL_Vulkan_CreateSurface(window, instance.handle, &surface) == c.SDL_FALSE) {
-        log.err("failed to create Vulkan surface out of SDL window: {s}", .{c.SDL_GetError()});
-        return error.CreateSurfaceFailed;
+    const res: zvk.Result = @enumFromInt(glfw.createWindowSurface(
+        @ptrFromInt(@intFromEnum(instance.handle)),
+        @ptrCast(window),
+        null,
+        @ptrCast(&surface),
+    ));
+    switch (res) {
+        .success => {},
+        .error_initialization_failed => return CreateVulkanSurfaceError.InitializationFailed,
+        .error_extension_not_present => return CreateVulkanSurfaceError.ExtensionNotPresent,
+        .error_native_window_in_use_khr => return CreateVulkanSurfaceError.NativeWindowInUse,
+        else => return CreateVulkanSurfaceError.Unknown,
     }
     return surface;
 }

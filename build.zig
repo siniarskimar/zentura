@@ -19,12 +19,17 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
+    c_headers.addIncludePath(b.dependency("vulkan_headers", .{}).path("include"));
+    // TODO: Replace this with fetching fontconfig
+    c_headers.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+
     mod_zentura.addImport("c", c_headers.createModule());
     mod_zentura.addImport("zig-vulkan", generateVulkanBindings(b));
     try compileVulkanShaders(b, mod_zentura);
 
     try linkFreetype(b, mod_zentura);
-    mod_zentura.linkSystemLibrary("SDL2", .{});
+    mod_zentura.linkSystemLibrary("glfw", .{});
+    mod_zentura.linkSystemLibrary("fontconfig", .{});
     try compileVulkanMemoryAllocator(b, mod_zentura);
 
     const exe_zentura = b.addExecutable(.{
