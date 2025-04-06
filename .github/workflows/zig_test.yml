@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - '**.zig'
+      - '.github/workflows/zig_test.yml'
     branches:
       - main
   pull_request:
     paths:
       - '**.zig'
+      - '.github/workflows/zig_test.yml'
 
 jobs:
   compile-check:
