@@ -26,6 +26,7 @@ pub fn build(b: *std.Build) !void {
 
     try linkFreetype(b, mod_zentura);
     mod_zentura.linkSystemLibrary("glfw", .{});
+    mod_zentura.linkSystemLibrary("fontconfig", .{});
     try compileVulkanMemoryAllocator(b, mod_zentura);
 
     const exe_zentura = b.addExecutable(.{
