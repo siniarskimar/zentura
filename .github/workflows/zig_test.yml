@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - '**.zig'
+      - '.github/workflows/zig_test.yml'
     branches:
       - main
   pull_request:
     paths:
       - '**.zig'
+      - '.github/workflows/zig_test.yml'
 
 jobs:
   compile-check:
@@ -17,8 +19,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v1
       - run: sudo apt-get update -y
-      - run: sudo apt-get install -y libsdl2-dev glslang-tools
-      - run: zig build check
+      - run: sudo apt-get install -y libglfw3-dev glslang-tools libfontconfig-dev
+      - run: zig build check --verbose
   fmt:
     runs-on: ubuntu-latest
     steps:
